@@ -1,0 +1,17 @@
+ROOT
+  PIPELINE
+    FUNCTION(fetch)
+      TAG_KEY(name)
+        VALUE(service.errors)
+    FUNCTION(transformNull)
+    FUNCTION(moving)
+      VALUE(1m)
+      VALUE(sum)
+    FUNCTION(sum)
+      VALUE(region)
+    FUNCTION(average)
+    FUNCTION(minSeries)
+      VALUE(region)
+    FUNCTION(maximum)
+    FUNCTION(alias)
+      VALUE({{.region}})

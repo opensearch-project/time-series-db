@@ -1,0 +1,5 @@
+# grouped macros get merged into separate series
+a = (fetch name:queries | sum);
+b = (fetch name:exceptions | sum);
+
+a | b

@@ -1,0 +1,3 @@
+# semicolon after alias, to validate handle parser mode transition
+a = fetch name:queries | sum | alias queries;
+a

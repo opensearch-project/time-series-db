@@ -1,0 +1,4 @@
+a = fetch name:abc | ((moving 1h avg | sum) | transformNull);    # test parenthesized + nested sub-expressions
+b = fetch name:def | exec(moving 1h avg | sum) | transformNull;  # test exec() sub-expression
+c = (fetch name:ghi | moving 1h avg | sum) | avg;                # test group with dangling avg
+a | b | c

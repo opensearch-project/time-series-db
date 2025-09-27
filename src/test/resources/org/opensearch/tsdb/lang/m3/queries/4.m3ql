@@ -1,0 +1,2 @@
+# test simple union
+fetch region:north* | transformNull 0 | fetch state:xyz | sum | fetch city:toronto

@@ -1,0 +1,23 @@
+ROOT
+  PIPELINE
+    PIPELINE
+      PIPELINE
+        FUNCTION(fetch)
+          TAG_KEY(name)
+            VALUE(a)
+      FUNCTION(asPercent)
+        PIPELINE
+          FUNCTION(fetch)
+            TAG_KEY(name)
+              VALUE(b)
+    FUNCTION(asPercent)
+      PIPELINE
+        PIPELINE
+          FUNCTION(fetch)
+            TAG_KEY(name)
+              VALUE(c)
+        FUNCTION(asPercent)
+          PIPELINE
+            FUNCTION(fetch)
+              TAG_KEY(name)
+                VALUE(d)

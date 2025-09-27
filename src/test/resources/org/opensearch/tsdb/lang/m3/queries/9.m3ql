@@ -1,0 +1,8 @@
+a = fetch name:a;
+b = fetch name:b;
+c = fetch name:c;
+d = fetch name:d;
+
+e = a | asPercent(b); # test chained macros in a single coordinator
+f = c | asPercent(d);
+e | asPercent(f)

@@ -1,0 +1,323 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+options {
+    STATIC = false;
+    LOOKAHEAD = 1;
+}
+
+PARSER_BEGIN(M3QLParser)
+package org.opensearch.tsdb.lang.m3.m3ql.parser.generated;
+
+import org.opensearch.tsdb.lang.m3.m3ql.parser.M3ASTProcessor;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ArgsNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.GroupNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.RootNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.TagKeyNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.MacroNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.PipelineNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
+import java.util.Objects;
+import javax.annotation.Generated;
+
+@Generated("JavaCC")
+public class M3QLParser {
+
+    public RootNode parse(boolean expandMacros) throws ParseException {
+        RootNode node = Root();
+        M3ASTProcessor.process(node, expandMacros);
+        return node;
+    }
+
+    public static RootNode parse(String query, boolean expandMacros) throws ParseException {
+        try (java.io.StringReader reader = new java.io.StringReader(query)) {
+            M3QLParser parser = new M3QLParser(reader);
+            return parser.parse(expandMacros);
+        }
+    }
+}
+PARSER_END(M3QLParser)
+
+SKIP : {
+    " " | "\t" | "\n" | "\r" | "\r\n" | < "#" (~["\n", "\r"])* >
+}
+
+TOKEN : {
+    < IDENTIFIER: (["a"-"z", "_", "-", "A"-"Z", "0"-"9", "*", "."])+ (["a"-"z", "0"-"9", "_", "-", "A"-"Z", "*", "."])* >
+  | < OPERATOR: "<=" | "<" | "==" | "!=" | ">=" | ">" >
+  | < SCIENTIFIC_NUMBER: (["0"-"9"])+ ("." (["0"-"9"])+)? (("e" | "E") ("+" | "-")? (["0"-"9"])+)? >
+  | < STRING_LITERAL: ("\"") (~["\""])* ("\"") >
+  | < SEMICOLON: ";" >
+  | < EQUALS: "=" >
+  | < PIPE: "|" >
+  | < LPAREN: "(" | "exec(" > // exec(...) is equivalent to (...) in M3QL
+  | < RPAREN: ")" >
+  | < COLON: ":" >
+  | < OPEN_CURLY: "{" >
+  | < CLOSED_CURLY: "}" >
+  | < COMMA: "," >
+  | < EXCLAMATION_MARK: "!" >
+}
+
+// Special tokens for alias arguments that preserve spaces and handle quotes/comments, etc.
+<ALIAS_MODE> TOKEN : {
+    < ALIAS_QUOTED_STRING: "\"" (~["\""])* "\"" >
+  | < ALIAS_UNCLOSED_STRING: "\"" (~["\"", "\n", "\r", "|", ";"])* >
+  | < ALIAS_COMMENT: "#" (~["\n", "\r"])* >
+  | < ALIAS_REGULAR_TEXT: (~["|", ";", "\"", "#", "\n", "\r", " ", "\t", "{", "}"])+ >
+  | < ALIAS_SPACE: (" " | "\t")+ >
+  | < ALIAS_PIPE: "|" >
+  | < ALIAS_CURLY_OPEN: "{" >
+  | < ALIAS_CURLY_CLOSE: "}" >
+  | < ALIAS_SEMICOLON: ";" >
+}
+
+<ALIAS_MODE> SKIP : {
+    "\n" | "\r" | "\r\n"
+}
+
+RootNode Root() :
+{
+    RootNode rootNode = new RootNode();
+    MacroNode macroNode;
+    M3ASTNode pipelineNode;
+}
+{
+    [
+      LOOKAHEAD(<IDENTIFIER> <EQUALS>)
+      macroNode = Macro()
+      (<SEMICOLON> | <ALIAS_SEMICOLON>)
+      { rootNode.addChildNode(macroNode); }
+
+      (
+        LOOKAHEAD(<IDENTIFIER> <EQUALS>)
+        macroNode = Macro()
+        (<SEMICOLON> | <ALIAS_SEMICOLON>)
+        { rootNode.addChildNode(macroNode); }
+      )*
+    ]
+    pipelineNode = Pipeline()
+    <EOF>
+    {
+        rootNode.addChildNode(pipelineNode);
+        return rootNode;
+    }
+}
+
+MacroNode Macro() :
+{
+    MacroNode macroNode;
+    M3ASTNode pipelineNode;
+    Token t;
+}
+{
+    t = <IDENTIFIER>
+    <EQUALS>
+    pipelineNode = Pipeline()
+    {
+        macroNode = new MacroNode(t.image);
+        macroNode.addChildNode(pipelineNode);
+        return macroNode;
+    }
+}
+
+M3ASTNode Pipeline() :
+{
+    M3ASTNode result;
+}
+{
+    result = RegularPipeline()
+    { return result; }
+}
+
+M3ASTNode RegularPipeline() :
+{
+    PipelineNode pipelineNode = new PipelineNode();
+    M3ASTNode tempChildNode;
+}
+{
+    tempChildNode = Expression()
+    { pipelineNode.addChildNode(tempChildNode); }
+
+    ((<PIPE> | <ALIAS_PIPE>) tempChildNode = Expression() { pipelineNode.addChildNode(tempChildNode); })*
+
+    {
+        return pipelineNode;
+    }
+}
+
+M3ASTNode Expression() :
+{
+    M3ASTNode childNode;
+}
+{
+    (
+        LOOKAHEAD(<LPAREN>)
+        childNode = ParenthesizedExpression()
+      | childNode = Function()
+    )
+    { return childNode; }
+}
+
+M3ASTNode ParenthesizedExpression() :
+{
+    GroupNode groupNode = new GroupNode();
+    M3ASTNode tempChildNode;
+}
+{
+    <LPAREN>
+    tempChildNode = Expression()
+    { groupNode.addChildNode(tempChildNode); }
+
+    (<PIPE> tempChildNode = Expression() { groupNode.addChildNode(tempChildNode); })*
+
+    <RPAREN>
+    {
+        return groupNode;
+    }
+}
+
+FunctionNode Function() :
+{
+    Token t;
+    FunctionNode node = new FunctionNode();
+}
+{
+    (
+        t = <IDENTIFIER> | t = <OPERATOR>
+    )
+    {
+        node.setFunctionName(t.image);
+        if ("alias".equals(t.image)) {
+            token_source.SwitchTo(ALIAS_MODE);
+        }
+    }
+    (
+        LOOKAHEAD({ "alias".equals(token.image) }) AliasArgument(node)
+      | (LOOKAHEAD(2) Argument(node))*
+    )
+    { return node; }
+}
+
+void AliasArgument(M3ASTNode parentNode) :
+{
+    Token t;
+    StringBuilder aliasText = new StringBuilder();
+}
+{
+    (
+        LOOKAHEAD({
+            getToken(1).kind != ALIAS_COMMENT &&
+            getToken(1).kind != ALIAS_PIPE &&
+            getToken(1).kind != ALIAS_SEMICOLON &&
+            getToken(1).kind != 0
+        })
+        (
+            t = <ALIAS_QUOTED_STRING> { aliasText.append(t.image); }
+          | t = <ALIAS_UNCLOSED_STRING> {
+                token_source.SwitchTo(DEFAULT);
+                throw new ParseException("Unclosed quoted string in alias: " + t.image);
+            }
+          | t = <ALIAS_CURLY_OPEN> { aliasText.append(t.image); }
+          | t = <ALIAS_CURLY_CLOSE> { aliasText.append(t.image); }
+          | t = <ALIAS_REGULAR_TEXT> { aliasText.append(t.image); }
+          | t = <ALIAS_SPACE> { aliasText.append(t.image); }
+        )
+    )*
+    (t = <ALIAS_COMMENT> { /* Consume but ignore comments in alias */ })*
+    {
+        token_source.SwitchTo(DEFAULT);
+        String result = aliasText.toString().trim();
+        if (!result.isEmpty()) {
+            parentNode.addChildNode(new ValueNode(result));
+        }
+    }
+}
+
+void Argument(M3ASTNode parentNode) :
+{
+    Token t;
+    ArgsNode argsNode = null;
+    TagKeyNode tagKeyNode = null;
+    M3ASTNode nestedNode;
+    ValueNode tempValueNode;
+}
+{
+    [
+      LOOKAHEAD(2) tagKeyNode = Tag()
+      {
+          parentNode.addChildNode(tagKeyNode);
+          parentNode = tagKeyNode;
+      }
+    ]
+    [
+      <EXCLAMATION_MARK> {
+          Objects.requireNonNull(tagKeyNode, "! only allowed in tag value expression");
+          tagKeyNode.setInverted(true);
+      }
+    ]
+    (
+        LOOKAHEAD(3)
+        <LPAREN>
+        t = <IDENTIFIER>
+        <RPAREN>
+        {
+            FunctionNode functionNode = new FunctionNode();
+            functionNode.setFunctionName(t.image);
+            parentNode.addChildNode(functionNode);
+        }
+      | LOOKAHEAD(2)
+        (
+            (
+                t = <IDENTIFIER> | t = <STRING_LITERAL>
+            )
+            {
+                tempValueNode = new ValueNode(t.image);
+                parentNode.addChildNode(tempValueNode);
+            }
+            (
+                <COMMA>
+                (t = <IDENTIFIER> | t = <STRING_LITERAL>)
+                {
+                    parentNode.addChildNode(new ValueNode(t.image));
+                }
+            )*
+        )
+      | t = <SCIENTIFIC_NUMBER> { parentNode.addChildNode(new ValueNode(t.image)); }
+      | argsNode = Args() { parentNode.addChildNode(argsNode); }
+      | nestedNode = Expression() { parentNode.addChildNode(nestedNode); }
+    )
+}
+
+TagKeyNode Tag() :
+{
+    Token t;
+    TagKeyNode node = new TagKeyNode();
+}
+{
+    t = <IDENTIFIER>
+    <COLON>
+    {
+        node.setKeyName(t.image);
+        return node;
+    }
+}
+
+ArgsNode Args() :
+{
+    Token t;
+    ArgsNode node = new ArgsNode();
+}
+{
+    <OPEN_CURLY>
+    (t = <IDENTIFIER> | t = <STRING_LITERAL>) { node.addArg(t.image); }
+    (<COMMA> (t = <IDENTIFIER> | t = <STRING_LITERAL>) { node.addArg(t.image); })*
+    <CLOSED_CURLY>
+    { return node; }
+}

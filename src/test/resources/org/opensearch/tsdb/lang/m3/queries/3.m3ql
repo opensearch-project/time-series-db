@@ -1,0 +1,14 @@
+# test timeshift
+a = (fetch region:west
+  | sum city_name
+  | transformNull
+  | moving 1h sum);
+
+b = (a | timeshift 1d);
+c = (a | timeshift 2d);
+
+mean = (a | b | c | avg);
+
+a | asPercent(mean)
+  | transformNull
+  | moving 1h avg

@@ -1,0 +1,35 @@
+ROOT
+  PIPELINE
+    PIPELINE
+      GROUP
+        FUNCTION(fetch)
+          TAG_KEY(dc)
+            VALUE(sfo*)
+          TAG_KEY(uuid)
+            ARGS([uuid-1, uuid-2, "uuid-3"])
+        FUNCTION(sum)
+          VALUE(dc)
+        FUNCTION(transformNull)
+        FUNCTION(moving)
+          VALUE(1m)
+          VALUE(sum)
+    FUNCTION(asPercent)
+      PIPELINE
+        GROUP
+          FUNCTION(fetch)
+            TAG_KEY(dc)
+              VALUE(sjc*)
+            TAG_KEY(uuid)
+              ARGS([uuid-1, uuid-2, "uuid-3"])
+          FUNCTION(sum)
+            VALUE(dc)
+          FUNCTION(transformNull)
+          FUNCTION(moving)
+            VALUE(1m)
+            VALUE(sum)
+    FUNCTION(scale)
+      VALUE(100)
+    FUNCTION(scale)
+      VALUE(0.01)
+    FUNCTION(alias)
+      VALUE(exec)

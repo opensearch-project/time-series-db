@@ -1,0 +1,18 @@
+ROOT
+  PIPELINE
+    FUNCTION(fetch)
+      TAG_KEY(city_name)
+        VALUE("San Francisco")
+      TAG_KEY(host)
+        ARGS(["host1", "host2"])
+    FUNCTION(sum)
+      VALUE(merchantID)
+    FUNCTION(transformNull)
+    FUNCTION(moving)
+      VALUE(1m)
+      VALUE(sum)
+    FUNCTION(alias)
+      VALUE("my     # alias")
+    FUNCTION(moving)
+      VALUE(3h)
+      VALUE(sum)

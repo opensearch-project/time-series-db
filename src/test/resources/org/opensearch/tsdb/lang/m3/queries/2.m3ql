@@ -1,0 +1,12 @@
+# test multi-fetch with asPercent
+a = (fetch dc:sfo* uuid:{uuid-1,uuid-2,"uuid-3"}        # test parens
+  | sum dc
+  | transformNull
+  | moving 1m sum);
+
+b = exec(fetch dc:sjc* uuid:{uuid-1,uuid-2,"uuid-3"}   # test exec has same behavior as parens
+  | sum dc
+  | transformNull
+  | moving 1m sum);
+
+a | asPercent(b) | scale 100 | scale 0.01 | alias exec   # comment after alias, to validate parser mode transition

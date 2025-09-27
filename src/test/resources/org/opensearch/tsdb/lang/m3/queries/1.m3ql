@@ -1,0 +1,9 @@
+# test comments, quoted tag values, and args
+# comment at the start
+fetch city_name:"San Francisco" host:{"host1", "host2"}
+  | sum merchantID  # comment in the middle
+  | transformNull
+  | moving 1m sum
+  | alias "my     # alias"
+  | moving 3h sum  # function after alias, to validate parser mode transition
+# comment at the end

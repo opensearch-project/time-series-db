@@ -1,0 +1,12 @@
+ROOT
+  PIPELINE
+    PIPELINE
+      FUNCTION(fetch)
+        TAG_KEY(name)
+          VALUE(queries)
+      FUNCTION(sum)
+    PIPELINE
+      FUNCTION(fetch)
+        TAG_KEY(name)
+          VALUE(exceptions)
+      FUNCTION(sum)

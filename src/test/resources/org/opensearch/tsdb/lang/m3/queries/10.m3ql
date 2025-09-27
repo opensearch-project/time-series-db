@@ -1,0 +1,5 @@
+# test perSecond, aliasByTags, and sort pipeline
+fetch service:"web-api" region:{"us-east", "us-west"} name:"requests_total"
+  | perSecond
+  | aliasByTags service region
+  | sort avg

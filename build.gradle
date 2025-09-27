@@ -128,6 +128,7 @@ integTest {
 
 javadoc {
   options.addStringOption('Xdoclint:all', '-Xwerror')
+  exclude '**/generated/**'
 }
 
 
@@ -153,11 +154,25 @@ jacocoTestReport {
         html.required = true
         xml.required = true
     }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/generated/**'
+            ])
+        }))
+    }
 }
 test.finalizedBy(project.tasks.jacocoTestReport)
 test.finalizedBy(project.tasks.jacocoTestCoverageVerification)
 
 jacocoTestCoverageVerification {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/generated/**'
+            ])
+        }))
+    }
     violationRules {
         rule {
             limit {
@@ -170,3 +185,48 @@ jacocoTestCoverageVerification {
 
 tasks.named("precommit").configure { dependsOn("spotlessCheck") }
 tasks.named("check").configure { dependsOn(jacocoTestCoverageVerification) }
+
+/**********************************************
+ *            JavaCC Configuration            *
+ **********************************************/
+
+configurations {
+    javacc
+}
+
+dependencies {
+    javacc 'net.java.dev.javacc:javacc:7.0.12'
+}
+
+String javaccGrammarPath = 'src/main/java/org/opensearch/tsdb/lang/m3/m3ql/parser'
+String javaccOutputPath = 'src/main/java/org/opensearch/tsdb/lang/m3/m3ql/parser/generated'
+
+tasks.register("cleanJavaCCGenerated", Delete) {
+    delete fileTree(javaccOutputPath) {
+        include '*.java'
+    }
+}
+
+tasks.register("generateJavaCC", JavaExec) {
+    dependsOn "cleanJavaCCGenerated", "spotlessApply", "spotlessCheck"
+    mainClass = 'javacc'
+    classpath = configurations.javacc
+    systemProperty 'file.encoding', 'UTF-8'
+    args '-OUTPUT_DIRECTORY=' + javaccOutputPath,
+            "${file(javaccGrammarPath)}/m3ql.jj"
+}
+
+compileJava.dependsOn generateJavaCC
+
+// Exclude generated files from forbidden APIs check
+forbiddenApisMain {
+    exclude 'org/opensearch/tsdb/lang/m3/m3ql/parser/generated/**'
+}
+
+forbiddenApisTest {
+    exclude 'org/opensearch/tsdb/lang/m3/m3ql/parser/generated/**'
+}
+
+forbiddenPatterns {
+    exclude 'org/opensearch/tsdb/lang/m3/m3ql/parser/generated/**'
+}

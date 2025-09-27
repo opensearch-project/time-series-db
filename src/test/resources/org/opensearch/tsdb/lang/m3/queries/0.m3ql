@@ -1,0 +1,9 @@
+# test simple query
+fetch name:service.errors
+  | transformNull
+  | moving 1m sum
+  | sum region
+  | average
+  | minSeries region
+  | maximum
+  | alias {{.region}}
