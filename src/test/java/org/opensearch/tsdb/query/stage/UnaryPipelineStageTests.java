@@ -99,7 +99,10 @@ public class UnaryPipelineStageTests extends OpenSearchTestCase {
         List<TimeSeriesProvider> aggregations = Arrays.asList(createMockProvider("provider1"), createMockProvider("provider2"));
 
         // Test the reduce method - should throw UnsupportedOperationException for unary stages
-        UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class, () -> stage.reduce(aggregations, null));
+        UnsupportedOperationException exception = assertThrows(
+            UnsupportedOperationException.class,
+            () -> stage.reduce(aggregations, false)
+        );
 
         assertTrue("Exception message should contain class name", exception.getMessage().contains("TestUnaryPipelineStage"));
         assertTrue("Exception message should mention reduce function", exception.getMessage().contains("reduce function"));

@@ -8,7 +8,6 @@
 package org.opensearch.tsdb.query.stage;
 
 import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 
@@ -65,11 +64,11 @@ public interface UnaryPipelineStage extends PipelineStage {
      * this method and return the appropriate reduced aggregation.</p>
      *
      * @param aggregations List of TimeSeriesProvider aggregations to reduce
-     * @param reduceContext The reduce context
+     * @param isFinalReduce Whether this is the final reduce phase
      * @return A new aggregation with the reduced results
      * @throws UnsupportedOperationException if this stage does not support reduce function
      */
-    default InternalAggregation reduce(List<TimeSeriesProvider> aggregations, ReduceContext reduceContext) {
+    default InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
         throw new UnsupportedOperationException(
             "Unary pipeline stage '"
                 + getClass().getSimpleName()
