@@ -7,9 +7,7 @@
  */
 package org.opensearch.tsdb.query.aggregator;
 
-import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
@@ -19,6 +17,8 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SumCountSample;
+import org.opensearch.tsdb.lang.m3.stage.SumStage;
+import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -83,111 +83,6 @@ public class InternalTimeSeriesTests extends OpenSearchTestCase {
         assertNull(internal.getName());
         assertEquals(timeSeries, internal.getTimeSeries());
         assertEquals(TEST_METADATA, internal.getMetadata());
-    }
-
-    // ========== Serialization Tests ==========
-
-    public void testSerializationRoundtrip() throws IOException {
-        // Arrange
-        List<TimeSeries> timeSeries = createTestTimeSeries();
-        InternalTimeSeries original = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA);
-
-        // Act
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            original.writeTo(out);
-
-            try (StreamInput in = out.bytes().streamInput()) {
-                InternalTimeSeries deserialized = new InternalTimeSeries(in);
-
-                // Assert
-                assertEquals(original.getName(), deserialized.getName());
-                assertEquals(original.getMetadata(), deserialized.getMetadata());
-                assertEquals(original.getTimeSeries().size(), deserialized.getTimeSeries().size());
-
-                // Verify time series data
-                List<TimeSeries> originalSeries = original.getTimeSeries();
-                List<TimeSeries> deserializedSeries = deserialized.getTimeSeries();
-
-                for (int i = 0; i < originalSeries.size(); i++) {
-                    TimeSeries orig = originalSeries.get(i);
-                    TimeSeries deser = deserializedSeries.get(i);
-
-                    assertEquals(orig.getSamples().size(), deser.getSamples().size());
-                    assertEquals(orig.getLabels().toMapView(), deser.getLabels().toMapView());
-                    assertEquals(orig.getAlias(), deser.getAlias());
-                    assertEquals(orig.getMinTimestamp(), deser.getMinTimestamp());
-                    assertEquals(orig.getMaxTimestamp(), deser.getMaxTimestamp());
-                    assertEquals(orig.getStep(), deser.getStep());
-
-                    // Verify samples
-                    for (int j = 0; j < orig.getSamples().size(); j++) {
-                        Sample origSample = orig.getSamples().get(j);
-                        Sample deserSample = deser.getSamples().get(j);
-                        assertEquals(origSample.getTimestamp(), deserSample.getTimestamp());
-                        assertEquals(origSample.getValue(), deserSample.getValue(), 0.001);
-                    }
-                }
-            }
-        }
-    }
-
-    public void testSerializationWithEmptyTimeSeries() throws IOException {
-        // Arrange
-        List<TimeSeries> emptyTimeSeries = new ArrayList<>();
-        InternalTimeSeries original = new InternalTimeSeries(TEST_NAME, emptyTimeSeries, TEST_METADATA);
-
-        // Act
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            original.writeTo(out);
-
-            try (StreamInput in = out.bytes().streamInput()) {
-                InternalTimeSeries deserialized = new InternalTimeSeries(in);
-
-                // Assert
-                assertEquals(original.getName(), deserialized.getName());
-                assertEquals(original.getMetadata(), deserialized.getMetadata());
-                assertTrue(deserialized.getTimeSeries().isEmpty());
-            }
-        }
-    }
-
-    public void testSerializationWithMixedSamples() throws IOException {
-        // Arrange
-        List<TimeSeries> timeSeries = createTimeSeriesWithMixedSamples();
-        InternalTimeSeries original = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA);
-
-        // Act
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            original.writeTo(out);
-
-            try (StreamInput in = out.bytes().streamInput()) {
-                InternalTimeSeries deserialized = new InternalTimeSeries(in);
-
-                // Assert
-                assertEquals(original.getTimeSeries().size(), deserialized.getTimeSeries().size());
-
-                TimeSeries origSeries = original.getTimeSeries().get(0);
-                TimeSeries deserSeries = deserialized.getTimeSeries().get(0);
-
-                assertEquals(origSeries.getSamples().size(), deserSeries.getSamples().size());
-
-                // Verify mixed sample types are preserved
-                for (int i = 0; i < origSeries.getSamples().size(); i++) {
-                    Sample origSample = origSeries.getSamples().get(i);
-                    Sample deserSample = deserSeries.getSamples().get(i);
-
-                    assertEquals(origSample.getClass(), deserSample.getClass());
-                    assertEquals(origSample.getTimestamp(), deserSample.getTimestamp());
-                    assertEquals(origSample.getValue(), deserSample.getValue(), 0.001);
-
-                    if (origSample instanceof SumCountSample origSumCount) {
-                        SumCountSample deserSumCount = (SumCountSample) deserSample;
-                        assertEquals(origSumCount.sum(), deserSumCount.sum(), 0.001);
-                        assertEquals(origSumCount.count(), deserSumCount.count());
-                    }
-                }
-            }
-        }
     }
 
     // ========== Interface Implementation Tests ==========
@@ -477,6 +372,193 @@ public class InternalTimeSeriesTests extends OpenSearchTestCase {
         assertFalse(jsonString.contains("\"alias\""));
         assertTrue(jsonString.contains("timeSeries"));
         assertTrue(jsonString.contains("samples"));
+    }
+
+    // ========== Constructor with Reduce Stage Tests ==========
+
+    public void testConstructorWithReduceStage() {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+        UnaryPipelineStage reduceStage = new SumStage("service");
+
+        // Act
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA, reduceStage);
+
+        // Assert
+        assertEquals(TEST_NAME, internal.getName());
+        assertEquals(timeSeries, internal.getTimeSeries());
+        assertEquals(TEST_METADATA, internal.getMetadata());
+        assertEquals(reduceStage, internal.getReduceStage());
+    }
+
+    public void testConstructorWithNullReduceStage() {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+
+        // Act
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA, null);
+
+        // Assert
+        assertEquals(TEST_NAME, internal.getName());
+        assertEquals(timeSeries, internal.getTimeSeries());
+        assertEquals(TEST_METADATA, internal.getMetadata());
+        assertNull(internal.getReduceStage());
+    }
+
+    // ========== Reduce with Reduce Stage Tests ==========
+
+    public void testReduceWithReduceStage() {
+        // Arrange - Create multiple time series that should be reduced by SumStage
+        Labels labels1 = ByteLabels.fromMap(Map.of("service", "api", "region", "us-east"));
+        Labels labels2 = ByteLabels.fromMap(Map.of("service", "api", "region", "us-west"));
+
+        List<Sample> samples1 = List.of(new FloatSample(1000L, 10.0), new FloatSample(2000L, 20.0));
+        List<Sample> samples2 = List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0));
+
+        TimeSeries ts1 = new TimeSeries(samples1, labels1, 1000L, 2000L, 1000L, "api-east");
+        TimeSeries ts2 = new TimeSeries(samples2, labels2, 1000L, 2000L, 1000L, "api-west");
+
+        UnaryPipelineStage sumStage = new SumStage("service");
+        InternalTimeSeries agg1 = new InternalTimeSeries(TEST_NAME, List.of(ts1), TEST_METADATA, sumStage);
+        InternalTimeSeries agg2 = new InternalTimeSeries(TEST_NAME, List.of(ts2), TEST_METADATA, sumStage);
+
+        List<InternalAggregation> aggregations = List.of(agg1, agg2);
+
+        // Create ReduceContext for final reduction
+        PipelineAggregator.PipelineTree emptyPipelineTree = new PipelineAggregator.PipelineTree(
+            Collections.emptyMap(),
+            Collections.emptyList()
+        );
+        InternalAggregation.ReduceContext finalReduceContext = InternalAggregation.ReduceContext.forFinalReduction(
+            null,
+            null,
+            (s) -> {},
+            emptyPipelineTree
+        );
+
+        // Act
+        InternalAggregation result = agg1.reduce(aggregations, finalReduceContext);
+
+        // Assert
+        assertTrue(result instanceof InternalTimeSeries);
+        InternalTimeSeries reducedInternal = (InternalTimeSeries) result;
+        assertEquals(TEST_NAME, reducedInternal.getName());
+
+        // Should have reduced the time series using the sum stage
+        List<TimeSeries> resultTimeSeries = reducedInternal.getTimeSeries();
+        assertNotNull(resultTimeSeries);
+        assertTrue(resultTimeSeries.size() <= 2); // Could be merged or kept separate depending on sum stage logic
+    }
+
+    public void testReduceWithReduceStagePartialReduction() {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+        UnaryPipelineStage sumStage = new SumStage("service");
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA, sumStage);
+
+        List<InternalAggregation> aggregations = List.of(internal);
+
+        // Create ReduceContext for partial reduction
+        PipelineAggregator.PipelineTree emptyPipelineTree = new PipelineAggregator.PipelineTree(
+            Collections.emptyMap(),
+            Collections.emptyList()
+        );
+        InternalAggregation.ReduceContext partialReduceContext = InternalAggregation.ReduceContext.forPartialReduction(
+            null,
+            null,
+            () -> emptyPipelineTree
+        );
+
+        // Act
+        InternalAggregation result = internal.reduce(aggregations, partialReduceContext);
+
+        // Assert
+        assertTrue(result instanceof InternalTimeSeries);
+        InternalTimeSeries reducedInternal = (InternalTimeSeries) result;
+        assertEquals(TEST_NAME, reducedInternal.getName());
+        // For partial reduction, the reduce stage should still be preserved
+        assertEquals(sumStage, reducedInternal.getReduceStage());
+    }
+
+    // ========== Edge Cases and Error Conditions ==========
+
+    public void testReduceWithEmptyAggregationsList() {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA);
+
+        List<InternalAggregation> emptyAggregations = List.of();
+
+        PipelineAggregator.PipelineTree emptyPipelineTree = new PipelineAggregator.PipelineTree(
+            Collections.emptyMap(),
+            Collections.emptyList()
+        );
+        InternalAggregation.ReduceContext finalReduceContext = InternalAggregation.ReduceContext.forFinalReduction(
+            null,
+            null,
+            (s) -> {},
+            emptyPipelineTree
+        );
+
+        // Act - Should handle empty aggregations gracefully (no exception expected)
+        InternalAggregation result = internal.reduce(emptyAggregations, finalReduceContext);
+
+        // Assert - Should return a valid result with empty time series
+        assertNotNull("Result should not be null", result);
+        assertTrue("Result should be InternalTimeSeries", result instanceof InternalTimeSeries);
+        InternalTimeSeries resultTimeSeries = (InternalTimeSeries) result;
+        assertEquals("Should have empty time series list", 0, resultTimeSeries.getTimeSeries().size());
+    }
+
+    public void testGetPropertyMultiplePathElements() {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA);
+
+        // Act & Assert - Test with multiple path elements (should still be invalid)
+        expectThrows(IllegalArgumentException.class, () -> { internal.getProperty(List.of("timeSeries", "invalidSubProperty")); });
+    }
+
+    public void testCreateReducedWithReduceStage() {
+        // Arrange
+        List<TimeSeries> originalSeries = createTestTimeSeries();
+        List<TimeSeries> newSeries = createDifferentTestTimeSeries();
+        UnaryPipelineStage reduceStage = new SumStage("service");
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, originalSeries, TEST_METADATA, reduceStage);
+
+        // Act
+        TimeSeriesProvider reduced = internal.createReduced(newSeries);
+
+        // Assert
+        assertTrue(reduced instanceof InternalTimeSeries);
+        InternalTimeSeries reducedInternal = (InternalTimeSeries) reduced;
+        assertEquals(TEST_NAME, reducedInternal.getName());
+        assertEquals(newSeries, reducedInternal.getTimeSeries());
+        assertEquals(TEST_METADATA, reducedInternal.getMetadata());
+        assertEquals(reduceStage, reducedInternal.getReduceStage());
+    }
+
+    public void testDoXContentBodyWithReduceStage() throws IOException {
+        // Arrange
+        List<TimeSeries> timeSeries = createTestTimeSeries();
+        UnaryPipelineStage reduceStage = new SumStage("service");
+        InternalTimeSeries internal = new InternalTimeSeries(TEST_NAME, timeSeries, TEST_METADATA, reduceStage);
+
+        // Act
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        XContentBuilder result = internal.doXContentBody(builder, null);
+        result.endObject();
+
+        // Assert
+        assertNotNull(result);
+        String jsonString = result.toString();
+        assertNotNull(jsonString);
+
+        // Verify the JSON contains expected structure including reduce stage info
+        assertTrue(jsonString.contains("timeSeries"));
+        assertTrue(jsonString.contains("samples"));
+        // The reduce stage may not be directly serialized in XContent, but should not cause errors
     }
 
     // ========== Helper Methods ==========

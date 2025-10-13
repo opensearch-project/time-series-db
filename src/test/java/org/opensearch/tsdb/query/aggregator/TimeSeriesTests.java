@@ -117,7 +117,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         assertNotEquals(timeSeries1.hashCode(), timeSeries3.hashCode());
     }
 
-    public void testEqualsWithDifferentHash() {
+    public void testEqualsWithDifferentLabels() {
         // Arrange
         Labels labels1 = ByteLabels.fromMap(Map.of("service", "api"));
         Labels labels2 = ByteLabels.fromMap(Map.of("service", "db"));

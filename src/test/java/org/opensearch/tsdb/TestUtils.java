@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb;
 
+import org.opensearch.tsdb.core.model.Sample;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -17,6 +19,8 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.stream.Stream;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Utility functions for tests.
@@ -57,5 +61,24 @@ public class TestUtils {
             }
         }
         return result;
+    }
+
+    /**
+     * Assert that two lists of samples are equal within a tolerance for float values.
+     * Timestamps must match exactly, but float values are compared with a delta.
+     *
+     * @param message Description of what is being compared
+     * @param expected Expected list of samples
+     * @param actual Actual list of samples
+     * @param delta Maximum allowed difference for float value comparison
+     */
+    public static void assertSamplesEqual(String message, List<Sample> expected, List<Sample> actual, double delta) {
+        assertEquals(message + " - sample count", expected.size(), actual.size());
+        for (int i = 0; i < expected.size(); i++) {
+            Sample expectedSample = expected.get(i);
+            Sample actualSample = actual.get(i);
+            assertEquals(message + " - timestamp at index " + i, expectedSample.getTimestamp(), actualSample.getTimestamp());
+            assertEquals(message + " - value at index " + i, expectedSample.getValue(), actualSample.getValue(), delta);
+        }
     }
 }

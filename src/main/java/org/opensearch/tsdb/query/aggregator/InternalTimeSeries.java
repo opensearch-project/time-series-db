@@ -15,6 +15,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.utils.SampleMerger;
+import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Internal aggregation result for time series pipeline aggregators.
@@ -97,8 +99,8 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
         // Read the reduce stage information
         boolean hasReduceStage = in.readBoolean();
         if (hasReduceStage) {
-            // For now, skip reading the reduce stage as it's not implemented in the current interface
-            this.reduceStage = null;
+            String stageName = in.readString();
+            this.reduceStage = (UnaryPipelineStage) PipelineStageFactory.readFrom(in, stageName);
         } else {
             this.reduceStage = null;
         }
@@ -267,6 +269,15 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
     }
 
     /**
+     * Gets the reduce stage associated with this aggregation result.
+     *
+     * @return the reduce stage, or null if no reduce stage is set
+     */
+    public UnaryPipelineStage getReduceStage() {
+        return reduceStage;
+    }
+
+    /**
      * Creates a new TimeSeriesProvider with the given time series data.
      *
      * <p>This method is used to create a reduced aggregation result with
@@ -372,5 +383,66 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
         long step = in.readLong();
 
         return new TimeSeries(samples, labels, minTimestamp, maxTimestamp, step, alias);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        InternalTimeSeries that = (InternalTimeSeries) o;
+        return Objects.equals(getName(), that.getName())
+            && Objects.equals(getMetadata(), that.getMetadata())
+            && timeSeriesListEquals(timeSeries, that.timeSeries)
+            && Objects.equals(
+                reduceStage != null ? reduceStage.getName() : null,
+                that.reduceStage != null ? that.reduceStage.getName() : null
+            );
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+            getName(),
+            getMetadata(),
+            timeSeriesListHashCode(timeSeries),
+            reduceStage != null ? reduceStage.getName() : null
+        );
+    }
+
+    /**
+     * Compare two time series lists for equality.
+     */
+    private boolean timeSeriesListEquals(List<TimeSeries> list1, List<TimeSeries> list2) {
+        if (list1 == list2) return true;
+        if (list1 == null || list2 == null) return false;
+        if (list1.size() != list2.size()) return false;
+
+        for (int i = 0; i < list1.size(); i++) {
+            TimeSeries ts1 = list1.get(i);
+            TimeSeries ts2 = list2.get(i);
+
+            // Compare key fields
+            if (!Objects.equals(ts1.getAlias(), ts2.getAlias())) return false;
+            if (ts1.getMinTimestamp() != ts2.getMinTimestamp()) return false;
+            if (ts1.getMaxTimestamp() != ts2.getMaxTimestamp()) return false;
+            if (ts1.getStep() != ts2.getStep()) return false;
+            if (!ts1.getLabels().toMapView().equals(ts2.getLabels().toMapView())) return false;
+            if (ts1.getSamples().size() != ts2.getSamples().size()) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Compute hash code for time series list.
+     */
+    private int timeSeriesListHashCode(List<TimeSeries> list) {
+        if (list == null) return 0;
+        int result = 1;
+        for (TimeSeries ts : list) {
+            result = 31 * result + (ts == null
+                ? 0
+                : Objects.hash(ts.getAlias(), ts.getMinTimestamp(), ts.getMaxTimestamp(), ts.getStep(), ts.getSamples().size()));
+        }
+        return result;
     }
 }

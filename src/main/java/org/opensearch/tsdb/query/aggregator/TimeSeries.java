@@ -16,18 +16,18 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Represents a time series in aggregation context with hash-based identification.
+ * Represents a time series in aggregation context.
  *
  * <p>This class provides an efficient representation of time series data for aggregation
- * operations. It uses hash-based identification for fast comparison and includes metadata
+ * operations. It uses Labels objects for identification and includes metadata
  * about the time series structure such as min/max timestamps and step size.</p>
  *
  * <h2>Key Features:</h2>
  * <ul>
- *   <li><strong>Hash-based Identification:</strong> Uses labels hash for efficient comparison</li>
+ *   <li><strong>Labels-based Identification:</strong> Uses Labels objects for comparison</li>
  *   <li><strong>Metadata Support:</strong> Includes min/max timestamps and step size</li>
  *   <li><strong>Alias Support:</strong> Optional alias name for renamed series</li>
- *   <li><strong>Labels Support:</strong> Uses Labels objects for efficient label handling</li>
+ *   <li><strong>Efficient Labels:</strong> Uses Labels objects for efficient label handling</li>
  * </ul>
  *
  * <h3>Usage Examples:</h3>
@@ -43,8 +43,8 @@ import java.util.Objects;
  *
  * <h3>Performance Considerations:</h3>
  * <p>This class is optimized for aggregation operations where time series need to be
- * compared and merged frequently. The hash-based identification allows for O(1) lookups
- * in most cases, making it more efficient than string-based label comparison.</p>
+ * compared and merged frequently. The Labels-based identification provides efficient
+ * comparison while maintaining semantic correctness.</p>
  *
  */
 public class TimeSeries {
