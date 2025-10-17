@@ -294,8 +294,10 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             List<TimeSeries> processedTimeSeries = entry.getValue();
             debugInfo.inputSeriesCount += processedTimeSeries.size();
 
-            for (UnaryPipelineStage stage : stages) {
-                processedTimeSeries = stage.process(processedTimeSeries);
+            if (stages != null) {
+                for (UnaryPipelineStage stage : stages) {
+                    processedTimeSeries = stage.process(processedTimeSeries);
+                }
             }
 
             // Store the processed time series
@@ -321,7 +323,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             debugInfo.outputSeriesCount += timeSeriesList.size();
 
             // Get the last stage to determine the reduce behavior
-            UnaryPipelineStage lastStage = stages.isEmpty() ? null : stages.getLast();
+            UnaryPipelineStage lastStage = (stages == null || stages.isEmpty()) ? null : stages.getLast();
 
             // Only set global aggregation stages as the reduceStage
             UnaryPipelineStage reduceStage = null;
@@ -351,7 +353,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         super.collectDebugInfo(add);
         debugInfo.add(add);
-        add.accept("stages", stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
+        add.accept("stages", stages == null ? "" : stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
     }
 
     // profiler debug info

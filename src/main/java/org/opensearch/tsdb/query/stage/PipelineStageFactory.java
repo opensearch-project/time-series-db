@@ -15,6 +15,7 @@ import org.opensearch.tsdb.lang.m3.stage.AvgStage;
 import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
+import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondStage;
 import org.opensearch.tsdb.lang.m3.stage.RoundStage;
 import org.opensearch.tsdb.lang.m3.stage.RemoveEmptyStage;
@@ -25,6 +26,7 @@ import org.opensearch.tsdb.lang.m3.stage.UnionStage;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
 import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
+import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -97,6 +99,7 @@ public class PipelineStageFactory {
             registerStage(AvgStage.class);
             registerStage(MaxStage.class);
             registerStage(MinStage.class);
+            registerStage(MovingStage.class);
             registerStage(PerSecondStage.class);
             registerStage(RemoveEmptyStage.class);
             registerStage(RoundStage.class);
@@ -105,6 +108,7 @@ public class PipelineStageFactory {
             registerStage(SumStage.class);
             registerStage(TimeshiftStage.class);
             registerStage(TransformNullStage.class);
+            registerStage(TruncateStage.class);
             registerStage(UnionStage.class);
             registerStage(ValueFilterStage.class);
         } catch (Exception e) {

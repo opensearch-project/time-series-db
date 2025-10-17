@@ -198,7 +198,7 @@ public class TimeSeriesUnfoldAggregationBuilderTests extends BaseAggregationTest
     }
 
     /**
-     * Test XContent generation with null stages.
+     * Test XContent generation with null stages (should be omitted from output).
      */
     public void testXContentGenerationWithNullStages() throws IOException {
         // Arrange
@@ -216,7 +216,7 @@ public class TimeSeriesUnfoldAggregationBuilderTests extends BaseAggregationTest
         assertTrue(jsonString.contains("min_timestamp"));
         assertTrue(jsonString.contains("max_timestamp"));
         assertTrue(jsonString.contains("step"));
-        // Should not contain stages when null
+        // Should not contain stages field when null
         assertFalse(jsonString.contains("stages"));
     }
 
@@ -378,7 +378,7 @@ public class TimeSeriesUnfoldAggregationBuilderTests extends BaseAggregationTest
             assertEquals(1000L, result.getMinTimestamp());
             assertEquals(2000L, result.getMaxTimestamp());
             assertEquals(100L, result.getStep());
-            assertNull("Should have no stages", result.getStages());
+            assertNull("Stages should be null when not specified", result.getStages());
         }
     }
 
@@ -496,7 +496,7 @@ public class TimeSeriesUnfoldAggregationBuilderTests extends BaseAggregationTest
             assertEquals(1000L, result.getMinTimestamp());
             assertEquals(2000L, result.getMaxTimestamp());
             assertEquals(500L, result.getStep());
-            assertNull("Should have no stages", result.getStages());
+            assertNull("Stages should be null when not specified", result.getStages());
         }
     }
 

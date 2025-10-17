@@ -8,6 +8,7 @@
 package org.opensearch.tsdb;
 
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.query.aggregator.TimeSeries;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -97,5 +98,24 @@ public class TestUtils {
      */
     public static void assertSamplesEqual(String message, List<Sample> expected, List<Sample> actual) {
         assertSamplesEqual(message, expected, actual, DEFAULT_SAMPLE_DELTA);
+    }
+
+    /**
+     * Find a time series in a list by matching a specific label value.
+     *
+     * @param series List of time series to search
+     * @param labelKey The label key to match
+     * @param labelValue The expected label value
+     * @return The first time series with the matching label
+     * @throws AssertionError if no time series with the specified label is found
+     */
+    public static TimeSeries findSeriesByLabel(List<TimeSeries> series, String labelKey, String labelValue) {
+        for (TimeSeries ts : series) {
+            String value = ts.getLabels().get(labelKey);
+            if (labelValue.equals(value)) {
+                return ts;
+            }
+        }
+        throw new AssertionError("Time series with label " + labelKey + "=" + labelValue + " not found");
     }
 }

@@ -69,7 +69,7 @@ public class TimeSeriesUnfoldAggregationBuilder extends AbstractAggregationBuild
      * Create a time series unfold aggregation builder.
      *
      * @param name The name of the aggregation
-     * @param stages The list of unary pipeline stages
+     * @param stages The list of unary pipeline stages (null will be converted to empty list)
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param step The step size for timestamp alignment
@@ -82,7 +82,7 @@ public class TimeSeriesUnfoldAggregationBuilder extends AbstractAggregationBuild
         long step
     ) {
         super(name);
-        this.stages = stages;
+        this.stages = (stages == null || stages.isEmpty()) ? null : stages;
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.step = step;
@@ -101,9 +101,13 @@ public class TimeSeriesUnfoldAggregationBuilder extends AbstractAggregationBuild
         this.step = in.readLong();
 
         int stageCount = in.readInt();
-        this.stages = stageCount == 0 ? null : new ArrayList<>(stageCount);
-        for (int i = 0; i < stageCount; i++) {
-            this.stages.add((UnaryPipelineStage) PipelineStageFactory.readFrom(in));
+        if (stageCount == 0) {
+            this.stages = null;
+        } else {
+            this.stages = new ArrayList<>(stageCount);
+            for (int i = 0; i < stageCount; i++) {
+                this.stages.add((UnaryPipelineStage) PipelineStageFactory.readFrom(in));
+            }
         }
     }
 
@@ -336,10 +340,10 @@ public class TimeSeriesUnfoldAggregationBuilder extends AbstractAggregationBuild
     /**
      * Set the pipeline stages.
      *
-     * @param stages The list of unary pipeline stages
+     * @param stages The list of unary pipeline stages (can be null or empty, both treated as null)
      */
     public void setStages(List<UnaryPipelineStage> stages) {
-        this.stages = stages;
+        this.stages = (stages == null || stages.isEmpty()) ? null : stages;
     }
 
     /**
