@@ -145,7 +145,7 @@ configurations {
     // Resolve dependency conflicts
     all {
         resolutionStrategy {
-            force 'org.yaml:snakeyaml:2.3'
+            force 'org.yaml:snakeyaml:2.5'
         }
     }
 }
