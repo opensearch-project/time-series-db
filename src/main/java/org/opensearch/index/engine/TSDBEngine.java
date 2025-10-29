@@ -44,6 +44,7 @@ import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.core.index.live.LiveSeriesIndex;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.reader.MetricsDirectoryReaderReferenceManager;
+import org.opensearch.tsdb.core.retention.RetentionFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -124,10 +125,17 @@ public class TSDBEngine extends Engine {
         store.incRef();
         boolean success = false;
         try {
+            var retention = RetentionFactory.create(engineConfig.getIndexSettings());
             lastCommittedSegmentInfos = store.readLastCommittedSegmentsInfo();
             Files.createDirectories(metricsStorePath);
             metadataStore = new CheckpointedMetadataStore();
-            closedChunkIndexManager = new ClosedChunkIndexManager(metricsStorePath, metadataStore, engineConfig.getShardId());
+            closedChunkIndexManager = new ClosedChunkIndexManager(
+                metricsStorePath,
+                metadataStore,
+                retention,
+                engineConfig.getThreadPool(),
+                engineConfig.getShardId()
+            );
             head = new Head(metricsStorePath, engineConfig.getShardId(), closedChunkIndexManager);
             this.localCheckpointTracker = createLocalCheckpointTracker();
             String translogUUID = Objects.requireNonNull(lastCommittedSegmentInfos.getUserData().get(Translog.TRANSLOG_UUID_KEY));
@@ -153,7 +161,9 @@ public class TSDBEngine extends Engine {
             success = true;
         } finally {
             if (success == false) {
-                head.close();
+                if (head != null) {
+                    head.close();
+                }
                 if (isClosed.get() == false) {
                     // decrement store reference as engine initialization failed
                     store.decRef();

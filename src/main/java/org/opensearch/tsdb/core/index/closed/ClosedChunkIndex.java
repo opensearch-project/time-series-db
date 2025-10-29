@@ -39,15 +39,19 @@ import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.core.utils.Time;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_TIME_UNIT;
 
 /**
  * Simple head index that stores chunks, current as one doc per chunk.
@@ -60,10 +64,12 @@ public class ClosedChunkIndex {
     private final SnapshotDeletionPolicy snapshotDeletionPolicy;
     private final ReaderManager directoryReaderManager;
     private final Metadata metadata;
+    private final Path path;
 
     /**
      * Create a new ClosedChunkIndex in the given directory.
-     * @param dir the directory to store the index
+     *
+     * @param dir      the directory to store the index
      * @param metadata metadata of the index
      * @throws IOException if there is an error creating the index
      */
@@ -90,6 +96,7 @@ public class ClosedChunkIndex {
 
             indexWriter = new IndexWriter(directory, iwc);
             directoryReaderManager = new ReaderManager(DirectoryReader.open(indexWriter));
+            path = dir;
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize ClosedChunkIndex at: " + dir, e);
         }
@@ -97,7 +104,8 @@ public class ClosedChunkIndex {
 
     /**
      * Add a new MemChunk to the index.
-     * @param labels the Labels for the series
+     *
+     * @param labels   the Labels for the series
      * @param memChunk the MemChunk to add
      * @throws IOException if there is an error adding the chunk
      */
@@ -143,6 +151,7 @@ public class ClosedChunkIndex {
 
     /**
      * Get the ReaderManager where the index is stored.
+     *
      * @return the ReaderManager
      */
     public ReaderManager getDirectoryReaderManager() {
@@ -243,6 +252,41 @@ public class ClosedChunkIndex {
      */
     public Metadata getMetadata() {
         return metadata;
+    }
+
+    /**
+     * Get the directory backing the index.
+     *
+     * @return the Directory
+     */
+    public Directory getDirectory() {
+        return directory;
+    }
+
+    /**
+     * Returns the min boundary of the index.
+     *
+     * @return Instant representing the min boundary
+     */
+    public Instant getMinTime() {
+        return Time.toInstant(metadata.minTimestamp(), DEFAULT_TIME_UNIT);
+    }
+
+    /**
+     * Returns the max boundary of the index.
+     *
+     * @return Instant representing the max boundary
+     */
+    public Instant getMaxTime() {
+        return Time.toInstant(metadata.maxTimestamp(), DEFAULT_TIME_UNIT);
+    }
+
+    /**
+     * Returns filesystem path backing the index
+     * @return filesystem {@link Path}
+     */
+    public Path getPath() {
+        return path;
     }
 
     /**

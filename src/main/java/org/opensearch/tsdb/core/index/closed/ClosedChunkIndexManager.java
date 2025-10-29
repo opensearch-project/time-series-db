@@ -12,6 +12,7 @@ import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.ReaderManager;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.logging.Loggers;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.DeprecationHandler;
@@ -19,23 +20,32 @@ import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.threadpool.Scheduler;
+import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.tsdb.MetadataStore;
+import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.core.retention.Retention;
 import org.opensearch.tsdb.core.utils.Constants;
+import org.opensearch.tsdb.core.utils.Time;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 /**
  * Responsible for managing the closed chunk indexes. Adds chunks to the appropriate index, removes old indexes, tracks pending changes
@@ -68,14 +78,18 @@ public class ClosedChunkIndexManager {
     // Thread-safety when adding/replacing indexes
     private final ReentrantLock lock = new ReentrantLock();
     private final MetadataStore metadataStore;
+    private final Retention retention;
+    private final Scheduler.Cancellable mgmtTaskScheduler;
 
     /**
      * Constructor for ClosedChunkIndexManager
-     * @param dir to store blocks under
+     *
+     * @param dir           to store blocks under
      * @param metadataStore to store index metadata
-     * @param shardId ShardId for logging context
+     * @param threadPool    to run async management tasks e.g. retention, compaction
+     * @param shardId       ShardId for logging context
      */
-    public ClosedChunkIndexManager(Path dir, MetadataStore metadataStore, ShardId shardId) {
+    public ClosedChunkIndexManager(Path dir, MetadataStore metadataStore, Retention retention, ThreadPool threadPool, ShardId shardId) {
         this.dir = dir.resolve(BLOCKS_DIR);
         try {
             Files.createDirectories(this.dir);
@@ -83,11 +97,52 @@ public class ClosedChunkIndexManager {
             throw new RuntimeException("Failed to create blocks directory: " + this.dir, e);
         }
 
+        this.retention = retention;
         this.metadataStore = metadataStore;
         this.log = Loggers.getLogger(ClosedChunkIndexManager.class, shardId);
         closedChunkIndexMap = new TreeMap<>();
         pendingChunksToSeriesMMapTimestamps = new HashMap<>();
         openClosedChunkIndexes(this.dir);
+        mgmtTaskScheduler = threadPool.scheduleWithFixedDelay(
+            this::runOptimization,
+            TimeValue.timeValueMillis(Duration.ofMillis(retention.getFrequency()).toMillis()),
+            TSDBPlugin.MGMT_THREAD_POOL_NAME
+        );
+    }
+
+    // visible for testing.
+    synchronized void runOptimization() {
+        try {
+            // Run retention first to avoid compacting soon to be deleted indexes.
+            var retentionResult = retention.run(this);
+            deleteOrphanDirectories(retentionResult.success(), retentionResult.failure());
+        } catch (Exception e) {
+            log.error("Failed to run optimization cycle", e);
+        }
+    }
+
+    private void deleteOrphanDirectories(List<ClosedChunkIndex> removalSuccess, List<ClosedChunkIndex> removalFailure) throws IOException {
+        List<Path> currentPaths = new ArrayList<>();
+        // prevent indexes pending removal from being deleted to allow proper closing sequence to be executed.
+        Set<Path> livePaths = removalFailure.stream().map(ClosedChunkIndex::getPath).collect(Collectors.toSet());
+
+        lock.lock();
+        try (var paths = Files.newDirectoryStream(dir, BLOCK_PREFIX + "*")) {
+            for (Path path : paths) {
+                currentPaths.add(path);
+            }
+            // read live indexes
+            closedChunkIndexMap.values().stream().map(ClosedChunkIndex::getPath).forEach(livePaths::add);
+        } finally {
+            lock.unlock();
+        }
+
+        // delete paths
+        for (Path path : currentPaths) {
+            if (!livePaths.contains(path)) {
+                org.opensearch.tsdb.core.utils.Files.deleteDirectory(path.toAbsolutePath());
+            }
+        }
     }
 
     /**
@@ -156,7 +211,7 @@ public class ClosedChunkIndexManager {
      * chunk in previous block ensures block boundaries are not crossed, and reduces creation of tiny chunks.
      *
      * @param series the series the chunk belongs to
-     * @param chunk the chunk to add
+     * @param chunk  the chunk to add
      * @throws IOException if there is an error adding the chunk
      */
     public void addMemChunk(MemSeries series, MemChunk chunk) throws IOException {
@@ -197,8 +252,16 @@ public class ClosedChunkIndexManager {
         long newIndexMinTime = newIndexMaxTime - Constants.Time.DEFAULT_BLOCK_DURATION;
         String dirName = String.join("_", BLOCK_PREFIX, Long.toString(newIndexMinTime), Long.toString(newIndexMaxTime), UUIDs.base64UUID());
         ClosedChunkIndex.Metadata metadata = new ClosedChunkIndex.Metadata(dirName, newIndexMinTime, newIndexMaxTime);
-        ClosedChunkIndex newIndex = new ClosedChunkIndex(dir.resolve(dirName), metadata);
-        closedChunkIndexMap.put(newIndexMaxTime, newIndex);
+        ClosedChunkIndex newIndex;
+
+        lock.lock();
+        try {
+            newIndex = new ClosedChunkIndex(dir.resolve(dirName), metadata);
+            closedChunkIndexMap.put(newIndexMaxTime, newIndex);
+        } finally {
+            lock.unlock();
+        }
+
         log.info("Created new block dir:{}, range: [{},{}]", dirName, newIndexMinTime, newIndexMaxTime);
         return newIndex;
     }
@@ -246,7 +309,8 @@ public class ClosedChunkIndexManager {
                 builder.endObject();
                 metadataStore.store(METADATA_STORE_KEY, builder.toString());
             }
-            assert pendingChunksToSeriesMMapTimestamps.isEmpty() : "pending data should be empty after commit";
+            // Clean any dangling changes for indexes that no longer exist.
+            pendingChunksToSeriesMMapTimestamps.clear();
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -285,6 +349,7 @@ public class ClosedChunkIndexManager {
 
     /**
      * Get the number of closed chunk indexes managed.
+     *
      * @return the number of closed chunk indexes
      */
     public int getNumBlocks() {
@@ -298,6 +363,7 @@ public class ClosedChunkIndexManager {
 
     /**
      * Snapshot all closed chunk indexes.
+     *
      * @return a SnapshotResult containing the list of IndexCommits and release actions
      */
     public SnapshotResult snapshotAllIndexes() {
@@ -330,7 +396,8 @@ public class ClosedChunkIndexManager {
 
     /**
      * Result of snapshotAllIndexes, containing the list of IndexCommits and release actions.
-     * @param indexCommits list of IndexCommits
+     *
+     * @param indexCommits   list of IndexCommits
      * @param releaseActions list of Runnables to release the snapshots
      */
     public record SnapshotResult(List<IndexCommit> indexCommits, List<Runnable> releaseActions) {
@@ -342,6 +409,7 @@ public class ClosedChunkIndexManager {
     public void close() {
         lock.lock();
         try {
+            mgmtTaskScheduler.cancel();
             for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
                 index.close();
             }
@@ -356,5 +424,32 @@ public class ClosedChunkIndexManager {
      */
     private long rangeForTimestamp(long t, long chunkRange) {
         return (t / chunkRange) * chunkRange + chunkRange;
+    }
+
+    /**
+     * Remove removes the given index.
+     *
+     * @param closedChunkIndex An instance of {@link ClosedChunkIndex} managed by this {@link ClosedChunkIndexManager}.
+     */
+    public void remove(ClosedChunkIndex closedChunkIndex) {
+        lock.lock();
+        try {
+            closedChunkIndexMap.entrySet().removeIf(entry -> entry.getValue().equals(closedChunkIndex));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Get all {@link ClosedChunkIndex} for the time range with start (inclusive) and end(exclusive).
+     *
+     * @param start Instant indicating start of the range(inclusive).
+     * @param end   Instant indicating end of the range(exclusive).
+     * @return a collection of ClosedChunkIndex sorted in ascending order.
+     */
+    public List<ClosedChunkIndex> getClosedChunkIndexes(Instant start, Instant end) {
+        var startTimestamp = Time.toTimestamp(start, Constants.Time.DEFAULT_TIME_UNIT);
+        var endTimestamp = Time.toTimestamp(end, Constants.Time.DEFAULT_TIME_UNIT);
+        return new ArrayList<>(closedChunkIndexMap.subMap(startTimestamp, endTimestamp).values());
     }
 }

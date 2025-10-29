@@ -16,10 +16,15 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.threadpool.FixedExecutorBuilder;
+import org.opensearch.threadpool.TestThreadPool;
+import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.tsdb.InMemoryMetadataStore;
 import org.opensearch.tsdb.MetadataStore;
+import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.core.chunk.Chunk;
 import org.opensearch.tsdb.core.chunk.ChunkAppender;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
@@ -29,10 +34,13 @@ import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.core.retention.NOOPRetention;
+import org.opensearch.tsdb.core.retention.TimeBasedRetention;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -42,11 +50,31 @@ import java.util.Map;
 import java.util.Set;
 
 public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
+    ThreadPool threadPool;
+
+    public void setUp() throws Exception {
+        super.setUp();
+        threadPool = new TestThreadPool(
+            TSDBPlugin.MGMT_THREAD_POOL_NAME,
+            new FixedExecutorBuilder(Settings.builder().build(), TSDBPlugin.MGMT_THREAD_POOL_NAME, 1, 1, "")
+        );
+    }
+
+    public void tearDown() throws Exception {
+        super.tearDown();
+        threadPool.shutdownNow();
+    }
 
     public void testClosedChunkIndexManagerLoad() throws IOException {
         Path tempDir = createTempDir("testClosedChunkIndexManagerLoad");
         MetadataStore metadataStore = new InMemoryMetadataStore();
-        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(tempDir, metadataStore, new ShardId("index", "uuid", 0));
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            threadPool,
+            new ShardId("index", "uuid", 0)
+        );
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         MemSeries series1 = new MemSeries(0, labels1);
@@ -61,7 +89,13 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         assertEquals("MaxMMapTimestamp updated after commit", 7800000, series1.getMaxMMapTimestamp());
         manager.close();
 
-        ClosedChunkIndexManager reopenedManager = new ClosedChunkIndexManager(tempDir, metadataStore, new ShardId("index", "uuid", 0));
+        ClosedChunkIndexManager reopenedManager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            threadPool,
+            new ShardId("index", "uuid", 0)
+        );
         assertEquals("Two indexes were created", 2, reopenedManager.getNumBlocks());
         reopenedManager.close();
     }
@@ -69,7 +103,13 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
     public void testAddChunk() throws IOException {
         Path tempDir = createTempDir("testAddChunk");
         MetadataStore metadataStore = new InMemoryMetadataStore();
-        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(tempDir, metadataStore, new ShardId("index", "uuid", 0));
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            threadPool,
+            new ShardId("index", "uuid", 0)
+        );
 
         var blockDirs = new ArrayList<Path>();
         // Add chunk and verify first index is created
@@ -125,6 +165,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
             tempDir,
             new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            threadPool,
             new ShardId("index", "uuid", 0)
         );
 
@@ -157,6 +199,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
             tempDir,
             new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            threadPool,
             new ShardId("index", "uuid", 0)
         );
         var blockDirs = new ArrayList<Path>();
@@ -203,6 +247,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
             tempDir,
             new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            threadPool,
             new ShardId("index", "uuid", 0)
         );
 
@@ -230,6 +276,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
             tempDir,
             new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            threadPool,
             new ShardId("index", "uuid", 0)
         );
 
@@ -294,6 +342,75 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         assertTrue("Some snapshot files should be cleaned up after release", someFilesCleanedUp);
 
         manager.close();
+    }
+
+    public void testRemove() throws IOException {
+        Path tempDir = createTempDir("testRemove");
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            threadPool,
+            new ShardId("index", "uuid", 0)
+        );
+
+        Labels labels1 = ByteLabels.fromStrings("label1", "value1");
+        MemSeries series1 = new MemSeries(0, labels1);
+
+        // Create two indexes
+        manager.addMemChunk(series1, getMemChunk(5, 0, 1500));
+        manager.addMemChunk(series1, getMemChunk(5, 7200000, 7800000));
+
+        var indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        assertEquals(2, indexes.size());
+
+        manager.remove(indexes.getFirst());
+        indexes.getFirst().close();
+
+        indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        assertEquals(1, indexes.size());
+        manager.close();
+    }
+
+    public void testOptimizationCycle() throws IOException {
+        Path tempDir = createTempDir("testOptimizationCycle");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new TimeBasedRetention(org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_BLOCK_DURATION, 0),
+            threadPool,
+            new ShardId("index", "uuid", 0)
+        );
+
+        var blockDirs = new ArrayList<Path>();
+        // Add chunk and verify first index is created
+        Labels labels1 = ByteLabels.fromStrings("label1", "value1");
+        MemSeries series1 = new MemSeries(0, labels1);
+        manager.addMemChunk(series1, getMemChunk(5, 0, 1500));
+        manager.addMemChunk(series1, getMemChunk(5, 1600, 2500));
+        addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
+        assertEquals(1, blockDirs.size());
+
+        // Add chunk and verify second index is created
+        manager.addMemChunk(series1, getMemChunk(5, 7200000, 7800000));
+        addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
+        assertEquals(2, blockDirs.size());
+
+        // Create orphan block.
+        Files.createDirectories(tempDir.resolve("blocks").resolve("block_1000"));
+        blockDirs.clear();
+        addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
+        assertEquals(3, blockDirs.size());
+
+        // Optimization cycle should remove both stale and orphan/dangling indexes.
+        manager.runOptimization();
+        blockDirs.clear();
+        addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
+        assertEquals(1, blockDirs.size());
+        var liveIndexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        assertEquals(1, liveIndexes.size());
+        liveIndexes.getLast().close();
     }
 
     private MemChunk getMemChunk(int numSamples, int minTimestamp, int maxTimestamp) {

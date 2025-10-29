@@ -29,6 +29,9 @@ import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.store.Store;
 import org.opensearch.index.translog.Translog;
 import org.opensearch.test.IndexSettingsModule;
+import org.opensearch.threadpool.FixedExecutorBuilder;
+import org.opensearch.threadpool.TestThreadPool;
+import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
@@ -86,6 +89,7 @@ public class TSDBEngineTests extends EngineTestCase {
         if (engineStore != null) {
             engineStore.close();
         }
+        threadPool.shutdownNow();
         super.tearDown();
         engineConfig = null;
     }
@@ -96,6 +100,13 @@ public class TSDBEngineTests extends EngineTestCase {
         IndexSettings settings,
         ClusterApplierService clusterApplierService
     ) throws IOException {
+        // Close the default thread pool and initialize mgmt threadPool.
+        threadPool.shutdownNow();
+        threadPool = new TestThreadPool(
+            TSDBPlugin.MGMT_THREAD_POOL_NAME,
+            new FixedExecutorBuilder(Settings.builder().build(), TSDBPlugin.MGMT_THREAD_POOL_NAME, 1, 1, "")
+        );
+
         if (engineConfig == null) {
             engineConfig = config(settings, store, createTempDir(), NoMergePolicy.INSTANCE, null, null, globalCheckpoint::get);
         }
