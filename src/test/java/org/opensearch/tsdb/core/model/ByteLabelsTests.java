@@ -42,6 +42,110 @@ public class ByteLabelsTests extends OpenSearchTestCase {
         expectThrows(IllegalArgumentException.class, () -> ByteLabels.fromStrings("k1", "v1", "k2"));
     }
 
+    public void testWithLabels() {
+        // Start with some existing labels
+        ByteLabels original = ByteLabels.fromStrings("a", "1", "c", "3", "e", "5");
+
+        // Add multiple labels at once
+        Map<String, String> newLabels = Map.of("b", "2", "d", "4", "f", "6");
+        Labels result = original.withLabels(newLabels);
+
+        // Verify all labels are present (original + new)
+        assertEquals("1", result.get("a"));
+        assertEquals("2", result.get("b"));
+        assertEquals("3", result.get("c"));
+        assertEquals("4", result.get("d"));
+        assertEquals("5", result.get("e"));
+        assertEquals("6", result.get("f"));
+
+        // Verify sorted order
+        String kvString = result.toKeyValueString();
+        assertTrue("Should maintain sorted order", kvString.indexOf("a:1") < kvString.indexOf("b:2"));
+        assertTrue("Should maintain sorted order", kvString.indexOf("b:2") < kvString.indexOf("c:3"));
+    }
+
+    public void testWithLabelsUpdate() {
+        // Start with existing labels
+        ByteLabels original = ByteLabels.fromStrings("a", "1", "b", "2", "c", "3");
+
+        // Update some and add new ones
+        Map<String, String> updates = Map.of("b", "updated", "d", "new");
+        Labels result = original.withLabels(updates);
+
+        // Verify updates and additions
+        assertEquals("1", result.get("a"));
+        assertEquals("updated", result.get("b"));
+        assertEquals("3", result.get("c"));
+        assertEquals("new", result.get("d"));
+    }
+
+    public void testWithLabelsEmpty() {
+        ByteLabels original = ByteLabels.fromStrings("a", "1", "b", "2");
+
+        // Empty map should return same instance
+        Labels result = original.withLabels(Map.of());
+        assertSame("Empty map should return same instance", original, result);
+
+        // Null map should also return same instance
+        result = original.withLabels(null);
+        assertSame("Null map should return same instance", original, result);
+    }
+
+    public void testWithLabelsNullValue() {
+        ByteLabels original = ByteLabels.fromStrings("a", "1");
+
+        // Null value should be converted to empty string
+        Map<String, String> updates = new java.util.HashMap<>();
+        updates.put("b", null);
+        Labels result = original.withLabels(updates);
+
+        assertEquals("", result.get("b"));
+    }
+
+    public void testWithLabelsInvalidName() {
+        ByteLabels original = ByteLabels.fromStrings("a", "1");
+
+        // Null name should throw
+        Map<String, String> invalidNull = new java.util.HashMap<>();
+        invalidNull.put(null, "value");
+        expectThrows(IllegalArgumentException.class, () -> original.withLabels(invalidNull));
+
+        // Empty name should throw
+        Map<String, String> invalidEmpty = Map.of("", "value");
+        expectThrows(IllegalArgumentException.class, () -> original.withLabels(invalidEmpty));
+    }
+
+    public void testWithLabelsVsChainedWithLabel() {
+        // Verify that withLabels produces same result as chained withLabel calls
+        ByteLabels original = ByteLabels.fromStrings("a", "1");
+
+        // Using withLabels
+        Map<String, String> newLabels = Map.of("b", "2", "c", "3", "d", "4");
+        Labels batchResult = original.withLabels(newLabels);
+
+        // Using chained withLabel
+        Labels chainedResult = original.withLabel("b", "2").withLabel("c", "3").withLabel("d", "4");
+
+        // Both should produce identical results
+        assertEquals(batchResult.toKeyValueString(), chainedResult.toKeyValueString());
+        assertEquals(batchResult.get("a"), chainedResult.get("a"));
+        assertEquals(batchResult.get("b"), chainedResult.get("b"));
+        assertEquals(batchResult.get("c"), chainedResult.get("c"));
+        assertEquals(batchResult.get("d"), chainedResult.get("d"));
+    }
+
+    public void testWithLabelsOnEmpty() {
+        ByteLabels empty = ByteLabels.emptyLabels();
+
+        // Add labels to empty
+        Map<String, String> newLabels = Map.of("a", "1", "b", "2");
+        Labels result = empty.withLabels(newLabels);
+
+        assertEquals("1", result.get("a"));
+        assertEquals("2", result.get("b"));
+        assertFalse(result.isEmpty());
+    }
+
     public void testEmptyLabels() {
         ByteLabels empty = ByteLabels.emptyLabels();
         assertTrue(empty.isEmpty());
@@ -262,5 +366,168 @@ public class ByteLabelsTests extends OpenSearchTestCase {
         assertTrue(labels.isEmpty());
 
         expectThrows(IllegalArgumentException.class, () -> ByteLabels.fromSortedStrings("k1", "v1", "k2"));
+    }
+
+    // Tests for withLabel API
+
+    public void testWithLabelInsertNew() {
+        // Test inserting new labels at different positions
+        ByteLabels base = ByteLabels.fromStrings("b", "2", "d", "4");
+
+        // Insert at beginning
+        Labels result1 = base.withLabel("a", "1");
+        assertEquals("1", result1.get("a"));
+        assertEquals("2", result1.get("b"));
+        assertEquals("4", result1.get("d"));
+        assertEquals("a:1 b:2 d:4", result1.toKeyValueString());
+
+        // Insert in middle
+        Labels result2 = base.withLabel("c", "3");
+        assertEquals("2", result2.get("b"));
+        assertEquals("3", result2.get("c"));
+        assertEquals("4", result2.get("d"));
+        assertEquals("b:2 c:3 d:4", result2.toKeyValueString());
+
+        // Insert at end
+        Labels result3 = base.withLabel("e", "5");
+        assertEquals("2", result3.get("b"));
+        assertEquals("4", result3.get("d"));
+        assertEquals("5", result3.get("e"));
+        assertEquals("b:2 d:4 e:5", result3.toKeyValueString());
+    }
+
+    public void testWithLabelUpdateExisting() {
+        ByteLabels base = ByteLabels.fromStrings("a", "1", "b", "2", "c", "3");
+
+        // Update first label
+        Labels result1 = base.withLabel("a", "new_value_1");
+        assertEquals("new_value_1", result1.get("a"));
+        assertEquals("2", result1.get("b"));
+        assertEquals("3", result1.get("c"));
+
+        // Update middle label
+        Labels result2 = base.withLabel("b", "new_value_2");
+        assertEquals("1", result2.get("a"));
+        assertEquals("new_value_2", result2.get("b"));
+        assertEquals("3", result2.get("c"));
+
+        // Update last label
+        Labels result3 = base.withLabel("c", "new_value_3");
+        assertEquals("1", result3.get("a"));
+        assertEquals("2", result3.get("b"));
+        assertEquals("new_value_3", result3.get("c"));
+    }
+
+    public void testWithLabelUpdateSameValue() {
+        ByteLabels base = ByteLabels.fromStrings("a", "1", "b", "2");
+
+        // Update with same value should return the same instance
+        Labels result = base.withLabel("a", "1");
+        assertSame("Should return same instance when value unchanged", base, result);
+
+        // Update with different value should return new instance
+        Labels result2 = base.withLabel("a", "different");
+        assertNotSame("Should return new instance when value changed", base, result2);
+        assertEquals("different", result2.get("a"));
+    }
+
+    public void testWithLabelEmptyLabels() {
+        ByteLabels empty = ByteLabels.emptyLabels();
+
+        Labels result = empty.withLabel("first", "value");
+        assertEquals("value", result.get("first"));
+        assertEquals("first:value", result.toKeyValueString());
+        assertFalse(result.isEmpty());
+    }
+
+    public void testWithLabelNullValue() {
+        ByteLabels base = ByteLabels.fromStrings("a", "1");
+
+        // Null value should be treated as empty string
+        Labels result = base.withLabel("b", null);
+        assertEquals("", result.get("b"));
+        assertTrue(result.has("b"));
+    }
+
+    public void testWithLabelInvalidInput() {
+        ByteLabels base = ByteLabels.fromStrings("a", "1");
+
+        // Null name should throw exception
+        expectThrows(IllegalArgumentException.class, () -> base.withLabel(null, "value"));
+
+        // Empty name should throw exception
+        expectThrows(IllegalArgumentException.class, () -> base.withLabel("", "value"));
+    }
+
+    public void testWithLabelMaintainsSortOrder() {
+        ByteLabels base = ByteLabels.fromStrings("b", "2", "d", "4", "f", "6");
+
+        // Add multiple labels in unsorted order
+        Labels result = base.withLabel("z", "26")  // Add at end
+            .withLabel("a", "1")   // Add at beginning
+            .withLabel("c", "3")   // Add in middle
+            .withLabel("e", "5");  // Add in middle
+
+        // Verify all labels are present and sorted
+        assertEquals("1", result.get("a"));
+        assertEquals("2", result.get("b"));
+        assertEquals("3", result.get("c"));
+        assertEquals("4", result.get("d"));
+        assertEquals("5", result.get("e"));
+        assertEquals("6", result.get("f"));
+        assertEquals("26", result.get("z"));
+
+        // Verify string representation maintains sort order
+        assertEquals("a:1 b:2 c:3 d:4 e:5 f:6 z:26", result.toKeyValueString());
+    }
+
+    public void testWithLabelChaining() {
+        ByteLabels base = ByteLabels.fromStrings("a", "1");
+
+        // Test method chaining
+        Labels result = base.withLabel("b", "2")
+            .withLabel("c", "3")
+            .withLabel("a", "updated")  // Update existing
+            .withLabel("d", "4");
+
+        assertEquals("updated", result.get("a"));
+        assertEquals("2", result.get("b"));
+        assertEquals("3", result.get("c"));
+        assertEquals("4", result.get("d"));
+        assertEquals("a:updated b:2 c:3 d:4", result.toKeyValueString());
+    }
+
+    public void testWithLabelHashAndEquals() {
+        ByteLabels base1 = ByteLabels.fromStrings("a", "1", "b", "2");
+        ByteLabels base2 = ByteLabels.fromStrings("a", "1");
+
+        // Add same label to both
+        Labels result1 = base1.withLabel("c", "3");
+        Labels result2 = base2.withLabel("b", "2").withLabel("c", "3");
+
+        // Results should be equal
+        assertEquals(result1, result2);
+        assertEquals(result1.hashCode(), result2.hashCode());
+        assertEquals(result1.stableHash(), result2.stableHash());
+    }
+
+    public void testWithLabelPercentileExample() {
+        // Test the specific use case mentioned in the requirements
+        ByteLabels base = ByteLabels.fromStrings("service", "api", "region", "us-east");
+
+        // Add percentile label
+        Labels withP50 = base.withLabel("percentile", "p50");
+        assertEquals("p50", withP50.get("percentile"));
+        assertEquals("api", withP50.get("service"));
+        assertEquals("us-east", withP50.get("region"));
+
+        // Update percentile label
+        Labels withP95 = withP50.withLabel("percentile", "p95");
+        assertEquals("p95", withP95.get("percentile"));
+        assertEquals("api", withP95.get("service"));
+        assertEquals("us-east", withP95.get("region"));
+
+        // Verify sorted order includes percentile in correct position
+        assertTrue(withP95.toKeyValueString().contains("percentile:p95"));
     }
 }

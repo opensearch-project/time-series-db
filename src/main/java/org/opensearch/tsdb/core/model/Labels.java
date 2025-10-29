@@ -65,4 +65,29 @@ public interface Labels {
      * @return set of label strings formatted for indexing
      */
     Set<String> toIndexSet();
+
+    /**
+     * Create a new Labels instance with the specified label added or updated.
+     * If the label already exists, its value will be updated. If it doesn't exist, it will be added.
+     * The resulting Labels instance maintains sorted order.
+     *
+     * @param name  the label name
+     * @param value the label value
+     * @return a new Labels instance with the label added/updated
+     * @throws IllegalArgumentException if name is null or empty
+     */
+    Labels withLabel(String name, String value);
+
+    /**
+     * Create a new Labels instance with multiple labels added or updated in a single operation.
+     * This is more efficient than calling withLabel multiple times as it performs only one allocation
+     * and copy operation instead of N operations for N labels.
+     * If a label already exists, its value will be updated. If it doesn't exist, it will be added.
+     * The resulting Labels instance maintains sorted order.
+     *
+     * @param newLabels map of label names to values to add or update
+     * @return a new Labels instance with all labels added/updated
+     * @throws IllegalArgumentException if any label name is null or empty
+     */
+    Labels withLabels(Map<String, String> newLabels);
 }

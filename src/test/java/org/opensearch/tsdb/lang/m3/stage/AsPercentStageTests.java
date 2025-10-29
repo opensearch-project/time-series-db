@@ -117,7 +117,10 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         assertEquals(2000L, samples.get(1).getTimestamp());
         assertEquals(25.0, samples.get(1).getValue(), 0.001);
 
-        assertEquals(leftLabels, resultSeries.getLabels());
+        // Verify that result has the original labels plus the type:ratios label
+        assertEquals("ratios", resultSeries.getLabels().get("type"));
+        assertEquals("api", resultSeries.getLabels().get("service"));
+        assertEquals("server1", resultSeries.getLabels().get("instance"));
     }
 
     public void testNoMatchingLabels() {

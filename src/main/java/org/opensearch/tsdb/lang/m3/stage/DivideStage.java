@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
@@ -37,6 +38,10 @@ public class DivideStage extends AbstractBinaryProjectionStage {
 
     /** The parameter name for label keys. */
     public static final String LABELS_PARAM_KEY = "labels";
+
+    /** The type label value to add to all generated time series. */
+    private static final String TYPE_LABEL = "type";
+    private static final String RATIOS_VALUE = "ratios";
 
     private final String rightOperandReferenceName;
     private final List<String> labelKeys;
@@ -69,6 +74,18 @@ public class DivideStage extends AbstractBinaryProjectionStage {
     @Override
     protected List<String> getLabelKeys() {
         return labelKeys;
+    }
+
+    /**
+     * Transform labels to add the type:ratios label to all generated time series.
+     * This ensures that all Divide stage outputs are tagged with type=ratios.
+     *
+     * @param originalLabels The original labels from the left series
+     * @return The labels with type:ratios added
+     */
+    @Override
+    protected Labels transformLabels(Labels originalLabels) {
+        return originalLabels.withLabel(TYPE_LABEL, RATIOS_VALUE);
     }
 
     /**

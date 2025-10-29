@@ -136,14 +136,10 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
         long minTimestamp = Math.min(leftSeries.getMinTimestamp(), rightSeries.getMinTimestamp());
         long maxTimestamp = Math.max(leftSeries.getMaxTimestamp(), rightSeries.getMaxTimestamp());
 
-        return new TimeSeries(
-            resultSamples,
-            leftSeries.getLabels(),
-            minTimestamp,
-            maxTimestamp,
-            leftSeries.getStep(),
-            leftSeries.getAlias()
-        );
+        // Transform labels if needed (can be overridden by subclasses)
+        Labels transformedLabels = transformLabels(leftSeries.getLabels());
+
+        return new TimeSeries(resultSamples, transformedLabels, minTimestamp, maxTimestamp, leftSeries.getStep(), leftSeries.getAlias());
     }
 
     /**
@@ -230,6 +226,18 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
         }
 
         return result;
+    }
+
+    /**
+     * Transform labels before creating the result time series.
+     * The default implementation returns labels unchanged.
+     * Subclasses can override this to add, modify, or remove labels as needed.
+     *
+     * @param originalLabels The original labels from the left series
+     * @return The transformed labels to use in the result time series
+     */
+    protected Labels transformLabels(Labels originalLabels) {
+        return originalLabels;
     }
 
     /**

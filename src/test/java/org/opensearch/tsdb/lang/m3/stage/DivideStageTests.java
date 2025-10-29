@@ -105,7 +105,11 @@ public class DivideStageTests extends AbstractWireSerializingTestCase<DivideStag
         assertEquals(1, result.size());
         TimeSeries resultSeries = result.get(0);
         assertEquals(3, resultSeries.getSamples().size());
-        assertEquals(leftLabels, resultSeries.getLabels());
+
+        // Verify that result has the original labels plus the type:ratios label
+        assertEquals("ratios", resultSeries.getLabels().get("type"));
+        assertEquals("api", resultSeries.getLabels().get("service"));
+        assertEquals("server1", resultSeries.getLabels().get("instance"));
 
         List<Sample> samples = resultSeries.getSamples();
 

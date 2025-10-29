@@ -407,7 +407,7 @@ public class ByteLabels implements Labels {
 
     @Override
     public String get(String name) {
-        if (name == null || name.isEmpty()) return "";
+        if (name == null || name.isEmpty()) return EMPTY_STRING;
 
         byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
         int pos = 0;
@@ -425,7 +425,7 @@ public class ByteLabels implements Labels {
             }
         }
 
-        return "";
+        return EMPTY_STRING;
     }
 
     @Override
@@ -489,6 +489,207 @@ public class ByteLabels implements Labels {
         }
 
         return result;
+    }
+
+    @Override
+    public Labels withLabel(String name, String value) {
+        // TODO: Consider lazy wrapper approach for performance - instead of immediately re-encoding,
+        // wrap existing labels with new labels and handle reads lazily. This could be faster for
+        // cases where labels are added but not immediately read. Benchmark to compare:
+        // 1. Current: eager merge + re-encode on every withLabel call
+        // 2. Alternative: lazy wrapper that defers encoding until labels are accessed
+        // Trade-offs: lazy approach adds complexity and may use more memory for wrapper objects
+
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Label name cannot be null or empty");
+        }
+        if (value == null) {
+            value = EMPTY_STRING;
+        }
+
+        byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+        byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+
+        // Find the insertion/update position
+        LabelPosition position = findLabelPosition(nameBytes);
+
+        if (position.exists()) {
+            // Update existing label with same value - no change needed
+            if (position.valueLength() == valueBytes.length
+                && compareBytes(data, position.valueStart(), position.valueLength(), valueBytes) == 0) {
+                return this;
+            }
+            return updateExistingLabel(position, nameBytes, valueBytes);
+        } else {
+            return insertNewLabel(position.insertPos(), nameBytes, valueBytes);
+        }
+    }
+
+    @Override
+    public Labels withLabels(Map<String, String> newLabels) {
+        if (newLabels == null || newLabels.isEmpty()) {
+            return this;
+        }
+
+        // Validate all label names upfront
+        for (String name : newLabels.keySet()) {
+            if (name == null || name.isEmpty()) {
+                throw new IllegalArgumentException("Label name cannot be null or empty");
+            }
+        }
+
+        // Merge existing labels with new labels
+        TreeMap<String, String> merged = TREE_MAP_CACHE.get();
+        merged.clear();
+
+        // Add existing labels
+        int pos = 0;
+        while (pos < data.length) {
+            DecodedString name = decodeString(data, pos);
+            pos = name.nextPos;
+            DecodedString value = decodeString(data, pos);
+            pos = value.nextPos;
+            merged.put(name.value, value.value);
+        }
+
+        // Add/update with new labels
+        for (Map.Entry<String, String> entry : newLabels.entrySet()) {
+            String value = entry.getValue();
+            merged.put(entry.getKey(), value == null ? EMPTY_STRING : value);
+        }
+
+        // Encode merged labels in one pass
+        return encodeLabels(merged);
+    }
+
+    /**
+     * Finds the position where a label should be inserted or updated.
+     * Returns information about whether the label exists and where to insert/update.
+     */
+    private LabelPosition findLabelPosition(byte[] nameBytes) {
+        int pos = 0;
+        int labelIndex = 0;
+
+        while (pos < data.length) {
+            StringPosition namePos = parseStringPos(data, pos);
+            StringPosition valuePos = parseStringPos(data, namePos.nextPos());
+
+            int cmp = compareBytes(data, namePos.dataStart(), namePos.length(), nameBytes);
+            if (cmp == 0) {
+                // Found exact match
+                return new LabelPosition(
+                    true,
+                    pos,
+                    labelIndex,
+                    namePos.dataStart(),
+                    namePos.length(),
+                    valuePos.dataStart(),
+                    valuePos.length(),
+                    valuePos.nextPos()
+                );
+            } else if (cmp > 0) {
+                // Found position where we should insert (labels are sorted)
+                return new LabelPosition(false, pos, labelIndex, 0, 0, 0, 0, 0);
+            }
+
+            pos = valuePos.nextPos();
+            labelIndex++;
+        }
+
+        // Insert at the end
+        return new LabelPosition(false, pos, labelIndex, 0, 0, 0, 0, 0);
+    }
+
+    /**
+     * Updates an existing label with a new value.
+     */
+    private ByteLabels updateExistingLabel(LabelPosition position, byte[] nameBytes, byte[] valueBytes) {
+        // Calculate encoded lengths
+        int newNameEncodedSize = getEncodedStringSize(nameBytes.length);
+        int newValueEncodedSize = getEncodedStringSize(valueBytes.length);
+        int newLabelSize = newNameEncodedSize + nameBytes.length + newValueEncodedSize + valueBytes.length;
+
+        int oldNameEncodedSize = getEncodedStringSize(position.nameLength());
+        int oldValueEncodedSize = getEncodedStringSize(position.valueLength());
+        int oldLabelSize = oldNameEncodedSize + position.nameLength() + oldValueEncodedSize + position.valueLength();
+
+        int sizeDelta = newLabelSize - oldLabelSize;
+        byte[] newData = new byte[data.length + sizeDelta];
+
+        // Copy data before the updated label
+        System.arraycopy(data, 0, newData, 0, position.startPos());
+
+        // Write the updated label
+        int writePos = position.startPos();
+        writePos = writeEncodedString(newData, writePos, nameBytes);
+        writePos = writeEncodedString(newData, writePos, valueBytes);
+
+        // Copy data after the updated label
+        System.arraycopy(data, position.endPos(), newData, writePos, data.length - position.endPos());
+
+        return new ByteLabels(newData);
+    }
+
+    /**
+     * Inserts a new label at the specified position.
+     */
+    private ByteLabels insertNewLabel(int insertPos, byte[] nameBytes, byte[] valueBytes) {
+        // Calculate encoded size for the new label
+        int nameEncodedSize = getEncodedStringSize(nameBytes.length);
+        int valueEncodedSize = getEncodedStringSize(valueBytes.length);
+        int newLabelSize = nameEncodedSize + nameBytes.length + valueEncodedSize + valueBytes.length;
+
+        byte[] newData = new byte[data.length + newLabelSize];
+
+        // Copy data before insertion point
+        System.arraycopy(data, 0, newData, 0, insertPos);
+
+        // Write the new label
+        int writePos = insertPos;
+        writePos = writeEncodedString(newData, writePos, nameBytes);
+        writePos = writeEncodedString(newData, writePos, valueBytes);
+
+        // Copy data after insertion point
+        System.arraycopy(data, insertPos, newData, writePos, data.length - insertPos);
+
+        return new ByteLabels(newData);
+    }
+
+    /**
+     * Calculates the encoded size needed for a string of the given length.
+     */
+    private static int getEncodedStringSize(int stringLength) {
+        return stringLength < 255 ? 1 : 4;
+    }
+
+    /**
+     * Writes an encoded string to the byte array at the specified position.
+     * Returns the position after the written data.
+     */
+    private static int writeEncodedString(byte[] dest, int pos, byte[] stringBytes) {
+        int length = stringBytes.length;
+
+        if (length < 255) {
+            dest[pos++] = (byte) length;
+        } else {
+            dest[pos++] = (byte) 255;
+            dest[pos++] = (byte) (length & 0xFF);
+            dest[pos++] = (byte) ((length >> 8) & 0xFF);
+            dest[pos++] = (byte) ((length >> 16) & 0xFF);
+        }
+
+        System.arraycopy(stringBytes, 0, dest, pos, length);
+        return pos + length;
+    }
+
+    /**
+     * Record representing the position information for a label in the byte array.
+     */
+    private record LabelPosition(boolean exists, int startPos, int labelIndex, int nameStart, int nameLength, int valueStart,
+        int valueLength, int endPos) {
+        int insertPos() {
+            return startPos;
+        }
     }
 
     @Override
