@@ -56,3 +56,4 @@ public class IsNonNullPlanNode extends M3PlanNode {
         return new IsNonNullPlanNode(M3PlannerContext.generateId());
     }
 }
+

@@ -191,3 +191,4 @@ public class SummarizePlanNodeTests extends BasePlanNodeTests {
         }
     }
 }
+

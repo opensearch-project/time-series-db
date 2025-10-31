@@ -80,3 +80,4 @@ public class IsNonNullPlanNodeTests extends BasePlanNodeTests {
         }
     }
 }
+

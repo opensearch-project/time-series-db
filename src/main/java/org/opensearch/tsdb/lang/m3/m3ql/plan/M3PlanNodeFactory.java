@@ -79,6 +79,7 @@ public class M3PlanNodeFactory {
             case Constants.Functions.REMOVE_EMPTY:
                 return RemoveEmptyPlanNode.of(functionNode);
             case Constants.Functions.SORT:
+            case Constants.Functions.SORT_SERIES:
                 return SortPlanNode.of(functionNode);
             case Constants.Functions.SUMMARIZE:
                 return SummarizePlanNode.of(functionNode);

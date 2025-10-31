@@ -122,6 +122,11 @@ public class Constants {
         public static final String SORT = "sort";
 
         /**
+         * sortSeries function name (alias for sort).
+         */
+        public static final String SORT_SERIES = "sortSeries";
+
+        /**
          * summarize function name.
          */
         public static final String SUMMARIZE = "summarize";

@@ -45,6 +45,13 @@ public class M3ASTConverterAliasTests extends OpenSearchTestCase {
     }
 
     /**
+     * Test that sortSeries alias produces SORT node.
+     */
+    public void testSortSeriesAliasProducesSortNode() {
+        assertUnaryAliasProducesNode("sortSeries", "SORT");
+    }
+
+    /**
      * Helper method to test that a binary function alias produces the expected node type.
      *
      * @param aliasName the binary alias function name (e.g., "ratio", "divide", "subtract")
@@ -52,6 +59,23 @@ public class M3ASTConverterAliasTests extends OpenSearchTestCase {
      */
     private void assertBinaryAliasProducesNode(String aliasName, String expectedNodeType) {
         String query = "fetch name:a | " + aliasName + "(fetch name:b)";
+        try (M3PlannerContext context = M3PlannerContext.create()) {
+            M3ASTConverter converter = new M3ASTConverter(context);
+            String plan = getPlanString(converter.buildPlan(M3QLParser.parse(query, true)));
+            assertTrue(aliasName + " alias should produce " + expectedNodeType + " node", plan.contains(expectedNodeType));
+        } catch (Exception e) {
+            fail("Failed to test " + aliasName + " alias: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Helper method to test that a unary function alias produces the expected node type.
+     *
+     * @param aliasName the unary alias function name (e.g., "sortSeries")
+     * @param expectedNodeType the expected node type in the plan (e.g., "SORT")
+     */
+    private void assertUnaryAliasProducesNode(String aliasName, String expectedNodeType) {
+        String query = "fetch name:a | " + aliasName + " avg";
         try (M3PlannerContext context = M3PlannerContext.create()) {
             M3ASTConverter converter = new M3ASTConverter(context);
             String plan = getPlanString(converter.buildPlan(M3QLParser.parse(query, true)));
