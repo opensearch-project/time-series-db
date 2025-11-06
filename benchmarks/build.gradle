@@ -28,8 +28,8 @@ dependencies {
     implementation project(':')
 
     // JMH dependencies
-    implementation 'org.openjdk.jmh:jmh-core:1.35'
-    annotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.35'
+    implementation 'org.openjdk.jmh:jmh-core:1.37'
+    annotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
 }
 
 // Configure annotation processing for JMH
