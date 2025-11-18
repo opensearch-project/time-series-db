@@ -42,15 +42,15 @@ public class ProfileInfoMapper {
     public static final String SHARD_ID_FIELD_NAME = "shard_id";
     public static final String AGGREGATIONS_FIELD_NAME = "aggregations";
     public static final String TIMING_INFO_FIELD_NAME = "timing_info";
-    public static final String QUERY_TIME = "query_time";
-    public static final String FETCH_TIME = "fetch_time";
-    public static final String NETWORK_INBOUND_TIME = "network_inbound_time";
-    public static final String NETWORK_OUTBOUND_TIME = "network_outbound_time";
-    public static final String INITIALIZE_TIME = "initialize_time";
-    public static final String COLLECT_TIME = "collect_time";
-    public static final String POST_COLLECTION_TIME = "post_collection_time";
-    public static final String BUILD_AGGREGATION_TIME = "build_aggregation_time";
-    public static final String REDUCE_TIME = "reduce_time";
+    public static final String QUERY_TIME = "query_time_ns";
+    public static final String FETCH_TIME = "fetch_time_ns";
+    public static final String NETWORK_INBOUND_TIME = "network_inbound_time_ns";
+    public static final String NETWORK_OUTBOUND_TIME = "network_outbound_time_ns";
+    public static final String INITIALIZE_TIME = "initialize";
+    public static final String COLLECT_TIME = "collect";
+    public static final String POST_COLLECTION_TIME = "post_collection";
+    public static final String BUILD_AGGREGATION_TIME = "build_aggregation";
+    public static final String REDUCE_TIME = "reduce";
 
     /**
      * Extract Profile Info from TimeSeriesUnfoldAggregator and construct debug info for every stage
@@ -224,11 +224,11 @@ public class ProfileInfoMapper {
      */
     private static void writeAggregationFields(XContentBuilder builder, AggregationStats stats) throws IOException {
         builder.startObject(TIMING_INFO_FIELD_NAME);
-        builder.field(INITIALIZE_TIME, stats.timingStats.initializeTime);
-        builder.field(COLLECT_TIME, stats.timingStats.collectTime);
-        builder.field(POST_COLLECTION_TIME, stats.timingStats.postCollectionTime);
-        builder.field(BUILD_AGGREGATION_TIME, stats.timingStats.buildAggregationTime);
-        builder.field(REDUCE_TIME, stats.timingStats.reduceTime);
+        builder.field(formatTimeString(INITIALIZE_TIME), stats.timingStats.initializeTime);
+        builder.field(formatTimeString(COLLECT_TIME), stats.timingStats.collectTime);
+        builder.field(formatTimeString(POST_COLLECTION_TIME), stats.timingStats.postCollectionTime);
+        builder.field(formatTimeString(BUILD_AGGREGATION_TIME), stats.timingStats.buildAggregationTime);
+        builder.field(formatTimeString(REDUCE_TIME), stats.timingStats.reduceTime);
         builder.endObject();
 
         builder.startObject(DEBUG_INFO_FIELD_NAME);
@@ -248,17 +248,25 @@ public class ProfileInfoMapper {
         builder.endObject();
     }
 
+    private static String formatTimeString(String phase) {
+        if (!phase.endsWith("_time_ns")) {
+            return phase + "_time_ns";
+        } else {
+            return phase;
+        }
+    }
+
     private static void writeTotalsFields(XContentBuilder builder, TotalsStats stats) throws IOException {
         builder.startObject(TIMING_INFO_FIELD_NAME);
-        builder.field(QUERY_TIME, stats.shardTimingStats.queryTime);
-        builder.field(FETCH_TIME, stats.shardTimingStats.fetchTime);
-        builder.field(NETWORK_INBOUND_TIME, stats.shardTimingStats.networkInboundTime);
-        builder.field(NETWORK_OUTBOUND_TIME, stats.shardTimingStats.networkOutboundTime);
-        builder.field(INITIALIZE_TIME, stats.timingStats.initializeTime);
-        builder.field(COLLECT_TIME, stats.timingStats.collectTime);
-        builder.field(POST_COLLECTION_TIME, stats.timingStats.postCollectionTime);
-        builder.field(BUILD_AGGREGATION_TIME, stats.timingStats.buildAggregationTime);
-        builder.field(REDUCE_TIME, stats.timingStats.reduceTime);
+        builder.field(formatTimeString(QUERY_TIME), stats.shardTimingStats.queryTime);
+        builder.field(formatTimeString(FETCH_TIME), stats.shardTimingStats.fetchTime);
+        builder.field(formatTimeString(NETWORK_INBOUND_TIME), stats.shardTimingStats.networkInboundTime);
+        builder.field(formatTimeString(NETWORK_OUTBOUND_TIME), stats.shardTimingStats.networkOutboundTime);
+        builder.field(formatTimeString(INITIALIZE_TIME), stats.timingStats.initializeTime);
+        builder.field(formatTimeString(COLLECT_TIME), stats.timingStats.collectTime);
+        builder.field(formatTimeString(POST_COLLECTION_TIME), stats.timingStats.postCollectionTime);
+        builder.field(formatTimeString(BUILD_AGGREGATION_TIME), stats.timingStats.buildAggregationTime);
+        builder.field(formatTimeString(REDUCE_TIME), stats.timingStats.reduceTime);
         builder.endObject();
 
         builder.startObject(DEBUG_INFO_FIELD_NAME);
