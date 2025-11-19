@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.compaction;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.tsdb.TSDBPlugin;
 
@@ -26,6 +28,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  */
 public class CompactionFactory {
+    private static final Logger logger = LogManager.getLogger(CompactionFactory.class);
 
     public enum CompactionType {
         SizeTieredCompaction("SizeTieredCompaction"),
@@ -54,6 +57,17 @@ public class CompactionFactory {
      * @return a Compaction instance configured according to the index settings
      */
     public static Compaction create(IndexSettings indexSettings) {
+        var compaction = getCompactionFor(indexSettings);
+        if (indexSettings.getScopedSettings().get(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey()) != null) {
+            indexSettings.getScopedSettings().addSettingsUpdateConsumer(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY, newFrequency -> {
+                logger.info("Updating compaction frequency to: {}", newFrequency);
+                compaction.setFrequency(newFrequency.getMillis());
+            });
+        }
+        return compaction;
+    }
+
+    private static Compaction getCompactionFor(IndexSettings indexSettings) {
         var compactionType = CompactionType.from(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.get(indexSettings.getSettings()));
 
         switch (compactionType) {

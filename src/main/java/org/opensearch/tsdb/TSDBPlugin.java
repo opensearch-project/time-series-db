@@ -115,7 +115,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         TimeValue.timeValueMinutes(15),
         TimeValue.timeValueMinutes(1),
         Setting.Property.IndexScope,
-        Setting.Property.Final
+        Setting.Property.Dynamic
     );
 
     public static final Setting<String> TSDB_ENGINE_COMPACTION_TYPE = Setting.simpleString(
@@ -130,7 +130,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         TimeValue.timeValueMinutes(15),
         TimeValue.timeValueMinutes(1),
         Setting.Property.IndexScope,
-        Setting.Property.Final
+        Setting.Property.Dynamic
     );
 
     /**
@@ -277,7 +277,9 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
      */
     public TSDBPlugin() {}
 
-    /** Initialize metrics if telemetry is available. */
+    /**
+     * Initialize metrics if telemetry is available.
+     */
     @Override
     public java.util.Collection<Object> createComponents(
         Client client,

@@ -34,7 +34,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
             Settings.EMPTY
         );
-
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
@@ -50,6 +50,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
@@ -67,6 +68,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
@@ -85,6 +87,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings1h.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         Retention retention1h = RetentionFactory.create(indexSettings1h);
         assertTrue(retention1h instanceof TimeBasedRetention);
 
@@ -98,6 +101,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             IndexMetadata.builder("test-index-30d").settings(settings30d).numberOfShards(1).numberOfReplicas(0).build(),
             Settings.EMPTY
         );
+        indexSettings30d.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
 
         Retention retention30d = RetentionFactory.create(indexSettings30d);
         assertTrue(retention30d instanceof TimeBasedRetention);
@@ -114,6 +118,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         Retention retention1 = RetentionFactory.create(indexSettings);
         Retention retention2 = RetentionFactory.create(indexSettings);
 
@@ -171,7 +176,37 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         assertNotNull("No error if retention is not set", RetentionFactory.create(indexSettings));
     }
 
+    public void testUpdateRetentionFrequency() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "200h")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY.getKey(), "5m")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        var retention = RetentionFactory.create(indexSettings);
+        assertEquals(Duration.ofMinutes(5).toMillis(), retention.getFrequency());
+        assertNotNull(retention);
+
+        // Update the frequency dynamically
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY.getKey(), "1m").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+        assertEquals(Duration.ofMinutes(1).toMillis(), retention.getFrequency());
+    }
 }

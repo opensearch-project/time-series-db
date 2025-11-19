@@ -22,7 +22,7 @@ import java.util.List;
  */
 public class TimeBasedRetention implements Retention {
     private final long duration;
-    private long interval;
+    private volatile long interval;
 
     /**
      * Constructs a new time-based retention policy.

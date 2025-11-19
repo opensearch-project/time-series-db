@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.retention;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.tsdb.TSDBPlugin;
@@ -22,6 +24,7 @@ import org.opensearch.tsdb.TSDBPlugin;
  * </ul>
  */
 public class RetentionFactory {
+    private static final Logger logger = LogManager.getLogger(RetentionFactory.class);
 
     /**
      * Creates a retention policy instance based on the provided index settings.
@@ -38,6 +41,17 @@ public class RetentionFactory {
      * @return a Retention instance configured according to the index settings
      */
     public static Retention create(IndexSettings indexSettings) {
+        var retention = getRetentionFor(indexSettings);
+        if (indexSettings.getScopedSettings().get(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY.getKey()) != null) {
+            indexSettings.getScopedSettings().addSettingsUpdateConsumer(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY, newFrequency -> {
+                logger.info("Updating retention frequency to: {}", newFrequency);
+                retention.setFrequency(newFrequency.getMillis());
+            });
+        }
+        return retention;
+    }
+
+    private static Retention getRetentionFor(IndexSettings indexSettings) {
         var age = TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.get(indexSettings.getSettings());
         var frequency = TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY.get(indexSettings.getSettings());
         var blockDuration = TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.get(indexSettings.getSettings());

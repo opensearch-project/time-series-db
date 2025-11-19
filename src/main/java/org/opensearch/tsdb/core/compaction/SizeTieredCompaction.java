@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 public class SizeTieredCompaction implements Compaction {
     private final long[] ranges;
     private final TimeUnit resolution;
-    private long interval;
+    private volatile long interval;
 
     /**
      * Constructs a new size-tiered compaction strategy with the specified time ranges.

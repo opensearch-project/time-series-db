@@ -71,8 +71,8 @@ public class ClosedChunkIndex {
     /**
      * Create a new ClosedChunkIndex in the given directory.
      *
-     * @param dir        the directory to store the index
-     * @param metadata   metadata of the index
+     * @param dir      the directory to store the index
+     * @param metadata metadata of the index
      * @param resolution resolution of the samples
      * @throws IOException if there is an error creating the index
      */

@@ -32,6 +32,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -55,6 +56,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -78,6 +80,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -107,6 +110,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -138,6 +142,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -159,6 +164,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
@@ -182,6 +188,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertNotNull(compaction);
         assertTrue(compaction instanceof NoopCompaction);
@@ -220,6 +227,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         assertThrows(IllegalArgumentException.class, () -> CompactionFactory.create(indexSettings));
     }
 
@@ -238,6 +246,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> CompactionFactory.create(indexSettings));
         assertEquals(
             "failed to parse value [30s] for setting [index.tsdb_engine.compaction.frequency], must be >= [1m]",
@@ -261,6 +270,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertEquals(Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
         assertNotNull(compaction);
@@ -284,11 +294,49 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         Compaction compaction = CompactionFactory.create(indexSettings);
         assertTrue(compaction instanceof SizeTieredCompaction);
         assertEquals(Duration.ofMinutes(2).toMillis(), compaction.getFrequency());
         var expectedTiers = new Duration[] { Duration.ofHours(2), Duration.ofHours(6), Duration.ofHours(18), };
         assertArrayEquals(expectedTiers, ((SizeTieredCompaction) compaction).getTiers());
         assertNotNull(compaction);
+    }
+
+    public void testUpdateCompactionFrequency() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "SizeTieredCompaction")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "200h")
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey(), "5m")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        // Register the dynamic setting before creating the compaction
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+
+        Compaction compaction = CompactionFactory.create(indexSettings);
+        assertTrue(compaction instanceof SizeTieredCompaction);
+        assertEquals(Duration.ofMinutes(5).toMillis(), compaction.getFrequency());
+        var expectedTiers = new Duration[] { Duration.ofHours(2), Duration.ofHours(6), Duration.ofHours(18) };
+        assertArrayEquals(expectedTiers, ((SizeTieredCompaction) compaction).getTiers());
+        assertNotNull(compaction);
+
+        // Update the frequency dynamically
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey(), "1m").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+
+        assertEquals(Duration.ofMinutes(1).toMillis(), compaction.getFrequency());
     }
 }
