@@ -12,10 +12,12 @@ import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.ReaderManager;
 import org.apache.lucene.index.SerialMergeScheduler;
 import org.apache.lucene.store.AlreadyClosedException;
+import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.xcontent.DeprecationHandler;
@@ -34,6 +36,7 @@ import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.retention.Retention;
 import org.opensearch.tsdb.core.utils.Time;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,7 +59,7 @@ import java.util.stream.Collectors;
  * Responsible for managing the closed chunk indexes. Adds chunks to the appropriate index, removes old indexes, tracks pending changes
  * and commits them in a safe manner.
  */
-public class ClosedChunkIndexManager {
+public class ClosedChunkIndexManager implements Closeable {
     // Key to store metadata in MetadataStore
     private static final String METADATA_STORE_KEY = "INDEX_METADATA";
 
@@ -672,10 +675,10 @@ public class ClosedChunkIndexManager {
         lock.lock();
         try {
             mgmtTaskScheduler.cancel();
-            for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
-                index.close();
-            }
+            IOUtils.close(closedChunkIndexMap.values());
             closedChunkIndexMap.clear();
+        } catch (IOException e) {
+            throw ExceptionsHelper.convertToRuntime(e);
         } finally {
             lock.unlock();
         }

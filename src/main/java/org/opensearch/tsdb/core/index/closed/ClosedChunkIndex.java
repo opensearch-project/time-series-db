@@ -33,6 +33,7 @@ import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
@@ -43,6 +44,7 @@ import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.utils.Time;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -59,7 +61,7 @@ import java.util.stream.Stream;
 /**
  * Simple head index that stores chunks, current as one doc per chunk.
  */
-public class ClosedChunkIndex {
+public class ClosedChunkIndex implements Closeable {
     private static final String SERIES_METADATA_KEY = "live_series_metadata";
     private final Analyzer analyzer;
     private final Directory directory;
@@ -162,10 +164,7 @@ public class ClosedChunkIndex {
      */
     public void close() {
         try {
-            analyzer.close();
-            indexWriter.close();
-            directory.close();
-            directoryReaderManager.close();
+            IOUtils.close(analyzer, indexWriter, directory, directoryReaderManager);
         } catch (Exception e) {
             throw ExceptionsHelper.convertToRuntime(e);
         }

@@ -31,12 +31,14 @@ import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.index.engine.TSDBTragicException;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -49,7 +51,7 @@ import java.util.Map;
 /**
  * LiveChunkIndex indexes series in the head block which have open chunks.
  */
-public class LiveSeriesIndex {
+public class LiveSeriesIndex implements Closeable {
     /**
      * Directory name for the live series index
      */
@@ -85,6 +87,8 @@ public class LiveSeriesIndex {
             indexWriter = new IndexWriter(directory, iwc);
             directoryReaderManager = new ReaderManager(DirectoryReader.open(indexWriter, true, false));
         } catch (IOException e) {
+            // close resources as LiveSeriesIndex initialization failed
+            close();
             throw new RuntimeException("Failed to initialize LiveSeriesIndex at: " + dir, e);
         }
 
@@ -159,10 +163,7 @@ public class LiveSeriesIndex {
      * @throws IOException if closing fails
      */
     public void close() throws IOException {
-        indexWriter.close();
-        directory.close();
-        directoryReaderManager.close();
-        analyzer.close();
+        IOUtils.close(indexWriter, directory, directoryReaderManager, analyzer);
     }
 
     /**

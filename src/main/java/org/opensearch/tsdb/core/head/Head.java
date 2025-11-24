@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.index.engine.TSDBEmptyLabelException;
@@ -28,6 +29,7 @@ import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.utils.Time;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * long-term storage blocks. It provides fast append operations, efficient querying,
  * and coordinates with indexing systems for optimal performance.
  */
-public class Head {
+public class Head implements Closeable {
     private static final String HEAD_DIR = "head";
     private final HeadAppender.AppendContext appendContext;
     private final long oooCutoffWindow;
@@ -63,35 +65,40 @@ public class Head {
      * @param shardId                 the shard ID for this head
      * @param closedChunkIndexManager the manager for closed chunk indexes
      */
-    public Head(Path dir, ShardId shardId, ClosedChunkIndexManager closedChunkIndexManager, Settings indexSettings) {
-        log = Loggers.getLogger(Head.class, shardId);
-        maxTime = Long.MIN_VALUE;
-        seriesMap = new SeriesMap();
-
-        TimeUnit timeUnit = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(indexSettings));
-        long chunkRange = Time.toTimestamp(TSDBPlugin.TSDB_ENGINE_CHUNK_DURATION.get(indexSettings), timeUnit);
-        appendContext = new HeadAppender.AppendContext(
-            new ChunkOptions(chunkRange, TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.get(indexSettings))
-        );
-        oooCutoffWindow = Time.toTimestamp(TSDBPlugin.TSDB_ENGINE_OOO_CUTOFF.get(indexSettings), timeUnit);
-
-        Path headDir = dir.resolve(HEAD_DIR);
+    public Head(Path dir, ShardId shardId, ClosedChunkIndexManager closedChunkIndexManager, Settings indexSettings) throws IOException {
         try {
-            Files.createDirectories(headDir);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create the head directory: " + headDir, e);
+            log = Loggers.getLogger(Head.class, shardId);
+            maxTime = Long.MIN_VALUE;
+            seriesMap = new SeriesMap();
+
+            TimeUnit timeUnit = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(indexSettings));
+            long chunkRange = Time.toTimestamp(TSDBPlugin.TSDB_ENGINE_CHUNK_DURATION.get(indexSettings), timeUnit);
+            appendContext = new HeadAppender.AppendContext(
+                new ChunkOptions(chunkRange, TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.get(indexSettings))
+            );
+            oooCutoffWindow = Time.toTimestamp(TSDBPlugin.TSDB_ENGINE_OOO_CUTOFF.get(indexSettings), timeUnit);
+
+            Path headDir = dir.resolve(HEAD_DIR);
+            try {
+                Files.createDirectories(headDir);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create the head directory: " + headDir, e);
+            }
+
+            try {
+                liveSeriesIndex = new LiveSeriesIndex(headDir);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to initialize the live series index", e);
+            }
+
+            this.closedChunkIndexManager = closedChunkIndexManager;
+
+            // rebuild in-memory state
+            loadSeries();
+        } catch (Exception e) {
+            close();
+            throw e;
         }
-
-        try {
-            liveSeriesIndex = new LiveSeriesIndex(headDir);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to initialize the live series index", e);
-        }
-
-        this.closedChunkIndexManager = closedChunkIndexManager;
-
-        // rebuild in-memory state
-        loadSeries();
     }
 
     /**
@@ -391,8 +398,7 @@ public class Head {
      * @throws IOException if an error while closing an index occurs
      */
     public void close() throws IOException {
-        liveSeriesIndex.close();
-        closedChunkIndexManager.close();
+        IOUtils.close(liveSeriesIndex, closedChunkIndexManager);
     }
 
     private void loadSeries() {

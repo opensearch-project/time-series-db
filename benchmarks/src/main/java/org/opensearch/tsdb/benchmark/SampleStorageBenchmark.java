@@ -99,7 +99,7 @@ import java.util.concurrent.TimeUnit;
  * @see org.opensearch.tsdb.query.aggregator.DefaultSampleContainer
  */
 @State(Scope.Benchmark)
-@Fork(value = 1, jvmArgs = {"-Xms2g", "-Xmx2g"})
+@Fork(value = 1, jvmArgs = { "-Xms2g", "-Xmx2g" })
 public class SampleStorageBenchmark {
     private static final int SAMPLE_COUNT = 10000;
     private static final long START_TIMESTAMP = 1000L;
@@ -125,7 +125,7 @@ public class SampleStorageBenchmark {
     @AuxCounters(AuxCounters.Type.EVENTS)
     @State(Scope.Thread)
     public static class ListStorageState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
         private SampleType sampleType;
         public double bytesPerSample;
@@ -195,7 +195,6 @@ public class SampleStorageBenchmark {
         return samples;
     }
 
-
     /**
      * Benchmarks memory footprint of sparse data in {@link ArrayList} (50% density).
      *
@@ -238,7 +237,6 @@ public class SampleStorageBenchmark {
         return samples;
     }
 
-
     /**
      * JMH state for SampleContainer-based storage benchmarks with memory tracking.
      *
@@ -265,11 +263,11 @@ public class SampleStorageBenchmark {
     @AuxCounters(AuxCounters.Type.EVENTS)
     @State(Scope.Thread)
     public static class ContainerStorageState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
         private SampleType sampleType;
 
-        @Param({"DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER"})
+        @Param({ "DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER" })
         private String containerTypeStr;
         private SampleContainer sampleContainer;
 
@@ -295,7 +293,6 @@ public class SampleStorageBenchmark {
             this.bytesPerSample = (double) bytes / sampleCount;
         }
     }
-
 
     /**
      * Benchmarks memory footprint of specialized {@link SampleContainer} implementations.
@@ -340,7 +337,6 @@ public class SampleStorageBenchmark {
 
         return state.sampleContainer;
     }
-
 
     /**
      * Benchmarks memory footprint of sparse data in {@link SampleContainer} implementations (50% density).
@@ -403,7 +399,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ListIterationState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
 
         private SampleType sampleType;
@@ -443,7 +439,7 @@ public class SampleStorageBenchmark {
      * @param blackhole JMH blackhole to consume the sum result
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -454,7 +450,6 @@ public class SampleStorageBenchmark {
         }
         blackhole.consume(sum);
     }
-
 
     /**
      * JMH state holding pre-populated {@link SampleContainer} for iteration benchmarks.
@@ -473,9 +468,9 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ContainerIterationState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
-        @Param({"DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER"})
+        @Param({ "DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER" })
         private String containerTypeStr;
 
         private SampleType sampleType;
@@ -496,7 +491,6 @@ public class SampleStorageBenchmark {
             }
         }
     }
-
 
     /**
      * Benchmarks iteration performance of {@link SampleContainer#iterator()}.
@@ -521,7 +515,7 @@ public class SampleStorageBenchmark {
      * @param blackhole JMH blackhole to consume the sum result
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -555,7 +549,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ListAppendState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
 
         private SampleType sampleType;
@@ -598,7 +592,7 @@ public class SampleStorageBenchmark {
      * @return the populated list
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -632,9 +626,9 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ContainerAppendState {
-        @Param({"FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE"})
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
         private String sampleTypeStr;
-        @Param({"DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER"})
+        @Param({ "DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER" })
         private String containerTypeStr;
 
         private SampleType sampleType;
@@ -686,7 +680,7 @@ public class SampleStorageBenchmark {
      * @return the populated container
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -726,7 +720,7 @@ public class SampleStorageBenchmark {
      * @return the sparse list with explicit nulls
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -737,7 +731,7 @@ public class SampleStorageBenchmark {
         // Only append every other sample
         for (int i = 0; i < SAMPLE_COUNT; i += 2) {
             samples.add(state.samplesToAppend[i]);
-            //explicitly store nulls
+            // explicitly store nulls
             samples.add(null);
         }
 
@@ -774,7 +768,7 @@ public class SampleStorageBenchmark {
      * @return the sparse container with gaps tracked in BitSet
      */
     @Benchmark
-    @BenchmarkMode({Mode.AverageTime})
+    @BenchmarkMode({ Mode.AverageTime })
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     @Warmup(iterations = 3, time = 1)
     @Measurement(iterations = 5, time = 1)
@@ -788,7 +782,6 @@ public class SampleStorageBenchmark {
         blackhole.consume(state.sampleContainer.size());
         return state.sampleContainer;
     }
-
 
     /**
      * Creates a sample of the specified type with deterministic values based on index.
@@ -813,14 +806,8 @@ public class SampleStorageBenchmark {
             case FLOAT_SAMPLE -> new FloatSample(timestamp, 100.0 + index);
             case SUM_COUNT_SAMPLE -> new SumCountSample(timestamp, 100.0 + index, 10 + index);
             case SORTED_VALUES_SAMPLE -> new SortedValuesSample(
-                    timestamp,
-                    Arrays.asList(
-                            (double) index,
-                            (double) index + 1,
-                            (double) index + 2,
-                            (double) index + 3,
-                            (double) index + 4
-                    )
+                timestamp,
+                Arrays.asList((double) index, (double) index + 1, (double) index + 2, (double) index + 3, (double) index + 4)
             );
         };
     }
@@ -847,4 +834,3 @@ public class SampleStorageBenchmark {
         };
     }
 }
-

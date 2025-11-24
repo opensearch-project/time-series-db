@@ -23,6 +23,7 @@ import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
 import org.opensearch.common.metrics.CounterMetric;
 import org.opensearch.common.util.concurrent.ReleasableLock;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.smile.SmileXContent;
 import org.opensearch.core.common.bytes.BytesReference;
@@ -190,16 +191,11 @@ public class TSDBEngine extends Engine {
             success = true;
         } finally {
             if (success == false) {
-                if (head != null) {
-                    head.close();
-                }
-                if (metadataIndexWriter != null) {
-                    metadataIndexWriter.close();
-                }
                 if (isClosed.get() == false) {
                     // decrement store reference as engine initialization failed
                     store.decRef();
                 }
+                close();
             }
         }
         logger.info("Created new TSDBEngine");
@@ -213,10 +209,7 @@ public class TSDBEngine extends Engine {
     @Override
     public void close() throws IOException {
         metricsStorePath = null;
-        head.close();
-        translogManager.close();
-        tsdbReaderManager.close();
-        metadataIndexWriter.close();
+        IOUtils.close(head, translogManager, tsdbReaderManager, metadataIndexWriter);
         super.close();
     }
 
