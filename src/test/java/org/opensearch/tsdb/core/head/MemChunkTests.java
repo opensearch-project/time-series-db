@@ -10,8 +10,22 @@ package org.opensearch.tsdb.core.head;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.TestUtils;
 import org.opensearch.tsdb.core.chunk.Encoding;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
+import org.opensearch.telemetry.metrics.Counter;
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.util.List;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 public class MemChunkTests extends OpenSearchTestCase {
 
@@ -322,5 +336,46 @@ public class MemChunkTests extends OpenSearchTestCase {
         chunk2.setClosed(true);
         assertTrue("Chunk1 should still be closed", chunk1.isClosed());
         assertTrue("Chunk2 should now be closed", chunk2.isClosed());
+    }
+
+    public void testOutOfOrderChunkMetricsDuringAndAfterMerge() {
+        MetricsRegistry registry = mock(MetricsRegistry.class);
+        when(registry.createCounter(anyString(), anyString(), anyString())).thenAnswer(invocation -> mock(Counter.class));
+
+        Counter oooCounter = mock(Counter.class);
+        when(registry.createCounter(eq(TSDBMetricsConstants.OOO_CHUNKS_CREATED_TOTAL), anyString(), anyString())).thenReturn(oooCounter);
+
+        TSDBMetrics.initialize(registry);
+        try {
+            MemChunk chunk = new MemChunk(1L, 0L, 10_000L, null, Encoding.XOR);
+
+            chunk.append(1_000L, 1.0, 1L);
+            verifyNoInteractions(oooCounter);
+
+            // 3 ooo sample creates three more chunks
+            chunk.append(500L, 0.5, 2L);
+            chunk.append(400L, 0.4, 3L);
+            chunk.append(300L, 0.3, 4L);
+            verify(oooCounter, times(3)).add(1L, Tags.EMPTY);
+
+            // 1 ooo event creates another chunk
+            chunk.append(200L, 0.2, 5L);
+            verify(oooCounter, times(4)).add(1L, Tags.EMPTY);
+
+            // sample is added to the merged chunk, and avoids ooo chunk creation
+            chunk.append(100L, 0.1, 6L);
+            verify(oooCounter, times(4)).add(1L, Tags.EMPTY);
+
+            // sample is ooo relative to the merged chunk, and creates a new ooo chunk
+            chunk.append(50L, 0.05, 7L);
+            verify(oooCounter, times(5)).add(1L, Tags.EMPTY);
+
+            // in order sample does not update the counter
+            chunk.append(1_500L, 1.5, 8L);
+            verify(oooCounter, times(5)).add(1L, Tags.EMPTY);
+            verifyNoMoreInteractions(oooCounter);
+        } finally {
+            TSDBMetrics.cleanup();
+        }
     }
 }
