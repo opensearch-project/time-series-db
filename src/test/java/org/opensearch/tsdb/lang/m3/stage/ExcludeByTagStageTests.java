@@ -239,10 +239,12 @@ public class ExcludeByTagStageTests extends AbstractWireSerializingTestCase<Excl
     }
 
     /**
-     * Test case 12: Exact match (no regex).
+     * Test case 12: Plain text no regex.
      * Test exact string matching without regex metacharacters.
+     * NOTE: due to compatibility with m3 query, we decided to allow partial matching of the label,
+     * so 'error' in the test will match against 'errors'
      */
-    public void testExactMatch() {
+    public void testPlainPatternMatch() {
         ExcludeByTagStage stage = new ExcludeByTagStage("status", List.of("error"));
 
         // Series 1: status=error (exact match, excluded)
@@ -259,9 +261,57 @@ public class ExcludeByTagStageTests extends AbstractWireSerializingTestCase<Excl
 
         List<TimeSeries> result = stage.process(List.of(ts1, ts2, ts3));
 
+        assertEquals(1, result.size());
+        assertEquals(labels3, result.get(0).getLabels());
+    }
+
+    /**
+     * Test against case where the pattern only matches partial of the label
+     */
+    public void testPartialMatch() {
+
+        // test for plain texts
+        ExcludeByTagStage stage = new ExcludeByTagStage("status", List.of("2"));
+
+        ByteLabels labels1 = ByteLabels.fromStrings("status", "200");
+        TimeSeries ts1 = new TimeSeries(List.of(new FloatSample(1000L, 10.0)), labels1, 1000L, 1000L, 1000L, null);
+
+        ByteLabels labels2 = ByteLabels.fromStrings("status", "020");
+        TimeSeries ts2 = new TimeSeries(List.of(new FloatSample(1000L, 20.0)), labels2, 1000L, 1000L, 1000L, null);
+
+        ByteLabels labels3 = ByteLabels.fromStrings("status", "002");
+        TimeSeries ts3 = new TimeSeries(List.of(new FloatSample(1000L, 30.0)), labels3, 1000L, 1000L, 1000L, null);
+
+        ByteLabels labels4 = ByteLabels.fromStrings("status", "3030");
+        TimeSeries ts4 = new TimeSeries(List.of(new FloatSample(1000L, 30.0)), labels4, 1000L, 1000L, 1000L, null);
+
+        ByteLabels labels5 = ByteLabels.fromStrings("status", "2");
+        TimeSeries ts5 = new TimeSeries(List.of(new FloatSample(1000L, 30.0)), labels5, 1000L, 1000L, 1000L, null);
+
+        List<TimeSeries> result = stage.process(List.of(ts1, ts2, ts3, ts4, ts5));
+
+        assertEquals(1, result.size());
+        assertEquals(labels4, result.get(0).getLabels());
+
+        // test for regex pattern
+        stage = new ExcludeByTagStage("status", List.of("2.*d"));
+        labels1 = ByteLabels.fromStrings("status", "200");
+        ts1 = new TimeSeries(List.of(new FloatSample(1000L, 10.0)), labels1, 1000L, 1000L, 1000L, null);
+
+        labels2 = ByteLabels.fromStrings("status", "020d");
+        ts2 = new TimeSeries(List.of(new FloatSample(1000L, 20.0)), labels2, 1000L, 1000L, 1000L, null);
+
+        labels3 = ByteLabels.fromStrings("status", "2d32");
+        ts3 = new TimeSeries(List.of(new FloatSample(1000L, 30.0)), labels3, 1000L, 1000L, 1000L, null);
+
+        labels4 = ByteLabels.fromStrings("status", "d32");
+        ts4 = new TimeSeries(List.of(new FloatSample(1000L, 30.0)), labels4, 1000L, 1000L, 1000L, null);
+
+        result = stage.process(List.of(ts1, ts2, ts3, ts4));
+
         assertEquals(2, result.size());
-        assertEquals(labels2, result.get(0).getLabels());
-        assertEquals(labels3, result.get(1).getLabels());
+        assertEquals(labels1, result.get(0).getLabels());
+        assertEquals(labels4, result.get(1).getLabels());
     }
 
     /**

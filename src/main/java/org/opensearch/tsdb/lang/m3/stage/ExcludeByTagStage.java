@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import com.google.re2j.Matcher;
 import com.google.re2j.Pattern;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -66,7 +67,11 @@ public class ExcludeByTagStage implements UnaryPipelineStage {
             if (seriesLabels != null && seriesLabels.has(tagName)) {
                 String labelValue = seriesLabels.get(tagName);
                 for (Pattern compiledPattern : compiledPatterns) {
-                    if (compiledPattern.matches(labelValue)) {
+                    Matcher matcher = compiledPattern.matcher(labelValue);
+                    // Use 'find()' here to not match the entire string, instead matching part of it
+                    // e.g. pattern '2' will then matches the following: '200', '020', '002', '2', etc.
+                    // similarly for regex pattern '2.*a' will match things like: 'bc245a', etc.
+                    if (matcher.find()) {
                         shouldExclude = true;
                         break;
                     }
