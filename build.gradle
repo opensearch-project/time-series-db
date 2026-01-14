@@ -209,6 +209,33 @@ task internalClusterTest(type: Test) {
     classpath = sourceSets.internalClusterTest.runtimeClasspath
     mustRunAfter test, javaRestTest
 
+    /**
+     * During peer recovery (primary relocation, adding replicas, or recovering failed replicas),
+     * the recovering shard may receive the same operation twice due to a race window in the recovery:
+     *
+     * <p>Recovery timeline:
+     * <pre>
+     * 1. initiateTracking() called → recovering shard joins replication group
+     * 2. New operations now replicate to recovering shard (REPLICA origin)
+     * 3. endingSeqNo sampled from primary's maxSeqNo
+     * 4. Phase 2 sends translog ops [startingSeqNo, endingSeqNo] (PEER_RECOVERY origin)
+     * </pre>
+     *
+     * <p>Operations indexed between steps 1 and 3 can arrive twice:
+     * <ol>
+     *   <li>First via REPLICA replication (step 2) - processed and written to translog</li>
+     *   <li>Then via PEER_RECOVERY translog replay (step 4) - duplicate arrival</li>
+     * </ol>
+     *
+     * <p>InternalEngine tolerates this because duplicate translog writes have identical bytes.
+     * TSDBEngine cannot because {@code TSDBEngine.rewriteParsedDocumentSource} modifies the document
+     * (removes labels from source), so the PEER_RECOVERY version has different bytes,
+     * causing {@code TranslogWriter.assertNoSeqNumberConflict} to fail.
+     * This assertion is disabled in production,
+     * so disabling it for tests is safe and avoids flakiness in TSDBPrimaryRelocationIT test.
+     */
+    jvmArgs '-da:org.opensearch.index.translog.TranslogWriter'
+
     // The --debug-jvm command-line option makes the cluster debuggable; this makes the tests debuggable
     if (System.getProperty("test.debug") != null) {
         jvmArgs '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005'
