@@ -93,11 +93,14 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     }
 
     @Override
-    public Sample merge(Sample other) {
-        if (!(other instanceof MinMaxSample otherMinMax)) {
-            throw new IllegalArgumentException("Cannot merge MinMaxSample with " + other.getClass().getSimpleName());
+    public MinMaxSample merge(Sample other) {
+        if (other instanceof MinMaxSample otherMinMax) {
+            return add(otherMinMax);
         }
-        return this.add(otherMinMax);
+        if (other.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return add(other.getValue());
+        }
+        throw new IllegalArgumentException("Cannot merge MinMaxSample with " + other.getClass().getSimpleName());
     }
 
     /**
@@ -121,9 +124,8 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     public static MinMaxSample fromSample(Sample sample) {
         if (sample instanceof MinMaxSample) {
             return (MinMaxSample) sample;
-        } else if (sample instanceof FloatSample) {
-            double value = ((FloatSample) sample).getValue();
-            return fromValue(sample.getTimestamp(), value);
+        } else if (sample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return fromValue(sample.getTimestamp(), sample.getValue());
         } else {
             throw new IllegalArgumentException("Unsupported sample type [" + sample.getClass() + "]");
         }

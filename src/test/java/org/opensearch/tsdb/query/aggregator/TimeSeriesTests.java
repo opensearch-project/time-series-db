@@ -209,21 +209,6 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         assertEquals(1000L, timeSeries.getStep());
     }
 
-    public void testWithMixedSampleTypes() {
-        // Arrange
-        Labels labels = ByteLabels.fromMap(Map.of("service", "mixed"));
-        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new SumCountSample(2000L, 10.0, 2));
-
-        // Act
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
-
-        // Assert
-        assertEquals(samples, timeSeries.getSamples().toList());
-        assertEquals(2, timeSeries.getSamples().size());
-        assertTrue(timeSeries.getSamples().getSample(0) instanceof FloatSample);
-        assertTrue(timeSeries.getSamples().getSample(1) instanceof SumCountSample);
-    }
-
     public void testWithEmptySamples() {
         // Arrange
         Labels labels = ByteLabels.fromMap(Map.of("service", "empty"));

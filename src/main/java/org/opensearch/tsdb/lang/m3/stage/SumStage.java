@@ -49,7 +49,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "sum")
-public class SumStage extends AbstractGroupingSampleStage {
+public class SumStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "sum";
 
@@ -77,14 +77,16 @@ public class SumStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for sum
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return bucket + newSample.getValue();
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double sum = existing.getValue() + newSample.getValue();
-        return new FloatSample(existing.getTimestamp(), sum);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override

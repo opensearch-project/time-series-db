@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import org.opensearch.common.Nullable;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
@@ -26,8 +27,10 @@ import java.util.Map;
  * Abstract base class for pipeline stages that support label grouping and calculation for each Sample.
  * Provides common functionality for grouping time series by labels and applying
  * aggregation functions within each group for each sample.
+ *
+ * @param <A> The type of class used as aggregation bucket, concrete class typically should specify this type
  */
-public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage {
+public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingStage {
 
     /**
      * Constructor for aggregation without label grouping.
@@ -58,20 +61,21 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     }
 
     /**
-     * Transform an input sample for aggregation. For most operations this is identity,
-     * but for average this converts FloatSample to SumCountSample.
-     * @param sample The input sample to transform
-     * @return Transformed sample ready for aggregation
+     * Aggregate a single sample into the bucket
+     *
+     * @param bucket could be null if the sample is the first sample of this particular timestamp
+     * @param newSample new sample that will be aggregated to the bucket
+     * @return The bucket after aggregation, could be the original one or a newly created one
      */
-    protected abstract Sample transformInputSample(Sample sample);
+    protected abstract A aggregateSingleSample(@Nullable A bucket, Sample newSample);
 
     /**
-     * Merge two samples of the same timestamp during aggregation.
-     * @param existing The existing aggregated sample
-     * @param newSample The new sample to merge in
-     * @return The merged sample
+     * Convert the bucket back to {@link Sample} so that it can be put back to {@link TimeSeries}
+     *
+     * @return a newly constructed {@link Sample}, or it could be the bucket itself if it is already the sample,
+     * like {@link org.opensearch.tsdb.core.model.SumCountSample}
      */
-    protected abstract Sample mergeReducedSamples(Sample existing, Sample newSample);
+    protected abstract Sample bucketToSample(long timestamp, A bucket);
 
     /**
      * Process a group of time series using the template method pattern.
@@ -96,7 +100,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
 
         // Aggregate samples by timestamp using operation-specific logic
         // Pre-allocate HashMap based on expected number of timestamps
-        Map<Long, Sample> timestampToAggregated = HashMap.newHashMap(expectedTimestamps);
+        Map<Long, A> timestampToAggregated = HashMap.newHashMap(expectedTimestamps);
 
         for (TimeSeries series : groupSeries) {
             for (Sample sample : series.getSamples()) {
@@ -104,18 +108,19 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
                 if (Double.isNaN(sample.getValue())) {
                     continue;
                 }
-                Sample transformed = transformInputSample(sample);
-                long timestamp = transformed.getTimestamp();
-                timestampToAggregated.merge(timestamp, transformed, this::mergeReducedSamples);
+                long timestamp = sample.getTimestamp();
+                timestampToAggregated.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
             }
         }
-
         // Create sorted samples - pre-allocate since we know the exact size
         List<Sample> aggregatedSamples = new ArrayList<>(timestampToAggregated.size());
+        // TODO: We could do (slightly) better here in theory -- this is an O(N * log(N)) sort
+        // if we do k-way merge in above instead of using an HashMap, then it will be an O(N * log(k))
+        // algorithm, tho it's only slightly better
         timestampToAggregated.entrySet()
             .stream()
             .sorted(Map.Entry.comparingByKey())
-            .forEach(entry -> aggregatedSamples.add(entry.getValue()));
+            .forEach(entry -> aggregatedSamples.add(bucketToSample(entry.getKey(), entry.getValue())));
 
         // Assumption: All time series in a group have the same metadata (start time, end time, step)
         // The result will inherit metadata from the first time series in the group
@@ -140,13 +145,13 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
         boolean isFinalReduce
     ) {
         // Combine samples by group across all aggregations
-        Map<ByteLabels, Map<Long, Sample>> groupToTimestampSample = new HashMap<>();
+        Map<ByteLabels, Map<Long, A>> groupToTimestampSample = new HashMap<>();
 
         for (TimeSeriesProvider aggregation : aggregations) {
             for (TimeSeries series : aggregation.getTimeSeries()) {
                 // For global case (no grouping), use empty labels
                 ByteLabels groupLabels = extractGroupLabelsDirect(series);
-                Map<Long, Sample> timestampToSample = groupToTimestampSample.computeIfAbsent(groupLabels, k -> new HashMap<>());
+                Map<Long, A> timestampToSample = groupToTimestampSample.computeIfAbsent(groupLabels, k -> new HashMap<>());
 
                 // Aggregate samples for this series into the group's timestamp map
                 aggregateSamplesIntoMap(series.getSamples(), timestampToSample);
@@ -157,14 +162,14 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
         // Pre-allocate result list since we know exactly how many groups we have
         List<TimeSeries> resultTimeSeries = new ArrayList<>(groupToTimestampSample.size());
 
-        for (Map.Entry<ByteLabels, Map<Long, Sample>> entry : groupToTimestampSample.entrySet()) {
+        for (Map.Entry<ByteLabels, Map<Long, A>> entry : groupToTimestampSample.entrySet()) {
             ByteLabels groupLabels = entry.getKey();
-            Map<Long, Sample> timestampToSample = entry.getValue();
+            Map<Long, A> timestampToSample = entry.getValue();
 
             // Pre-allocate samples list since we know exactly how many timestamps we have
             List<Sample> samples = new ArrayList<>(timestampToSample.size());
             timestampToSample.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(sampleEntry -> {
-                Sample sample = sampleEntry.getValue();
+                Sample sample = bucketToSample(sampleEntry.getKey(), sampleEntry.getValue());
                 // Always keep original sample type - materialization happens later if needed
                 samples.add(sample);
             });
@@ -198,16 +203,15 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     /**
      * Helper method to aggregate samples into an existing timestamp map.
      */
-    private void aggregateSamplesIntoMap(SampleList samples, Map<Long, Sample> timestampToSample) {
+    private void aggregateSamplesIntoMap(SampleList samples, Map<Long, A> timestampToSample) {
         for (Sample sample : samples) {
             // Skip NaN values - treat them as null/missing
             if (Double.isNaN(sample.getValue())) {
                 continue;
             }
             long timestamp = sample.getTimestamp();
-            Sample transformed = transformInputSample(sample);
 
-            timestampToSample.merge(timestamp, transformed, this::mergeReducedSamples);
+            timestampToSample.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
         }
     }
 

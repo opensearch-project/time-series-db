@@ -26,7 +26,7 @@ import org.opensearch.tsdb.core.chunk.DedupIterator;
 import org.opensearch.tsdb.core.chunk.MergeIterator;
 import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
 import org.opensearch.tsdb.core.model.ByteLabels;
-import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
@@ -368,7 +368,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 it = new DedupIterator(new MergeIterator(chunkIterators), DedupIterator.DuplicatePolicy.FIRST);
             }
             ChunkIterator.DecodeResult decodeResult = it.decodeSamples(minTimestamp, maxTimestamp);
-            List<Sample> allSamples = decodeResult.samples();
+            SampleList allSamples = decodeResult.samples();
 
             totalSamplesProcessed += decodeResult.processedSampleCount();
             if (isLiveReader) {
@@ -391,27 +391,24 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Align timestamps to step boundaries and deduplicate
             // Preallocate based on actual sample count
-            List<Sample> alignedSamples = new ArrayList<>(allSamples.size());
+            FloatSampleList.Builder alignedSamplesBuilder = new FloatSampleList.Builder(allSamples.size());
 
             // Accumulate circuit breaker bytes for aligned samples list
             bytesForThisDoc += ARRAYLIST_OVERHEAD + (allSamples.size() * TimeSeries.ESTIMATED_SAMPLE_SIZE);
-
             long lastAlignedTimestamp = Long.MIN_VALUE;
             for (Sample sample : allSamples) {
                 // Align timestamp to minTimestamp using floor (integer division)
                 long alignedTimestamp = minTimestamp + ((sample.getTimestamp() - minTimestamp) / step) * step;
-                // decodeSamples() always returns FloatSample instances
-                FloatSample floatSample = (FloatSample) sample;
 
                 // Deduplicate: only keep the latest sample for each aligned timestamp
                 // Since allSamples is sorted, we can just compare with the previous aligned timestamp
                 if (alignedTimestamp != lastAlignedTimestamp) {
-                    alignedSamples.add(new FloatSample(alignedTimestamp, floatSample.getValue()));
+                    alignedSamplesBuilder.add(alignedTimestamp, sample.getValue());
                     lastAlignedTimestamp = alignedTimestamp;
                 } else {
                     // Overwrite the previous sample with the same aligned timestamp
                     // This keeps the latest sample (ANY_WINS policy)
-                    alignedSamples.set(alignedSamples.size() - 1, new FloatSample(alignedTimestamp, floatSample.getValue()));
+                    alignedSamplesBuilder.set(alignedSamplesBuilder.size() - 1, alignedTimestamp, sample.getValue());
                 }
             }
 
@@ -451,7 +448,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 // Assume data points within each chunk are sorted by timestamp
                 SampleList mergedSamples = MERGE_HELPER.merge(
                     existingSeries.getSamples(),
-                    SampleList.fromList(alignedSamples),
+                    alignedSamplesBuilder.build(),
                     true // assumeSorted - data points within each chunk are sorted
                 );
 
@@ -478,7 +475,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 // Create new time series with aligned samples and labels
                 // No need to sort - samples within each chunk are already sorted by timestamp
                 // Use theoreticalMaxTimestamp (calculated from query params) instead of query maxTimestamp
-                TimeSeries newSeries = new TimeSeries(alignedSamples, labels, minTimestamp, theoreticalMaxTimestamp, step, null);
+                TimeSeries newSeries = new TimeSeries(
+                    alignedSamplesBuilder.build(),
+                    labels,
+                    minTimestamp,
+                    theoreticalMaxTimestamp,
+                    step,
+                    null
+                );
 
                 // Accumulate circuit breaker bytes for new time series
                 bytesForThisDoc += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + labels.estimateBytes();

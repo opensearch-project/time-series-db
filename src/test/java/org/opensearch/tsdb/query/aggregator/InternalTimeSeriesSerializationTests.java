@@ -13,6 +13,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.test.AbstractWireTestCase;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SumCountSample;
@@ -123,18 +124,20 @@ public class InternalTimeSeriesSerializationTests extends AbstractWireTestCase<I
 
                 // Verify mixed sample types are preserved
                 for (int i = 0; i < origSeries.getSamples().size(); i++) {
-                    Sample origSample = origSeries.getSamples().getSample(i);
-                    Sample deserSample = deserSeries.getSamples().getSample(i);
+                    assertEquals(origSeries.getSamples().getSampleType(), deserSeries.getSamples().getSampleType());
+                    assertEquals(origSeries.getSamples().getTimestamp(i), deserSeries.getSamples().getTimestamp(i));
+                    assertEquals(origSeries.getSamples().getValue(i), deserSeries.getSamples().getValue(i), 0.001);
 
-                    assertEquals(origSample.getClass(), deserSample.getClass());
-                    assertEquals(origSample.getTimestamp(), deserSample.getTimestamp());
-                    assertEquals(origSample.getValue(), deserSample.getValue(), 0.001);
+                    // Now we don't really explicitly support mix type of samples from our interface for simplicity
+                    // Although it is still implicitly supported by using List<Sample> but there's no API to tell whether
+                    // the list is of mixed sample type
+                    // We should revisit if we see such a need of mixing sample types
 
-                    if (origSample instanceof SumCountSample origSumCount) {
-                        SumCountSample deserSumCount = (SumCountSample) deserSample;
-                        assertEquals(origSumCount.sum(), deserSumCount.sum(), 0.001);
-                        assertEquals(origSumCount.count(), deserSumCount.count());
-                    }
+                    // if (origSample instanceof SumCountSample origSumCount) {
+                    // SumCountSample deserSumCount = (SumCountSample) deserSample;
+                    // assertEquals(origSumCount.sum(), deserSumCount.sum(), 0.001);
+                    // assertEquals(origSumCount.count(), deserSumCount.count());
+                    // }
                 }
             }
         }
@@ -163,6 +166,29 @@ public class InternalTimeSeriesSerializationTests extends AbstractWireTestCase<I
                 // Verify reduce stage is preserved
                 assertNotNull(deserialized.getReduceStage());
                 assertEquals(original.getReduceStage().getName(), deserialized.getReduceStage().getName());
+            }
+        }
+    }
+
+    public void testSerializationWithFloatSampleList() throws IOException {
+        FloatSampleList.Builder builder = new FloatSampleList.Builder();
+        for (int i = 0; i < 10; i++) {
+            builder.add(i, i * 2);
+        }
+        TimeSeries ts = new TimeSeries(builder.build(), ByteLabels.emptyLabels(), 0, 9, 1, "aaa");
+        InternalTimeSeries original = new InternalTimeSeries("test", List.of(ts), Map.of("key", "value"));
+
+        // Act
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            original.writeTo(out);
+
+            try (StreamInput in = out.bytes().streamInput()) {
+                InternalTimeSeries deserialized = new InternalTimeSeries(in);
+
+                // Assert
+                assertEquals(original.getName(), deserialized.getName());
+                assertEquals(original.getMetadata(), deserialized.getMetadata());
+                assertEquals(deserialized.getTimeSeries().get(0).getSamples(), ts.getSamples());
             }
         }
     }

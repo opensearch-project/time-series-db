@@ -49,7 +49,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "multiply")
-public class MultiplyStage extends AbstractGroupingSampleStage {
+public class MultiplyStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "multiply";
 
@@ -77,14 +77,16 @@ public class MultiplyStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for multiply
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return bucket * newSample.getValue();
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double product = existing.getValue() * newSample.getValue();
-        return new FloatSample(existing.getTimestamp(), product);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override

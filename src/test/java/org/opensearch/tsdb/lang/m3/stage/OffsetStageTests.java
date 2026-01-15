@@ -140,8 +140,8 @@ public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStag
 
         // Assert
         assertEquals(2, result.size());
-        assertEquals(105.0, result.get(0).getSamples().getSample(0).getValue(), 1e-10);
-        assertEquals(90.0, result.get(1).getSamples().getSample(0).getValue(), 1e-10);
+        assertEquals(105.0, result.get(0).getSamples().getValue(0), 1e-10);
+        assertEquals(90.0, result.get(1).getSamples().getValue(0), 1e-10);
         assertEquals(labels1, result.get(0).getLabels());
         assertEquals(labels2, result.get(1).getLabels());
     }
@@ -229,11 +229,7 @@ public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStag
         List<TimeSeries> combinedResult = combinedOffset.process(List.of(inputSeries));
 
         // Results should be the same
-        assertEquals(
-            result2.getFirst().getSamples().getSample(0).getValue(),
-            combinedResult.getFirst().getSamples().getSample(0).getValue(),
-            1e-10
-        );
+        assertEquals(result2.getFirst().getSamples().getValue(0), combinedResult.getFirst().getSamples().getValue(0), 1e-10);
     }
 
     public void testNullInputThrowsException() {

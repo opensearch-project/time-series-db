@@ -58,7 +58,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "avg")
-public class AvgStage extends AbstractGroupingSampleStage {
+public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
     /** The name identifier for this stage type. */
     public static final String NAME = "avg";
 
@@ -86,17 +86,16 @@ public class AvgStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return SumCountSample.fromSample(sample);
+    protected SumCountSample aggregateSingleSample(SumCountSample bucket, Sample newSample) {
+        if (bucket == null) {
+            return SumCountSample.fromSample(newSample);
+        }
+        return bucket.merge(newSample);
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        // TODO: Consider removing the transformInputSample step and let this reduce function
-        // handle both scenarios - transforming input samples AND merging existing samples.
-        // This would simplify the architecture by consolidating transformation logic into
-        // a single method instead of having separate transform + merge steps.
-        return ((SumCountSample) existing).merge((SumCountSample) newSample);
+    protected Sample bucketToSample(long timestamp, SumCountSample bucket) {
+        return bucket;
     }
 
     @Override
