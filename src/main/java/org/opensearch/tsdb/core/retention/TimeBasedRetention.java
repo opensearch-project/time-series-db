@@ -21,7 +21,7 @@ import java.util.List;
  * </p>
  */
 public class TimeBasedRetention implements Retention {
-    private final long duration;
+    private volatile long duration;
     private volatile long interval;
 
     /**
@@ -37,6 +37,10 @@ public class TimeBasedRetention implements Retention {
 
     public List<ClosedChunkIndex> plan(List<ClosedChunkIndex> indexes) {
         var candidates = new ArrayList<ClosedChunkIndex>();
+        // If duration is -1, retention is disabled - don't delete anything
+        if (duration == -1) {
+            return candidates;
+        }
         for (ClosedChunkIndex closedChunkIndex : indexes) {
             if (closedChunkIndex.getMaxTime().isAfter(indexes.getLast().getMaxTime().minusMillis(duration))) {
                 break;
@@ -51,7 +55,8 @@ public class TimeBasedRetention implements Retention {
      */
     @Override
     public long getFrequency() {
-        return interval;
+        // When retention is disabled (duration=-1), return Long.MAX_VALUE to prevent running
+        return (duration == -1) ? Long.MAX_VALUE : interval;
     }
 
     /**
@@ -60,6 +65,14 @@ public class TimeBasedRetention implements Retention {
     @Override
     public void setFrequency(long frequency) {
         this.interval = frequency;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setRetentionPeriod(long period) {
+        this.duration = period;
     }
 
     @Override

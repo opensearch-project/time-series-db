@@ -134,7 +134,7 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
         Settings settings = Settings.builder()
             .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
             .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "SizeTieredCompaction")
-            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "1h")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "2h") // Must be >= block.duration (default 2h)
             .build();
 
         IndexSettings indexSettings = new IndexSettings(

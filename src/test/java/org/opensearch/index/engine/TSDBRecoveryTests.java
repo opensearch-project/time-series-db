@@ -101,6 +101,7 @@ public class TSDBRecoveryTests extends OpenSearchIndexLevelReplicationTestCase {
         IndexScopedSettings.DEFAULT_SCOPED_SETTINGS.registerSetting(TSDBPlugin.TSDB_ENGINE_COMMIT_INTERVAL);
         IndexScopedSettings.DEFAULT_SCOPED_SETTINGS.registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
         IndexScopedSettings.DEFAULT_SCOPED_SETTINGS.registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+        IndexScopedSettings.DEFAULT_SCOPED_SETTINGS.registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
 
         // Initialize default TSDB settings
         defaultTSDBSettings = Settings.builder()

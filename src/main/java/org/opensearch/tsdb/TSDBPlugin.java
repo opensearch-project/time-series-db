@@ -108,11 +108,51 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         Setting.Property.Final
     );
 
-    public static final Setting<TimeValue> TSDB_ENGINE_RETENTION_TIME = Setting.timeSetting(
+    /**
+     * Setting for the retention time - how long data should be retained before deletion.
+     * Must be greater than or equal to block duration.
+     * Set to -1 to disable retention (keep data indefinitely).
+     */
+    public static final Setting<TimeValue> TSDB_ENGINE_RETENTION_TIME = new Setting<>(
         "index.tsdb_engine.retention.time",
-        TimeValue.MINUS_ONE,
+        "-1",
+        (s) -> TimeValue.parseTimeValue(s, "index.tsdb_engine.retention.time"),
+        new Setting.Validator<TimeValue>() {
+            @Override
+            public void validate(TimeValue retentionTime) {
+                if (retentionTime.millis() != -1 && retentionTime.millis() <= 0) {
+                    throw new IllegalArgumentException("index.tsdb_engine.retention.time must be -1 or positive");
+                }
+            }
+
+            @Override
+            public void validate(TimeValue retentionTime, Map<Setting<?>, Object> settings) {
+                if (retentionTime.millis() != -1) {
+                    TimeValue blockDuration = (TimeValue) settings.get(TSDB_ENGINE_BLOCK_DURATION);
+                    if (blockDuration != null) {
+                        if (retentionTime.compareTo(blockDuration) < 0) {
+                            throw new IllegalArgumentException(
+                                String.format(
+                                    Locale.ROOT,
+                                    "Invalid TSDB configuration: index.tsdb_engine.retention.time (%s) must be greater than or equal to "
+                                        + "index.tsdb_engine.block.duration (%s). Retention time controls how long data is kept, and it "
+                                        + "must be at least as long as the block duration to ensure proper data management.",
+                                    retentionTime,
+                                    blockDuration
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public Iterator<Setting<?>> settings() {
+                return Collections.<Setting<?>>singletonList(TSDB_ENGINE_BLOCK_DURATION).iterator();
+            }
+        },
         Setting.Property.IndexScope,
-        Setting.Property.Final
+        Setting.Property.Dynamic
     );
 
     public static final Setting<TimeValue> TSDB_ENGINE_RETENTION_FREQUENCY = Setting.timeSetting(

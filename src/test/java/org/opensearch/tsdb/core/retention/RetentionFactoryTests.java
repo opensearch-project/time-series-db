@@ -35,6 +35,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
@@ -51,10 +52,14 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
-        assertTrue(retention instanceof NOOPRetention);
+        // Now returns TimeBasedRetention with duration=-1 instead of NOOPRetention
+        assertTrue(retention instanceof TimeBasedRetention);
+        assertEquals(-1, retention.getRetentionPeriodMs());
+        assertEquals(Long.MAX_VALUE, retention.getFrequency());
     }
 
     public void testCreateWithExplicitMinusOneTime() {
@@ -69,10 +74,14 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         Retention retention = RetentionFactory.create(indexSettings);
 
         assertNotNull(retention);
-        assertTrue(retention instanceof NOOPRetention);
+        // Now returns TimeBasedRetention with duration=-1 instead of NOOPRetention
+        assertTrue(retention instanceof TimeBasedRetention);
+        assertEquals(-1, retention.getRetentionPeriodMs());
+        assertEquals(Long.MAX_VALUE, retention.getFrequency());
     }
 
     public void testCreateWithVariousTimeValues() throws Exception {
@@ -88,6 +97,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings1h.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings1h.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         Retention retention1h = RetentionFactory.create(indexSettings1h);
         assertTrue(retention1h instanceof TimeBasedRetention);
 
@@ -102,6 +112,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
         indexSettings30d.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings30d.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
 
         Retention retention30d = RetentionFactory.create(indexSettings30d);
         assertTrue(retention30d instanceof TimeBasedRetention);
@@ -119,6 +130,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         Retention retention1 = RetentionFactory.create(indexSettings);
         Retention retention2 = RetentionFactory.create(indexSettings);
 
@@ -140,9 +152,10 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
             Settings.EMPTY
         );
 
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RetentionFactory.create(indexSettings));
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
 
-        assertEquals("Retention time/age must be greater than or equal to default block duration", exception.getMessage());
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> RetentionFactory.create(indexSettings));
     }
 
     public void testInvalidFrequencyThrowsException() {
@@ -177,6 +190,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         assertNotNull("No error if retention is not set", RetentionFactory.create(indexSettings));
     }
 
@@ -193,6 +207,7 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
         );
 
         indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
         var retention = RetentionFactory.create(indexSettings);
         assertEquals(Duration.ofMinutes(5).toMillis(), retention.getFrequency());
         assertNotNull(retention);
@@ -208,5 +223,136 @@ public class RetentionFactoryTests extends OpenSearchTestCase {
 
         indexSettings.updateIndexMetadata(updatedMetadata);
         assertEquals(Duration.ofMinutes(1).toMillis(), retention.getFrequency());
+    }
+
+    public void testUpdateRetentionTime() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "200h")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY.getKey(), "5m")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
+
+        var retention = RetentionFactory.create(indexSettings);
+        assertEquals(Duration.ofHours(200).toMillis(), retention.getRetentionPeriodMs());
+        assertTrue(retention instanceof TimeBasedRetention);
+
+        // Update the retention time dynamically
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "100h").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+        assertEquals(Duration.ofHours(100).toMillis(), retention.getRetentionPeriodMs());
+    }
+
+    public void testUpdateRetentionTimeValidation() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "10h")
+            .put(TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.getKey(), "2h")
+            .put(TSDBPlugin.TSDB_ENGINE_CHUNK_DURATION.getKey(), "20m")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
+        var retention = RetentionFactory.create(indexSettings);
+        assertEquals(Duration.ofHours(10).toMillis(), retention.getRetentionPeriodMs());
+
+        // Try to update retention time to value less than block duration (should fail)
+        Settings invalidSettings = Settings.builder()
+            .put(settings)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "1h") // Less than 2h block duration
+            .build();
+
+        IndexMetadata invalidMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(invalidSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> indexSettings.updateIndexMetadata(invalidMetadata)
+        );
+    }
+
+    public void testUpdateRetentionTimeToMinusOne() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "100h")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
+        var retention = RetentionFactory.create(indexSettings);
+        assertTrue(retention instanceof TimeBasedRetention);
+        assertEquals(Duration.ofHours(100).toMillis(), retention.getRetentionPeriodMs());
+
+        // Update to -1 (disable retention)
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "-1").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+        // The retention instance remains TimeBasedRetention but with duration = -1
+        assertEquals(-1, retention.getRetentionPeriodMs());
+    }
+
+    public void testDynamicSwitchFromDisabledToEnabled() {
+        // Start with retention disabled (default: -1)
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
+        var retention = RetentionFactory.create(indexSettings);
+        assertTrue(retention instanceof TimeBasedRetention);
+        assertEquals(-1, retention.getRetentionPeriodMs());
+        assertEquals(Long.MAX_VALUE, retention.getFrequency());
+
+        // Now dynamically enable retention
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "100h").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+
+        assertTrue(retention instanceof TimeBasedRetention);
+        assertEquals(Duration.ofHours(100).toMillis(), retention.getRetentionPeriodMs());
+        assertEquals(Duration.ofMinutes(15).toMillis(), retention.getFrequency());
     }
 }

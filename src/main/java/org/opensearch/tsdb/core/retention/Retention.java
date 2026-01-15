@@ -46,4 +46,11 @@ public interface Retention {
     default long getRetentionPeriodMs() {
         return -1L;
     }
+
+    /**
+     * Set the retention period
+     *
+     * @param period long representing retention period in milliseconds.
+     */
+    default void setRetentionPeriod(long period) {}
 }

@@ -180,6 +180,7 @@ public class TSDBEngineTests extends EngineTestCase {
         indexScopedSettings.registerSetting(TSDBPlugin.TSDB_ENGINE_COMMIT_INTERVAL);
         indexScopedSettings.registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
         indexScopedSettings.registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_FREQUENCY);
+        indexScopedSettings.registerSetting(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME);
     }
 
     private Engine.IndexResult publishSample(int id, String json) throws IOException {
