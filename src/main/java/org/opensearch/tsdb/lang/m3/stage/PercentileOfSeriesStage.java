@@ -58,7 +58,7 @@ import java.util.TreeSet;
  * @see AbstractGroupingStage
  */
 @PipelineStageAnnotation(name = "percentile_of_series")
-public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
+public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<SortedValuesSample> {
 
     /** The name identifier for this stage. */
     public static final String NAME = "percentile_of_series";
@@ -233,35 +233,23 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
         return new PercentileOfSeriesStage(percentiles, interpolate, groupByLabels);
     }
 
-    /**
-     * Transform input sample to sorted values sample for aggregation.
-     * Converts FloatSample to SortedValuesSample containing a single value.
-     * If the sample is already a SortedValuesSample (during reduce), return it as-is.
-     */
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        // During reduce phase, samples are already SortedValuesSample, so return as-is
-        if (sample instanceof SortedValuesSample) {
-            return sample;
+    protected SortedValuesSample aggregateSingleSample(SortedValuesSample bucket, Sample newSample) {
+        if (bucket == null) {
+            // During reduce phase, samples are already SortedValuesSample, so return as-is
+            if (newSample instanceof SortedValuesSample sortedSample) {
+                return (SortedValuesSample) sortedSample.deepCopy();
+            }
+            // During initial collection, convert FloatSample to SortedValuesSample
+            return new SortedValuesSample(newSample.getTimestamp(), newSample.getValue());
         }
-        // During initial collection, convert FloatSample to SortedValuesSample
-        return new SortedValuesSample(sample.getTimestamp(), sample.getValue());
+        bucket.insert(newSample.getValue());
+        return bucket;
     }
 
-    /**
-     * Merge two sorted values samples by combining their value lists.
-     * The merge maintains sorted order for efficient percentile calculation.
-     */
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        if (!(existing instanceof SortedValuesSample) || !(newSample instanceof SortedValuesSample)) {
-            throw new IllegalArgumentException("Can only merge SortedValuesSample instances");
-        }
-
-        SortedValuesSample existingSorted = (SortedValuesSample) existing;
-        SortedValuesSample newSorted = (SortedValuesSample) newSample;
-
-        return existingSorted.merge(newSorted);
+    protected Sample bucketToSample(long timestamp, SortedValuesSample bucket) {
+        return bucket;
     }
 
     /**

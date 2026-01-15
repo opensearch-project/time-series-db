@@ -14,6 +14,7 @@ import org.opensearch.tsdb.query.utils.PercentileUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -156,6 +157,17 @@ public class SortedValuesSample implements Sample, Writeable {
         }
 
         return new SortedValuesSample(this.timestamp, mergedValues);
+    }
+
+    /**
+     * Insert one value to the list in sorted order
+     */
+    public void insert(double value) {
+        int index = Collections.binarySearch(values, value);
+        if (index < 0) {
+            index = -(index + 1);
+        }
+        values.add(index, value);
     }
 
     @Override

@@ -84,7 +84,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(3, result.size());
 
         // Should keep only first value for each timestamp
@@ -102,7 +102,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.LAST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(3, result.size());
 
         // Should keep only last value for each timestamp
@@ -121,7 +121,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedupFirst = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> result = dedupFirst.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedupFirst.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(3, result.size());
 
         for (int i = 0; i < 3; i++) {
@@ -136,7 +136,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(1, result.size());
         assertEquals(1000L, result.get(0).getTimestamp());
         assertEquals(10.0, result.get(0).getValue(), 0.0);
@@ -148,7 +148,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.LAST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(1, result.size());
         assertEquals(1000L, result.get(0).getTimestamp());
         assertEquals(50.0, result.get(0).getValue(), 0.0);  // Last value
@@ -174,7 +174,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(4, result.size());
         assertEquals(1000L, result.get(0).getTimestamp());
         assertEquals(10.0, result.get(0).getValue(), 0.0);
@@ -211,7 +211,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
         MergeIterator merged = new MergeIterator(iterators);
         DedupIterator dedup = new DedupIterator(merged, DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> samples = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(3, samples.size());
 
         // Should keep first value from each timestamp (stable sort ensures chunk1, chunk2, chunk3 order)
@@ -354,7 +354,7 @@ public class DedupIteratorTests extends OpenSearchTestCase {
 
         DedupIterator dedup = new DedupIterator(new TestIterator(samples), DedupIterator.DuplicatePolicy.FIRST);
 
-        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> result = dedup.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(0, result.size());
     }
 }

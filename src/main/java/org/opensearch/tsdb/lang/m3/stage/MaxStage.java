@@ -48,7 +48,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "max")
-public class MaxStage extends AbstractGroupingSampleStage {
+public class MaxStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "max";
 
@@ -76,14 +76,16 @@ public class MaxStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for max
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return Math.max(bucket, newSample.getValue());
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double max = Math.max(existing.getValue(), newSample.getValue());
-        return new FloatSample(existing.getTimestamp(), max);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override

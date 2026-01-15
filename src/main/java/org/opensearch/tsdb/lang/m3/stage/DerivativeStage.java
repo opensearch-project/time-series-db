@@ -11,8 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
@@ -63,7 +62,7 @@ public class DerivativeStage implements UnaryPipelineStage {
                 continue;
             }
 
-            List<Sample> derivativeSamples = new ArrayList<>(samples.size());
+            FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder(samples.size());
             // Start from the 2nd point and only emit derivative when consecutive points
             // are exactly step size apart
             long step = ts.getStep();
@@ -80,13 +79,20 @@ public class DerivativeStage implements UnaryPipelineStage {
 
                     // If either value is NaN, result is NaN
                     if (!Double.isNaN(prevValue) && !Double.isNaN(currentValue)) {
-                        derivativeSamples.add(new FloatSample(currTimestamp, currentValue - prevValue));
+                        resultBuilder.add(currTimestamp, currentValue - prevValue);
                     }
                 }
             }
 
             result.add(
-                new TimeSeries(derivativeSamples, ts.getLabels(), ts.getMinTimestamp(), ts.getMaxTimestamp(), ts.getStep(), ts.getAlias())
+                new TimeSeries(
+                    resultBuilder.build(),
+                    ts.getLabels(),
+                    ts.getMinTimestamp(),
+                    ts.getMaxTimestamp(),
+                    ts.getStep(),
+                    ts.getAlias()
+                )
             );
         }
 

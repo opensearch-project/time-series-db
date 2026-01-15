@@ -12,14 +12,12 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.ByteLabels;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -104,15 +102,6 @@ public class FallbackSeriesUnaryStage implements UnaryPipelineStage {
      * @return a list containing a single constant time series
      */
     private List<TimeSeries> createConstantSeries() {
-        // Calculate the number of samples: timestamps in [minTimestamp, maxTimestamp) at step intervals
-        long sampleCount = (maxTimestamp - minTimestamp - 1) / step + 1;
-        List<Sample> samples = new ArrayList<>((int) sampleCount);
-
-        // Generate samples from minTimestamp (inclusive) to maxTimestamp (exclusive) with the given step
-        for (long timestamp = minTimestamp; timestamp < maxTimestamp; timestamp += step) {
-            samples.add(new FloatSample(timestamp, fallbackValue));
-        }
-
         // Create labels for the constant series
         ByteLabels labels = ByteLabels.emptyLabels();
 
@@ -122,7 +111,16 @@ public class FallbackSeriesUnaryStage implements UnaryPipelineStage {
 
         // Format alias as 3 decimal places (e.g., 0 -> "0.000", 0.5135 -> "0.514")
         String alias = FALLBACK_ALIAS_FORMAT.get().format(fallbackValue);
-        return List.of(new TimeSeries(samples, labels, minTimestamp, lastSampleTimestamp, step, alias));
+        return List.of(
+            new TimeSeries(
+                new FloatSampleList.ConstantList(minTimestamp, lastSampleTimestamp, step, fallbackValue),
+                labels,
+                minTimestamp,
+                lastSampleTimestamp,
+                step,
+                alias
+            )
+        );
     }
 
     /**
