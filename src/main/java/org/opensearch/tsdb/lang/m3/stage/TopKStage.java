@@ -42,6 +42,10 @@ import java.util.Map;
  * - process(): Each shard calculates topK locally using sort + limit
  * - reduce(): Coordinator merges shard results and applies topK again
  * - Benefits: Reduced network traffic, parallel sorting, memory efficiency
+ *
+ * TODO: Optimize performance - Replace O(N log N) full sort in process() with O(N log K) heap-based partial selection,
+ * replace full sort in reduce() with k-way merge, and pre-compute sort keys to eliminate
+ * redundant statistic calculations during sorting.
  */
 @PipelineStageAnnotation(name = "topK")
 public class TopKStage implements UnaryPipelineStage {
