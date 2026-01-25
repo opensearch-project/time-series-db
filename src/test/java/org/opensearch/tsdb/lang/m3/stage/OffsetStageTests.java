@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.tsdb.TestUtils.assertSamplesEqual;
+
 public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStage> {
 
     public void testConstructor() {
@@ -61,14 +63,17 @@ public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStag
         // Assert
         assertEquals(1, result.size());
         TimeSeries offsetTimeSeries = result.getFirst();
-        assertEquals(7, offsetTimeSeries.getSamples().size());
-        assertEquals(6.0, offsetTimeSeries.getSamples().get(0).getValue(), 1e-10);
-        assertEquals(3.0, offsetTimeSeries.getSamples().get(1).getValue(), 1e-10);
-        assertEquals(5.0, offsetTimeSeries.getSamples().get(2).getValue(), 1e-10);
-        assertEquals(15.5, offsetTimeSeries.getSamples().get(3).getValue(), 1e-10);
-        assertEquals(Double.NaN, offsetTimeSeries.getSamples().get(4).getValue(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, offsetTimeSeries.getSamples().get(5).getValue(), 0.0);
-        assertEquals(Double.NEGATIVE_INFINITY, offsetTimeSeries.getSamples().get(6).getValue(), 0.0);
+
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 6.0),                        // 1 + 5 = 6
+            new FloatSample(2000L, 3.0),                        // -2 + 5 = 3
+            new FloatSample(3000L, 5.0),                        // 0 + 5 = 5
+            new FloatSample(4000L, 15.5),                       // 10.5 + 5 = 15.5
+            new FloatSample(5000L, Double.NaN),                 // NaN + 5 = NaN
+            new FloatSample(6000L, Double.POSITIVE_INFINITY),   // +Infinity + 5 = +Infinity
+            new FloatSample(7000L, Double.NEGATIVE_INFINITY)    // -Infinity + 5 = -Infinity
+        );
+        assertSamplesEqual("Positive offset mapping values", expectedSamples, offsetTimeSeries.getSamples(), 1e-10);
     }
 
     public void testMappingInputOutputNegativeOffset() {
@@ -89,11 +94,14 @@ public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStag
         // Assert
         assertEquals(1, result.size());
         TimeSeries offsetTimeSeries = result.getFirst();
-        assertEquals(4, offsetTimeSeries.getSamples().size());
-        assertEquals(7.0, offsetTimeSeries.getSamples().get(0).getValue(), 1e-10);
-        assertEquals(-3.0, offsetTimeSeries.getSamples().get(1).getValue(), 1e-10);
-        assertEquals(-5.0, offsetTimeSeries.getSamples().get(2).getValue(), 1e-10);
-        assertEquals(0.5, offsetTimeSeries.getSamples().get(3).getValue(), 1e-10);
+
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 7.0),    // 10 - 3 = 7
+            new FloatSample(2000L, -3.0),   // 0 - 3 = -3
+            new FloatSample(3000L, -5.0),   // -2 - 3 = -5
+            new FloatSample(4000L, 0.5)     // 3.5 - 3 = 0.5
+        );
+        assertSamplesEqual("Negative offset mapping values", expectedSamples, offsetTimeSeries.getSamples(), 1e-10);
     }
 
     public void testMappingInputOutputZeroOffset() {
@@ -109,10 +117,13 @@ public class OffsetStageTests extends AbstractWireSerializingTestCase<OffsetStag
         // Assert - values should remain unchanged
         assertEquals(1, result.size());
         TimeSeries offsetTimeSeries = result.getFirst();
-        assertEquals(3, offsetTimeSeries.getSamples().size());
-        assertEquals(5.0, offsetTimeSeries.getSamples().get(0).getValue(), 1e-10);
-        assertEquals(-3.0, offsetTimeSeries.getSamples().get(1).getValue(), 1e-10);
-        assertEquals(0.0, offsetTimeSeries.getSamples().get(2).getValue(), 1e-10);
+
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 5.0),    // 5 + 0 = 5
+            new FloatSample(2000L, -3.0),   // -3 + 0 = -3
+            new FloatSample(3000L, 0.0)     // 0 + 0 = 0
+        );
+        assertSamplesEqual("Zero offset mapping values", expectedSamples, offsetTimeSeries.getSamples(), 1e-10);
     }
 
     public void testProcessWithMultipleTimeSeries() {

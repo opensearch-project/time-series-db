@@ -114,14 +114,10 @@ public class LogarithmStage extends AbstractMapperStage {
     /**
      * Create a LogarithmStage from arguments map.
      *
-     * @param args Map of argument names to values
+     * @param args Map of argument names to values (ignored as logarithm takes no arguments)
      * @return LogarithmStage instance
-     * @throws IllegalArgumentException if arguments are invalid
      */
     public static LogarithmStage fromArgs(Map<String, Object> args) {
-        if (args == null) {
-            throw new IllegalArgumentException("Args cannot be null");
-        }
         return new LogarithmStage();
     }
 }

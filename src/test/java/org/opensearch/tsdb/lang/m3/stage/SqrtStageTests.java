@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.tsdb.TestUtils.assertSamplesEqual;
+
 public class SqrtStageTests extends AbstractWireSerializingTestCase<SqrtStage> {
 
     public void testDefaultConstructor() {
@@ -59,15 +61,18 @@ public class SqrtStageTests extends AbstractWireSerializingTestCase<SqrtStage> {
         // Assert
         assertEquals(1, result.size());
         TimeSeries sqrtTimeSeries = result.getFirst();
-        assertEquals(8, sqrtTimeSeries.getSamples().size());
-        assertEquals(2.0, sqrtTimeSeries.getSamples().get(0).getValue(), 1e-10);
-        assertEquals(3.0, sqrtTimeSeries.getSamples().get(1).getValue(), 1e-10);
-        assertEquals(0.0, sqrtTimeSeries.getSamples().get(2).getValue(), 1e-10);
-        assertEquals(Double.NaN, sqrtTimeSeries.getSamples().get(3).getValue(), 0.0);
-        assertEquals(4.0, sqrtTimeSeries.getSamples().get(4).getValue(), 1e-10);
-        assertEquals(Double.NaN, sqrtTimeSeries.getSamples().get(5).getValue(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, sqrtTimeSeries.getSamples().get(6).getValue(), 0.0);
-        assertEquals(0.5, sqrtTimeSeries.getSamples().get(7).getValue(), 1e-10);
+
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 2.0),                        // sqrt(4) = 2
+            new FloatSample(2000L, 3.0),                        // sqrt(9) = 3
+            new FloatSample(3000L, 0.0),                        // sqrt(0) = 0
+            new FloatSample(4000L, Double.NaN),                 // sqrt(-1) = NaN
+            new FloatSample(5000L, 4.0),                        // sqrt(16) = 4
+            new FloatSample(6000L, Double.NaN),                 // NaN input = NaN
+            new FloatSample(7000L, Double.POSITIVE_INFINITY),   // +Infinity input = +Infinity
+            new FloatSample(8000L, 0.5)                         // sqrt(0.25) = 0.5
+        );
+        assertSamplesEqual("Sqrt mapping values", expectedSamples, sqrtTimeSeries.getSamples(), 1e-10);
     }
 
     public void testSqrtEdgeCases() {
@@ -87,12 +92,14 @@ public class SqrtStageTests extends AbstractWireSerializingTestCase<SqrtStage> {
         List<TimeSeries> result = sqrtStage.process(List.of(inputSeries));
 
         // Assert
-        List<Sample> resultSamples = result.getFirst().getSamples();
-        assertEquals(0.0, resultSamples.get(0).getValue(), 1e-10);
-        assertEquals(1.0, resultSamples.get(1).getValue(), 1e-10);
-        assertEquals(2.0, resultSamples.get(2).getValue(), 1e-10);
-        assertTrue("sqrt(negative) should be NaN", Double.isNaN(resultSamples.get(3).getValue()));
-        assertEquals(0.1, resultSamples.get(4).getValue(), 1e-10);
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 0.0),       // sqrt(0) = 0
+            new FloatSample(2000L, 1.0),       // sqrt(1) = 1
+            new FloatSample(3000L, 2.0),       // sqrt(4) = 2
+            new FloatSample(4000L, Double.NaN), // sqrt(-5) = NaN
+            new FloatSample(5000L, 0.1)        // sqrt(0.01) = 0.1
+        );
+        assertSamplesEqual("Sqrt edge cases", expectedSamples, result.getFirst().getSamples(), 1e-10);
     }
 
     public void testProcessWithEmptyInput() {
@@ -214,9 +221,9 @@ public class SqrtStageTests extends AbstractWireSerializingTestCase<SqrtStage> {
     }
 
     public void testFromArgsWithNullMap() {
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> SqrtStage.fromArgs(null));
+        SqrtStage stage = SqrtStage.fromArgs(null);
 
-        assertEquals("Args cannot be null", exception.getMessage());
+        assertEquals("sqrt", stage.getName());
     }
 
     public void testCreateWithArgsSqrtStage() {

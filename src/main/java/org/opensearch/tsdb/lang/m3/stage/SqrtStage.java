@@ -112,14 +112,10 @@ public class SqrtStage extends AbstractMapperStage {
     /**
      * Create a SqrtStage from arguments map.
      *
-     * @param args Map of argument names to values
+     * @param args Map of argument names to values (ignored as sqrt takes no arguments)
      * @return SqrtStage instance
-     * @throws IllegalArgumentException if arguments are invalid
      */
     public static SqrtStage fromArgs(Map<String, Object> args) {
-        if (args == null) {
-            throw new IllegalArgumentException("Args cannot be null");
-        }
         return new SqrtStage();
     }
 }

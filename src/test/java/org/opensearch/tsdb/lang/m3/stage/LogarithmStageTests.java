@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.tsdb.TestUtils.assertSamplesEqual;
+
 public class LogarithmStageTests extends AbstractWireSerializingTestCase<LogarithmStage> {
 
     public void testDefaultConstructor() {
@@ -59,15 +61,18 @@ public class LogarithmStageTests extends AbstractWireSerializingTestCase<Logarit
         // Assert
         assertEquals(1, result.size());
         TimeSeries logTimeSeries = result.getFirst();
-        assertEquals(8, logTimeSeries.getSamples().size());
-        assertEquals(0.0, logTimeSeries.getSamples().get(0).getValue(), 1e-10);
-        assertEquals(1.0, logTimeSeries.getSamples().get(1).getValue(), 1e-10);
-        assertEquals(2.0, logTimeSeries.getSamples().get(2).getValue(), 1e-10);
-        assertEquals(Double.NaN, logTimeSeries.getSamples().get(3).getValue(), 0.0);
-        assertEquals(Double.NEGATIVE_INFINITY, logTimeSeries.getSamples().get(4).getValue(), 0.0);
-        assertEquals(Double.NaN, logTimeSeries.getSamples().get(5).getValue(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, logTimeSeries.getSamples().get(6).getValue(), 0.0);
-        assertEquals(-1.0, logTimeSeries.getSamples().get(7).getValue(), 1e-10);
+
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 0.0),                        // log10(1) = 0
+            new FloatSample(2000L, 1.0),                        // log10(10) = 1
+            new FloatSample(3000L, 2.0),                        // log10(100) = 2
+            new FloatSample(4000L, Double.NaN),                 // log10(-1) = NaN
+            new FloatSample(5000L, Double.NEGATIVE_INFINITY),   // log10(0) = -Infinity
+            new FloatSample(6000L, Double.NaN),                 // NaN input = NaN
+            new FloatSample(7000L, Double.POSITIVE_INFINITY),   // +Infinity input = +Infinity
+            new FloatSample(8000L, -1.0)                        // log10(0.1) = -1
+        );
+        assertSamplesEqual("Logarithm mapping values", expectedSamples, logTimeSeries.getSamples(), 1e-10);
     }
 
     public void testLogarithmEdgeCases() {
@@ -87,12 +92,14 @@ public class LogarithmStageTests extends AbstractWireSerializingTestCase<Logarit
         List<TimeSeries> result = logarithmStage.process(List.of(inputSeries));
 
         // Assert
-        List<Sample> resultSamples = result.getFirst().getSamples();
-        assertEquals(0.0, resultSamples.get(0).getValue(), 1e-10);
-        assertEquals(1.0, resultSamples.get(1).getValue(), 1e-10);
-        assertEquals(-1.0, resultSamples.get(2).getValue(), 1e-10);
-        assertTrue("log10(negative) should be NaN", Double.isNaN(resultSamples.get(3).getValue()));
-        assertEquals("log10(0) should be -Infinity", Double.NEGATIVE_INFINITY, resultSamples.get(4).getValue(), 0.0);
+        List<Sample> expectedSamples = Arrays.asList(
+            new FloatSample(1000L, 0.0),                        // log10(1) = 0
+            new FloatSample(2000L, 1.0),                        // log10(10) = 1
+            new FloatSample(3000L, -1.0),                       // log10(0.1) = -1
+            new FloatSample(4000L, Double.NaN),                 // log10(-5) = NaN
+            new FloatSample(5000L, Double.NEGATIVE_INFINITY)    // log10(0) = -Infinity
+        );
+        assertSamplesEqual("Logarithm edge cases", expectedSamples, result.getFirst().getSamples(), 1e-10);
     }
 
     public void testProcessWithEmptyInput() {
@@ -189,9 +196,9 @@ public class LogarithmStageTests extends AbstractWireSerializingTestCase<Logarit
     }
 
     public void testFromArgsWithNullMap() {
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> LogarithmStage.fromArgs(null));
+        LogarithmStage stage = LogarithmStage.fromArgs(null);
 
-        assertEquals("Args cannot be null", exception.getMessage());
+        assertEquals("logarithm", stage.getName());
     }
 
     public void testCreateWithArgsLogarithmStage() {

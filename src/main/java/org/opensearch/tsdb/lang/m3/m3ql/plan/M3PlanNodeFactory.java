@@ -33,6 +33,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PercentileOfSeriesPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RemoveEmptyPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RoundPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScaleToSecondsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
@@ -131,6 +132,8 @@ public class M3PlanNodeFactory {
                 return SqrtPlanNode.of(functionNode);
             case Constants.Functions.OFFSET:
                 return OffsetPlanNode.of(functionNode);
+            case Constants.Functions.ROUND:
+                return RoundPlanNode.of(functionNode);
             case Constants.Functions.ValueFilter.EQ:
             case Constants.Functions.ValueFilter.EQUALS:
             case Constants.Functions.ValueFilter.GE:
