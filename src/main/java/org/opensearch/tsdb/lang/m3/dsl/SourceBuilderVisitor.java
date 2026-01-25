@@ -42,8 +42,10 @@ import org.opensearch.tsdb.lang.m3.stage.DivideStage;
 import org.opensearch.tsdb.lang.m3.stage.HistogramPercentileStage;
 import org.opensearch.tsdb.lang.m3.stage.IntersectStage;
 import org.opensearch.tsdb.lang.m3.stage.KeepLastValueStage;
+import org.opensearch.tsdb.lang.m3.stage.LogarithmStage;
 import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
+import org.opensearch.tsdb.lang.m3.stage.OffsetStage;
 import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondRateStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondStage;
@@ -57,6 +59,7 @@ import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
 import org.opensearch.tsdb.lang.m3.stage.HeadStage;
 import org.opensearch.tsdb.lang.m3.stage.ShowTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
+import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
 import org.opensearch.tsdb.lang.m3.stage.SustainStage;
 import org.opensearch.tsdb.lang.m3.stage.SubtractStage;
 import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
@@ -78,8 +81,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PercentileOfSeriesPlanNode;
@@ -89,6 +94,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScaleToSecondsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
@@ -436,6 +442,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
+    public ComponentHolder visit(LogarithmPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new LogarithmStage());
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
     public ComponentHolder visit(MovingPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
@@ -475,6 +488,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
         stageStack.add(new DerivativeStage());
 
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(OffsetPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new OffsetStage(planNode.getOffset()));
         return planNode.getChildren().getFirst().accept(this);
     }
 
@@ -625,6 +645,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         long duration = getDurationAsLong(planNode.getDuration());
         stageStack.add(new SustainStage(duration));
 
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(SqrtPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new SqrtStage());
         return planNode.getChildren().getFirst().accept(this);
     }
 
