@@ -42,10 +42,6 @@ public class Constants {
             "_tagAdd",
             "_toHistogramBuckets",
             "_topKPerTimestamp",
-            "aliasSub",
-            "aliasByDistinctTags",
-            "aliasByBucket",
-            "aliasByHistogramBucket",
             "anomalies",
             "asBurnRate",
             "asMultiBurnRate",
@@ -99,6 +95,26 @@ public class Constants {
          * aliasByTags function name.
          */
         public static final String ALIAS_BY_TAGS = "aliasByTags";
+
+        /**
+         * aliasSub function name.
+         */
+        public static final String ALIAS_SUB = "aliasSub";
+
+        /**
+         * aliasByDistinctTags function name.
+         */
+        public static final String ALIAS_BY_DISTINCT_TAGS = "aliasByDistinctTags";
+
+        /**
+         * aliasByBucket function name.
+         */
+        public static final String ALIAS_BY_BUCKET = "aliasByBucket";
+
+        /**
+         * aliasByHistogramBucket function name.
+         */
+        public static final String ALIAS_BY_HISTOGRAM_BUCKET = "aliasByHistogramBucket";
 
         /**
          * showTags function name.
