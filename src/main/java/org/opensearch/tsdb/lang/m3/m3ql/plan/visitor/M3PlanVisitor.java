@@ -19,7 +19,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNod
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RoundPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadTailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
@@ -165,11 +165,11 @@ public abstract class M3PlanVisitor<T> {
     }
 
     /**
-     * Visit method for HeadPlanNode.
-     * @param planNode the HeadPlanNode to visit
-     * @return the result of processing the HeadPlanNode
+     * Visit method for HeadTailPlanNode.
+     * @param planNode the HeadTailPlanNode to visit
+     * @return the result of processing the HeadTailPlanNode
      */
-    public T visit(HeadPlanNode planNode) {
+    public T visit(HeadTailPlanNode planNode) {
         return process(planNode);
     }
 

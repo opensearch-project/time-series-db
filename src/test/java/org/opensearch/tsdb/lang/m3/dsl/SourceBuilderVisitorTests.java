@@ -31,7 +31,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesBinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadTailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
@@ -579,10 +579,10 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Test HeadPlanNode with correct number of children (1).
+     * Test HeadTailPlanNode with correct number of children (1).
      */
-    public void testHeadPlanNodeWithOneChild() {
-        HeadPlanNode planNode = new HeadPlanNode(1, 5);
+    public void testHeadTailPlanNodeWithOneChild() {
+        HeadTailPlanNode planNode = new HeadTailPlanNode(1, 5, org.opensearch.tsdb.lang.m3.common.HeadTailMode.HEAD);
         planNode.addChild(createMockFetchNode(2));
 
         // Should not throw an exception
@@ -600,13 +600,13 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Test HeadPlanNode with incorrect number of children (0).
+     * Test HeadTailPlanNode with incorrect number of children (0).
      */
-    public void testHeadPlanNodeWithNoChildren() {
-        HeadPlanNode planNode = new HeadPlanNode(1, 10);
+    public void testHeadTailPlanNodeWithNoChildren() {
+        HeadTailPlanNode planNode = new HeadTailPlanNode(1, 10, org.opensearch.tsdb.lang.m3.common.HeadTailMode.HEAD);
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
-        assertEquals("HeadPlanNode must have exactly one child", exception.getMessage());
+        assertEquals("HeadTailPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**

@@ -59,7 +59,7 @@ import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
 import org.opensearch.tsdb.lang.m3.stage.IntegralStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
-import org.opensearch.tsdb.lang.m3.stage.HeadStage;
+import org.opensearch.tsdb.lang.m3.stage.HeadTailStage;
 import org.opensearch.tsdb.lang.m3.stage.ShowTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
 import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
@@ -81,7 +81,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadTailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
@@ -559,12 +559,12 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
-    public ComponentHolder visit(HeadPlanNode planNode) {
+    public ComponentHolder visit(HeadTailPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        // HeadStage is a coordinator-only stage
-        HeadStage headStage = new HeadStage(planNode.getLimit());
-        stageStack.add(headStage);
+        // HeadTailStage is a coordinator-only stage
+        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), planNode.getMode());
+        stageStack.add(headTailStage);
 
         return planNode.getChildren().getFirst().accept(this);
     }

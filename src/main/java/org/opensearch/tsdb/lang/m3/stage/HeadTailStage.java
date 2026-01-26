@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
@@ -23,43 +24,61 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Pipeline stage that implements M3QL's head function.
+ * Pipeline stage that implements M3QL's head and tail functions.
  *
- * Returns the first n series from the series list.
+ * HEAD mode: Returns the first n series from the series list.
+ * TAIL mode: Returns the last n series from the series list.
  *
  * Usage: fetch a | head 5
+ *        fetch a | tail 5
  *        fetch a | head    (defaults to 10)
+ *        fetch a | tail    (defaults to 10)
  *
  * This stage can be executed on shards and then reduced on the coordinator.
- * On each shard, it limits to the first n series, and during reduce, it combines
- * results from all shards and returns the first n series total.
+ * On each shard, it limits to the first/last n series, and during reduce, it combines
+ * results from all shards.
  */
 @PipelineStageAnnotation(name = "head")
-public class HeadStage implements UnaryPipelineStage {
+public class HeadTailStage implements UnaryPipelineStage {
     /** The name identifier for this pipeline stage type. */
     public static final String NAME = "head";
     /** The argument name for limit parameter. */
     public static final String LIMIT_ARG = "limit";
 
     private final int limit;
+    private final HeadTailMode mode;
 
     /**
-     * Constructs a new HeadStage with the specified limit.
+     * Constructs a new HeadTailStage with the specified limit and mode.
      *
-     * @param limit the number of series to return (defaults to 10 if not specified)
+     * @param limit the number of series to return
+     * @param mode the operation mode (HEAD or TAIL)
      */
-    public HeadStage(int limit) {
+    public HeadTailStage(int limit, HeadTailMode mode) {
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be positive, got: " + limit);
         }
+        if (mode == null) {
+            throw new IllegalArgumentException("Mode cannot be null");
+        }
         this.limit = limit;
+        this.mode = mode;
     }
 
     /**
-     * Constructs a new HeadStage with default limit of 10.
+     * Constructs a new HeadTailStage with the specified limit and HEAD mode for backward compatibility.
+     *
+     * @param limit the number of series to return (defaults to 10 if not specified)
      */
-    public HeadStage() {
-        this(10);
+    public HeadTailStage(int limit) {
+        this(limit, HeadTailMode.HEAD);
+    }
+
+    /**
+     * Constructs a new HeadTailStage with default limit of 10 and HEAD mode for backward compatibility.
+     */
+    public HeadTailStage() {
+        this(10, HeadTailMode.HEAD);
     }
 
     @Override
@@ -71,9 +90,15 @@ public class HeadStage implements UnaryPipelineStage {
             return new ArrayList<>();
         }
 
-        // Return the first limit series
         int size = Math.min(limit, input.size());
-        return new ArrayList<>(input.subList(0, size));
+        if (mode == HeadTailMode.HEAD) {
+            // Return the first limit series
+            return new ArrayList<>(input.subList(0, size));
+        } else { // TAIL
+            // Return the last limit series
+            int startIndex = Math.max(0, input.size() - size);
+            return new ArrayList<>(input.subList(startIndex, input.size()));
+        }
     }
 
     @Override
@@ -89,6 +114,14 @@ public class HeadStage implements UnaryPipelineStage {
         return limit;
     }
 
+    /**
+     * Get the mode.
+     * @return the operation mode
+     */
+    public HeadTailMode getMode() {
+        return mode;
+    }
+
     @Override
     public boolean isCoordinatorOnly() {
         return false;
@@ -99,13 +132,20 @@ public class HeadStage implements UnaryPipelineStage {
         return true;
     }
 
+    /**
+     * Note: The reduce() operation works the same for both head and tail modes.
+     * If reduce() is called directly without prior sorting, we cannot guarantee
+     * the order of time series across shards, so this will return random N series
+     * regardless of head/tail mode. For proper head/tail behavior, ensure series
+     * are sorted before applying this stage.
+     */
     @Override
     public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
 
-        // Collect only the first limit series from all aggregations
+        // Keep existing head reduce logic unchanged for both modes
         List<TimeSeries> resultSeries = new ArrayList<>(limit);
         for (TimeSeriesProvider aggregation : aggregations) {
             if (resultSeries.size() >= limit) {
@@ -136,35 +176,38 @@ public class HeadStage implements UnaryPipelineStage {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeInt(limit);
+        out.writeString(mode.getDisplayName());
     }
 
     /**
-     * Create a HeadStage instance from the input stream for deserialization.
+     * Create a HeadTailStage instance from the input stream for deserialization.
      *
      * @param in the stream input to read from
-     * @return a new HeadStage instance with the deserialized parameters
+     * @return a new HeadTailStage instance with the deserialized parameters
      * @throws IOException if an I/O error occurs during deserialization
      */
-    public static HeadStage readFrom(StreamInput in) throws IOException {
+    public static HeadTailStage readFrom(StreamInput in) throws IOException {
         int limit = in.readInt();
-        return new HeadStage(limit);
+        String modeStr = in.readString();
+        HeadTailMode mode = HeadTailMode.fromString(modeStr);
+        return new HeadTailStage(limit, mode);
     }
 
     /**
-     * Create a HeadStage from arguments map.
+     * Create a HeadTailStage from arguments map.
      *
      * @param args Map of argument names to values
-     * @return HeadStage instance
+     * @return HeadTailStage instance
      * @throws IllegalArgumentException if arguments are invalid
      */
-    public static HeadStage fromArgs(Map<String, Object> args) {
+    public static HeadTailStage fromArgs(Map<String, Object> args) {
         if (args == null || args.isEmpty() || !args.containsKey(LIMIT_ARG)) {
-            return new HeadStage(); // Default to 10
+            return new HeadTailStage(); // Default to 10 and HEAD mode
         }
 
         Object limitObj = args.get(LIMIT_ARG);
         if (limitObj == null) {
-            return new HeadStage(); // Default to 10
+            return new HeadTailStage(); // Default to 10 and HEAD mode
         }
 
         int limit;
@@ -185,7 +228,8 @@ public class HeadStage implements UnaryPipelineStage {
             );
         }
 
-        return new HeadStage(limit);
+        // Mode will be determined by planning logic, default to HEAD for backward compatibility
+        return new HeadTailStage(limit);
     }
 
     @Override
@@ -196,12 +240,12 @@ public class HeadStage implements UnaryPipelineStage {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        HeadStage other = (HeadStage) obj;
-        return limit == other.limit;
+        HeadTailStage other = (HeadTailStage) obj;
+        return limit == other.limit && mode == other.mode;
     }
 
     @Override
     public int hashCode() {
-        return Integer.hashCode(limit);
+        return Integer.hashCode(limit) * 31 + mode.hashCode();
     }
 }
