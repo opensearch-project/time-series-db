@@ -7,7 +7,6 @@
  */
 package org.opensearch.tsdb.lang.m3.m3ql.plan.nodes;
 
-import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
@@ -17,35 +16,28 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 import java.util.Locale;
 
 /**
- * HeadTailPlanNode represents a plan node that handles head and tail operations in M3QL.
+ * HeadPlanNode represents a plan node that handles head operations in M3QL.
  *
  * The head function returns the first n series from the series list.
- * The tail function returns the last n series from the series list.
- * Both take an optional limit argument (defaults to 10).
+ * Takes an optional limit argument (defaults to 10).
  *
  * This is a coordinator-only stage that operates on all time series at once.
  */
-public class HeadTailPlanNode extends M3PlanNode {
+public class HeadPlanNode extends M3PlanNode {
     private final int limit;
-    private final HeadTailMode mode;
 
     /**
-     * Constructor for HeadTailPlanNode.
+     * Constructor for HeadPlanNode.
      *
      * @param id    The node ID
      * @param limit The number of series to return (defaults to 10 if not specified)
-     * @param mode  The operation mode (HEAD or TAIL)
      */
-    public HeadTailPlanNode(int id, int limit, HeadTailMode mode) {
+    public HeadPlanNode(int id, int limit) {
         super(id);
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be positive, got: " + limit);
         }
-        if (mode == null) {
-            throw new IllegalArgumentException("Mode cannot be null");
-        }
         this.limit = limit;
-        this.mode = mode;
     }
 
     @Override
@@ -55,7 +47,7 @@ public class HeadTailPlanNode extends M3PlanNode {
 
     @Override
     public String getExplainName() {
-        return String.format(Locale.ROOT, "%s(%d)", mode.name(), limit);
+        return String.format(Locale.ROOT, "HEAD(%d)", limit);
     }
 
     /**
@@ -68,42 +60,18 @@ public class HeadTailPlanNode extends M3PlanNode {
     }
 
     /**
-     * Returns the mode.
-     *
-     * @return The operation mode
-     */
-    public HeadTailMode getMode() {
-        return mode;
-    }
-
-    /**
-     * Creates a HeadTailPlanNode from a FunctionNode for head function.
+     * Creates a HeadPlanNode from a FunctionNode for head function.
      * Expected format:
      * - head() -> defaults to 10
      * - head(5) -> returns first 5 series
      *
      * @param functionNode The function node to parse
-     * @return HeadTailPlanNode instance with HEAD mode
+     * @return HeadPlanNode instance
      * @throws IllegalArgumentException if the function arguments are invalid
      */
-    public static HeadTailPlanNode ofHead(FunctionNode functionNode) {
+    public static HeadPlanNode of(FunctionNode functionNode) {
         int limit = parseLimit(functionNode, "head");
-        return new HeadTailPlanNode(M3PlannerContext.generateId(), limit, HeadTailMode.HEAD);
-    }
-
-    /**
-     * Creates a HeadTailPlanNode from a FunctionNode for tail function.
-     * Expected format:
-     * - tail() -> defaults to 10
-     * - tail(5) -> returns last 5 series
-     *
-     * @param functionNode The function node to parse
-     * @return HeadTailPlanNode instance with TAIL mode
-     * @throws IllegalArgumentException if the function arguments are invalid
-     */
-    public static HeadTailPlanNode ofTail(FunctionNode functionNode) {
-        int limit = parseLimit(functionNode, "tail");
-        return new HeadTailPlanNode(M3PlannerContext.generateId(), limit, HeadTailMode.TAIL);
+        return new HeadPlanNode(M3PlannerContext.generateId(), limit);
     }
 
     /**

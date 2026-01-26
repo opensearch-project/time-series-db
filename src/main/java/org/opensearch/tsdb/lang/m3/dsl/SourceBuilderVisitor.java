@@ -19,6 +19,7 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.LabelConstants;
 import org.opensearch.tsdb.lang.m3.common.AggregationType;
+import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
@@ -81,7 +82,8 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadTailPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
@@ -559,11 +561,22 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
-    public ComponentHolder visit(HeadTailPlanNode planNode) {
+    public ComponentHolder visit(HeadPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        // HeadTailStage is a coordinator-only stage
-        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), planNode.getMode());
+        // Create HeadTailStage with HEAD mode
+        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), HeadTailMode.HEAD);
+        stageStack.add(headTailStage);
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(TailPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+
+        // Create HeadTailStage with TAIL mode
+        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), HeadTailMode.TAIL);
         stageStack.add(headTailStage);
 
         return planNode.getChildren().getFirst().accept(this);
