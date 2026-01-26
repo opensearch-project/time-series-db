@@ -28,13 +28,7 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
         HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
-        assertEquals("head", stage.getName());
-    }
-
-    public void testConstructorWithDefaultLimit() {
-        HeadTailStage stage = new HeadTailStage();
-        assertEquals(10, stage.getLimit());
-        assertEquals(HeadTailMode.HEAD, stage.getMode());
+        assertEquals("headTail", stage.getName());
     }
 
     public void testConstructorWithNegativeLimit() {
@@ -56,37 +50,59 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
 
     public void testProcessWithNullInput() {
         HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
-        TestUtils.assertNullInputThrowsException(stage, "head");
+        TestUtils.assertNullInputThrowsException(stage, "headTail");
     }
 
     public void testFromArgsWithLimit() {
         Map<String, Object> args = Map.of("limit", 5);
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        HeadTailStage stage = HeadTailStage.fromArgs(args, HeadTailMode.HEAD);
         assertEquals(5, stage.getLimit());
+        assertEquals(HeadTailMode.HEAD, stage.getMode());
     }
 
     public void testFromArgsWithDefaultLimit() {
-        HeadTailStage stage = HeadTailStage.fromArgs(Map.of());
+        HeadTailStage stage = HeadTailStage.fromArgs(Map.of(), HeadTailMode.TAIL);
         assertEquals(10, stage.getLimit());
+        assertEquals(HeadTailMode.TAIL, stage.getMode());
     }
 
     public void testFromArgsWithNullLimit() {
         Map<String, Object> args = new HashMap<>();
         args.put("limit", null);
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        HeadTailStage stage = HeadTailStage.fromArgs(args, HeadTailMode.HEAD);
         assertEquals(10, stage.getLimit());
+        assertEquals(HeadTailMode.HEAD, stage.getMode());
     }
 
     public void testFromArgsWithInvalidStringLimit() {
         Map<String, Object> args = Map.of("limit", "invalid");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args, HeadTailMode.TAIL));
         assertEquals("Invalid type for 'limit' argument. Expected integer, but got: invalid", e.getMessage());
     }
 
     public void testFromArgsWithZeroLimit() {
         Map<String, Object> args = Map.of("limit", 0);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args, HeadTailMode.HEAD));
         assertEquals("Limit must be positive, got: 0", e.getMessage());
+    }
+
+    public void testFromArgsWithNullMode() {
+        Map<String, Object> args = Map.of("limit", 5);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args, null));
+        assertEquals("Mode cannot be null", e.getMessage());
+    }
+
+    public void testFromArgsBackwardCompatibility() {
+        Map<String, Object> args = Map.of("limit", 7);
+        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        assertEquals(7, stage.getLimit());
+        assertEquals(HeadTailMode.HEAD, stage.getMode()); // Should default to HEAD mode
+    }
+
+    public void testFromArgsBackwardCompatibilityWithEmptyArgs() {
+        HeadTailStage stage = HeadTailStage.fromArgs(Map.of());
+        assertEquals(10, stage.getLimit()); // Default limit
+        assertEquals(HeadTailMode.HEAD, stage.getMode()); // Should default to HEAD mode
     }
 
     public void testIsCoordinatorOnly() {

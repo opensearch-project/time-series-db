@@ -38,10 +38,10 @@ import java.util.Map;
  * On each shard, it limits to the first/last n series, and during reduce, it combines
  * results from all shards.
  */
-@PipelineStageAnnotation(name = "head")
+@PipelineStageAnnotation(name = "headTail")
 public class HeadTailStage implements UnaryPipelineStage {
     /** The name identifier for this pipeline stage type. */
-    public static final String NAME = "head";
+    public static final String NAME = "headTail";
     /** The argument name for limit parameter. */
     public static final String LIMIT_ARG = "limit";
 
@@ -63,22 +63,6 @@ public class HeadTailStage implements UnaryPipelineStage {
         }
         this.limit = limit;
         this.mode = mode;
-    }
-
-    /**
-     * Constructs a new HeadTailStage with the specified limit and HEAD mode for backward compatibility.
-     *
-     * @param limit the number of series to return (defaults to 10 if not specified)
-     */
-    public HeadTailStage(int limit) {
-        this(limit, HeadTailMode.HEAD);
-    }
-
-    /**
-     * Constructs a new HeadTailStage with default limit of 10 and HEAD mode for backward compatibility.
-     */
-    public HeadTailStage() {
-        this(10, HeadTailMode.HEAD);
     }
 
     @Override
@@ -194,42 +178,57 @@ public class HeadTailStage implements UnaryPipelineStage {
     }
 
     /**
-     * Create a HeadTailStage from arguments map.
+     * Create a HeadTailStage from arguments map with specified mode.
      *
      * @param args Map of argument names to values
+     * @param mode The operation mode (HEAD or TAIL) - required
      * @return HeadTailStage instance
+     * @throws IllegalArgumentException if arguments are invalid or mode is null
+     */
+    public static HeadTailStage fromArgs(Map<String, Object> args, HeadTailMode mode) {
+        if (mode == null) {
+            throw new IllegalArgumentException("Mode cannot be null");
+        }
+
+        int limit = 10; // Default limit
+        if (args != null && !args.isEmpty()) {
+            Object limitObj = args.get(LIMIT_ARG);
+            if (limitObj != null) {
+                if (limitObj instanceof Number number) {
+                    limit = number.intValue();
+                } else if (limitObj instanceof String limitStr) {
+                    try {
+                        limit = Integer.parseInt(limitStr);
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException(
+                            "Invalid type for '" + LIMIT_ARG + "' argument. Expected integer, but got: " + limitStr,
+                            e
+                        );
+                    }
+                } else {
+                    throw new IllegalArgumentException(
+                        "Invalid type for '"
+                            + LIMIT_ARG
+                            + "' argument. Expected Number or String, but got "
+                            + limitObj.getClass().getSimpleName()
+                    );
+                }
+            }
+        }
+
+        return new HeadTailStage(limit, mode);
+    }
+
+    /**
+     * Create a HeadTailStage from arguments map (for PipelineStageFactory compatibility).
+     * Defaults to HEAD mode for backward compatibility.
+     *
+     * @param args Map of argument names to values
+     * @return HeadTailStage instance with HEAD mode
      * @throws IllegalArgumentException if arguments are invalid
      */
     public static HeadTailStage fromArgs(Map<String, Object> args) {
-        if (args == null || args.isEmpty() || !args.containsKey(LIMIT_ARG)) {
-            return new HeadTailStage(); // Default to 10 and HEAD mode
-        }
-
-        Object limitObj = args.get(LIMIT_ARG);
-        if (limitObj == null) {
-            return new HeadTailStage(); // Default to 10 and HEAD mode
-        }
-
-        int limit;
-        if (limitObj instanceof Number number) {
-            limit = number.intValue();
-        } else if (limitObj instanceof String limitStr) {
-            try {
-                limit = Integer.parseInt(limitStr);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(
-                    "Invalid type for '" + LIMIT_ARG + "' argument. Expected integer, but got: " + limitStr,
-                    e
-                );
-            }
-        } else {
-            throw new IllegalArgumentException(
-                "Invalid type for '" + LIMIT_ARG + "' argument. Expected Number or String, but got " + limitObj.getClass().getSimpleName()
-            );
-        }
-
-        // Mode will be determined by planning logic, default to HEAD for backward compatibility
-        return new HeadTailStage(limit);
+        return fromArgs(args, HeadTailMode.HEAD);
     }
 
     @Override

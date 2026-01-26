@@ -53,7 +53,7 @@
             "sortOrder" : "asc"
           },
           {
-            "type" : "head",
+            "type" : "headTail",
             "limit" : 5
           }
         ],
