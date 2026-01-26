@@ -74,8 +74,6 @@ public class Constants {
             "sustainedBelow",
             "switch",
             "tagCompare",
-            "tagSub",
-            "tail",
             "topK",
             "timestamp",
             "toHistogram",
