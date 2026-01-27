@@ -70,7 +70,7 @@ public class AliasByBucketStage implements UnaryPipelineStage {
 
         List<TimeSeries> result = new ArrayList<>(input.size());
         for (TimeSeries ts : input) {
-            String bucketAlias = extractBucketAlias(ts.getLabels());
+            String bucketAlias = extractBucketAlias(ts);
 
             // Create new TimeSeries with bucket-based alias
             TimeSeries newTs = new TimeSeries(
@@ -87,19 +87,30 @@ public class AliasByBucketStage implements UnaryPipelineStage {
     }
 
     /**
-     * Extract bucket alias from the time series labels.
+     * Extract bucket alias from the time series.
      *
-     * @param labels the labels containing bucket information
+     * @param timeSeries the time series containing bucket information
      * @return the bucket alias based on the upper (or lower for infinity) bound
+     * @throws IllegalArgumentException if the required bucket tag doesn't exist in the series
      */
-    private String extractBucketAlias(Labels labels) {
+    private String extractBucketAlias(TimeSeries timeSeries) {
+        Labels labels = timeSeries.getLabels();
         if (labels == null) {
-            return null;
+            throw new IllegalArgumentException("Series has no labels");
         }
 
-        String bucketRangeValue = getBucketRangeValue(labels);
+        // Check if the bucket tag exists in the series
+        if (!labels.has(tagName)) {
+            String seriesAlias = timeSeries.getAlias();
+            String seriesDescription = seriesAlias != null ? "series '" + seriesAlias + "'" : "series";
+            throw new IllegalArgumentException("Required bucket tag '" + tagName + "' does not exist in " + seriesDescription);
+        }
+
+        String bucketRangeValue = labels.get(tagName);
         if (bucketRangeValue == null || bucketRangeValue.isEmpty()) {
-            return null;
+            String seriesAlias = timeSeries.getAlias();
+            String seriesDescription = seriesAlias != null ? "series '" + seriesAlias + "'" : "series";
+            throw new IllegalArgumentException("Bucket tag '" + tagName + "' exists but has no value in " + seriesDescription);
         }
 
         try {
@@ -123,16 +134,6 @@ public class AliasByBucketStage implements UnaryPipelineStage {
             // If parsing fails, return the original value
             return bucketRangeValue;
         }
-    }
-
-    /**
-     * Get the bucket range value from labels using the explicitly specified tag name.
-     *
-     * @param labels the labels to search
-     * @return the bucket range value, or null if not found
-     */
-    private String getBucketRangeValue(Labels labels) {
-        return labels.get(tagName);
     }
 
     /**

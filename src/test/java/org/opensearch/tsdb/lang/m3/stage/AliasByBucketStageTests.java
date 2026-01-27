@@ -70,12 +70,42 @@ public class AliasByBucketStageTests extends AbstractWireSerializingTestCase<Ali
         assertThrows(NullPointerException.class, () -> stage.process(null));
     }
 
-    public void testNoBucketTag() {
+    public void testMissingBucketTag() {
         AliasByBucketStage stage = new AliasByBucketStage("missing");
         TimeSeries ts = new TimeSeries(List.of(new FloatSample(10L, 1.0)), ByteLabels.fromStrings("other", "value"), 10L, 10L, 10L, null);
 
-        List<TimeSeries> result = stage.process(List.of(ts));
-        assertNull(result.get(0).getAlias());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> stage.process(List.of(ts)));
+        assertEquals("Required bucket tag 'missing' does not exist in series", exception.getMessage());
+    }
+
+    public void testMissingBucketTagWithSeriesAlias() {
+        AliasByBucketStage stage = new AliasByBucketStage("le");
+        TimeSeries ts = new TimeSeries(
+            List.of(new FloatSample(10L, 1.0)),
+            ByteLabels.fromStrings("other", "value"),
+            10L,
+            10L,
+            10L,
+            "my_series"  // Series with alias
+        );
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> stage.process(List.of(ts)));
+        assertEquals("Required bucket tag 'le' does not exist in series 'my_series'", exception.getMessage());
+    }
+
+    public void testEmptyBucketTagValue() {
+        AliasByBucketStage stage = new AliasByBucketStage("le");
+        TimeSeries ts = new TimeSeries(
+            List.of(new FloatSample(10L, 1.0)),
+            ByteLabels.fromStrings("le", ""),  // Empty value
+            10L,
+            10L,
+            10L,
+            "test_series"
+        );
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> stage.process(List.of(ts)));
+        assertEquals("Bucket tag 'le' exists but has no value in series 'test_series'", exception.getMessage());
     }
 
     public void testFromArgs() {
