@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.query.aggregator;
 
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.MinMaxSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.core.model.SortedValuesSample;
@@ -229,6 +230,7 @@ public class DenseSampleContainer implements SampleContainer {
                 fixedValues[index * 2],
                 (long) fixedValues[index * 2 + 1]
             );
+            case MIN_MAX_SAMPLE -> new MinMaxSample(minTimestamp + index * step, fixedValues[index * 2], fixedValues[index * 2 + 1]);
             case SORTED_VALUES_SAMPLE -> new SortedValuesSample(
                 minTimestamp + index * step,
                 Arrays.stream(variableValues[index]).boxed().collect(Collectors.toList())
@@ -346,6 +348,8 @@ public class DenseSampleContainer implements SampleContainer {
             case FLOAT_SAMPLE -> new FloatSample(timestamp, fixedValues[index]);
 
             case SUM_COUNT_SAMPLE -> new SumCountSample(timestamp, fixedValues[index * 2], (long) fixedValues[index * 2 + 1]);
+
+            case MIN_MAX_SAMPLE -> new MinMaxSample(timestamp, fixedValues[index * 2], fixedValues[index * 2 + 1]);
 
             case SORTED_VALUES_SAMPLE -> variableValues[index] == null
                 ? null
