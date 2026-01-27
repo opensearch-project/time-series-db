@@ -48,6 +48,7 @@ import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondRateStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondStage;
 import org.opensearch.tsdb.lang.m3.stage.PercentileOfSeriesStage;
+import org.opensearch.tsdb.lang.m3.stage.RangeStage;
 import org.opensearch.tsdb.lang.m3.stage.IsNonNullStage;
 import org.opensearch.tsdb.lang.m3.stage.RemoveEmptyStage;
 import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
@@ -253,6 +254,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             case AggregationType.MAX -> new MaxStage(planNode.getTags());
             case AggregationType.MULTIPLY -> new MultiplyStage(planNode.getTags());
             case AggregationType.COUNT -> new CountStage(planNode.getTags());
+            case AggregationType.RANGE -> new RangeStage(planNode.getTags());
         };
 
         stageStack.add(stage);

@@ -23,6 +23,7 @@ import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jol.info.GraphLayout;
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.MinMaxSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.core.model.SortedValuesSample;
@@ -805,6 +806,7 @@ public class SampleStorageBenchmark {
         return switch (sampleType) {
             case FLOAT_SAMPLE -> new FloatSample(timestamp, 100.0 + index);
             case SUM_COUNT_SAMPLE -> new SumCountSample(timestamp, 100.0 + index, 10 + index);
+            case MIN_MAX_SAMPLE -> new MinMaxSample(timestamp, 50.0 + index, 150.0 + index);
             case SORTED_VALUES_SAMPLE -> new SortedValuesSample(
                 timestamp,
                 Arrays.asList((double) index, (double) index + 1, (double) index + 2, (double) index + 3, (double) index + 4)

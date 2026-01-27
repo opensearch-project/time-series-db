@@ -68,8 +68,6 @@ public class Constants {
             "nPercentile",
             "offset",
             "promHistogramPercentile",
-            "range",
-            "rangeOfSeries",
             "removeAbovePercentile",
             "removeBelowPercentile",
             "round",
@@ -429,6 +427,11 @@ public class Constants {
              * sumSeries aggregation function name.
              */
             public static final String SUM_SERIES = "sumSeries";
+
+            /**
+             * range aggregation function name.
+             */
+            public static final String RANGE = "range";
         }
 
         /**
