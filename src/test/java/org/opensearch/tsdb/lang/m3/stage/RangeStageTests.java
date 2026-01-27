@@ -56,7 +56,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
             List.of(
                 new FloatSample(1000L, 19.0), // max(10,20,5,3,1) - min(10,20,5,3,1) = 20 - 1 = 19
                 new FloatSample(2000L, 38.0), // max(20,40,15,6,2) - min(20,40,15,6,2) = 40 - 2 = 38
-                new FloatSample(3000L, 57.0)  // max(30,60,25,9,3) - min(30,60,25,9,3) = 60 - 3 = 57
+                new FloatSample(3000L, 57.0) // max(30,60,25,9,3) - min(30,60,25,9,3) = 60 - 3 = 57
             ),
             ranged.getSamples()
         );
@@ -78,7 +78,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
             List.of(
                 new FloatSample(1000L, 10.0), // max(10, 20) - min(10, 20) = 20 - 10 = 10
                 new FloatSample(2000L, 20.0), // max(20, 40) - min(20, 40) = 40 - 20 = 20
-                new FloatSample(3000L, 30.0)  // max(30, 60) - min(30, 60) = 60 - 30 = 30
+                new FloatSample(3000L, 30.0) // max(30, 60) - min(30, 60) = 60 - 30 = 30
             ),
             apiGroup.getSamples()
         );
@@ -133,7 +133,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
             List.of(
                 new FloatSample(1000L, 19.0), // max(20) - min(1) = 19
                 new FloatSample(2000L, 38.0), // max(40) - min(2) = 38
-                new FloatSample(3000L, 57.0)  // max(60) - min(3) = 57
+                new FloatSample(3000L, 57.0) // max(60) - min(3) = 57
             ),
             reduced.getSamples()
         );
@@ -238,10 +238,9 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                                                                                                                                   // value
                                                                                                                                   // at
                                                                                                                                   // 2000L
-            StageTestUtils.createTimeSeriesWithGaps("ts2", Map.of("service", "api"), List.of(1000L, 2000L), List.of(20.0, 40.0))  // Missing
-                                                                                                                                  // value
-                                                                                                                                  // at
-                                                                                                                                  // 3000L
+            StageTestUtils.createTimeSeriesWithGaps("ts2", Map.of("service", "api"), List.of(1000L, 2000L), List.of(20.0, 40.0)) // Missing
+                                                                                                                                 // value at
+                                                                                                                                 // 3000L
         );
 
         List<TimeSeries> result = rangeStageWithLabels.process(input);
