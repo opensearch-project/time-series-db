@@ -23,6 +23,7 @@ import org.opensearch.tsdb.lang.m3.stage.AvgStage;
 import org.opensearch.tsdb.lang.m3.stage.CopyStage;
 import org.opensearch.tsdb.lang.m3.stage.CountStage;
 import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
+import org.opensearch.tsdb.lang.m3.stage.DivideScalarStage;
 import org.opensearch.tsdb.lang.m3.stage.DivideStage;
 import org.opensearch.tsdb.lang.m3.stage.ExcludeByTagStage;
 import org.opensearch.tsdb.lang.m3.stage.TagSubStage;
@@ -124,6 +125,7 @@ public class PipelineStageFactory {
             registerStage(AvgStage.class);
             registerStage(CountStage.class);
             registerStage(DerivativeStage.class);
+            registerStage(DivideScalarStage.class);
             registerStage(DivideStage.class);
             registerStage(ExcludeByTagStage.class);
             registerStage(TagSubStage.class);

@@ -13,6 +13,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DivideScalarPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RoundPlanNode;
@@ -150,6 +151,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the DerivativePlanNode
      */
     public T visit(DerivativePlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for DivideScalarPlanNode.
+     * @param planNode the DivideScalarPlanNode to visit
+     * @return the result of processing the DivideScalarPlanNode
+     */
+    public T visit(DivideScalarPlanNode planNode) {
         return process(planNode);
     }
 

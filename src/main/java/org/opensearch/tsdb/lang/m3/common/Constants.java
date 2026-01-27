@@ -53,7 +53,6 @@ public class Constants {
             "burnRateMultiplier",
             "changed",
             "constantLine",
-            "divideScalar",
             "divideWhen",
             "histogramCDF",
             "jainCP",
@@ -285,6 +284,11 @@ public class Constants {
          * offset function name.
          */
         public static final String OFFSET = "offset";
+
+        /**
+         * divideScalar function name.
+         */
+        public static final String DIVIDE_SCALAR = "divideScalar";
 
         /**
          * round function name.
