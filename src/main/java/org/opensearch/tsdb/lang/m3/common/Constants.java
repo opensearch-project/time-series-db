@@ -430,6 +430,11 @@ public class Constants {
              * range aggregation function name.
              */
             public static final String RANGE = "range";
+
+            /**
+             * rangeOfSeries aggregation function name.
+             */
+            public static final String RANGE_OF_SERIES = "rangeOfSeries";
         }
 
         /**
