@@ -48,6 +48,7 @@ import java.util.Map;
  * <ul>
  *   <li><strong>Linear Transformation:</strong> Preserves relative relationships between values</li>
  *   <li><strong>Zero Handling:</strong> Division by zero is prevented at construction time</li>
+ *   <li><strong>NaN Handling:</strong> NaN values are preserved unchanged in the output</li>
  *   <li><strong>Precision:</strong> Maintains floating-point precision throughout operations</li>
  * </ul>
  *
@@ -82,7 +83,7 @@ public class DivideScalarStage extends AbstractMapperStage {
         }
         double value = sample.getValue();
         if (Double.isNaN(value)) {
-            throw new IllegalArgumentException("Cannot process NaN value");
+            return sample; // Keep NaN samples unchanged
         }
         double dividedValue = value / divisor;
         return new FloatSample(sample.getTimestamp(), dividedValue);
