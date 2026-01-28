@@ -234,13 +234,10 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
     public void testProcessWithMissingTimestamps() {
         // Test with time series that have gaps/missing timestamps
         List<TimeSeries> input = List.of(
-            StageTestUtils.createTimeSeriesWithGaps("ts1", Map.of("service", "api"), List.of(1000L, 3000L), List.of(10.0, 30.0)), // Missing
-                                                                                                                                  // value
-                                                                                                                                  // at
-                                                                                                                                  // 2000L
-            StageTestUtils.createTimeSeriesWithGaps("ts2", Map.of("service", "api"), List.of(1000L, 2000L), List.of(20.0, 40.0)) // Missing
-                                                                                                                                 // value at
-                                                                                                                                 // 3000L
+            // Missing value at 2000L
+            StageTestUtils.createTimeSeriesWithGaps("ts1", Map.of("service", "api"), List.of(1000L, 3000L), List.of(10.0, 30.0)),
+            // Missing value at 3000L
+            StageTestUtils.createTimeSeriesWithGaps("ts2", Map.of("service", "api"), List.of(1000L, 2000L), List.of(20.0, 40.0))
         );
 
         List<TimeSeries> result = rangeStageWithLabels.process(input);
