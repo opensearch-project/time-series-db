@@ -118,28 +118,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     private final long step;
     private final long theoreticalMaxTimestamp; // Theoretical maximum aligned timestamp for time series
 
-    // Aggregator profiler debug info
-    private final DebugInfo debugInfo = new DebugInfo();
-
-    // Metrics tracking (using primitives for minimal overhead)
-    private long collectStartNanos = 0;
-    private long collectDurationNanos = 0;
-    private long postCollectStartNanos = 0;
-    private long postCollectDurationNanos = 0;
-    private int totalDocsProcessed = 0;
-    private int liveDocsProcessed = 0;
-    private int closedDocsProcessed = 0;
-    private int totalChunksProcessed = 0;
-    private int liveChunksProcessed = 0;
-    private int closedChunksProcessed = 0;
-    private int totalSamplesProcessed = 0;
-    private int liveSamplesProcessed = 0;
-    private int closedSamplesProcessed = 0;
-    private int chunksForDocErrors = 0;
-    private int outputSeriesCount = 0;
-
-    // Circuit breaker tracking
-    long circuitBreakerBytes = 0; // package-private for testing
+    // Aggregator execution stats - single source of truth for all metrics
+    private final ExecutionStats executionStats = new ExecutionStats();
 
     // Estimated sizes for circuit breaker accounting
     private static final long HASHMAP_ENTRY_OVERHEAD = 32; // Estimated overhead per HashMap entry
@@ -150,7 +130,15 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
      * Package-private for testing.
      */
     void setOutputSeriesCountForTesting(int count) {
-        this.outputSeriesCount = count;
+        this.executionStats.outputSeriesCount = count;
+    }
+
+    /**
+     * Record metrics for testing purposes.
+     * Package-private for testing.
+     */
+    void recordMetrics() {
+        executionStats.recordMetrics();
     }
 
     /**
@@ -172,14 +160,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         if (bytes > 0) {
             try {
                 addRequestCircuitBreakerBytes(bytes);
-                circuitBreakerBytes += bytes;
+                executionStats.circuitBreakerBytes += bytes;
 
                 // Log at DEBUG level for normal tracking
                 if (logger.isDebugEnabled()) {
                     logger.debug(
                         "Circuit breaker allocation: +{} bytes, total={} bytes, aggregator={}",
                         bytes,
-                        circuitBreakerBytes,
+                        executionStats.circuitBreakerBytes,
                         name()
                     );
                 }
@@ -213,7 +201,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     String.format(Locale.ROOT, "%.2f", e.getByteLimit() / (1024.0 * 1024.0)),
                     name(),
                     bytes,
-                    circuitBreakerBytes,
+                    executionStats.circuitBreakerBytes,
                     minTimestamp,
                     maxTimestamp,
                     step,
@@ -278,8 +266,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
         // Start timing collect phase
-        if (collectStartNanos == 0) {
-            collectStartNanos = System.nanoTime();
+        if (executionStats.collectStartNanos == 0) {
+            executionStats.collectStartNanos = System.nanoTime();
         }
 
         // Check if this leaf reader can be pruned based on time range
@@ -319,22 +307,19 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Track document processing - determine if from live or closed index
             boolean isLiveReader = tsdbLeafReader instanceof LiveSeriesIndexLeafReader;
-            totalDocsProcessed++;
+            executionStats.totalDocCount++;
             if (isLiveReader) {
-                liveDocsProcessed++;
+                executionStats.liveDocCount++;
             } else {
-                closedDocsProcessed++;
+                executionStats.closedDocCount++;
             }
-
-            // FIXME: this is doc count, not chunk count
-            debugInfo.chunkCount++;
 
             // Use unified API to get chunks for this document
             List<ChunkIterator> chunkIterators;
             try {
                 chunkIterators = tsdbLeafReader.chunksForDoc(doc, tsdbDocValues);
             } catch (Exception e) {
-                chunksForDocErrors++;
+                executionStats.chunksForDocErrors++;
                 throw e;
             }
 
@@ -346,12 +331,12 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 if (chunkSamples > 0) {
                     totalSampleCount += chunkSamples;
                 }
-                // Track chunks
-                totalChunksProcessed++;
+                // Track chunks - fixed to increment per chunk, not per doc
+                executionStats.totalChunkCount++;
                 if (isLiveReader) {
-                    liveChunksProcessed++;
+                    executionStats.liveChunkCount++;
                 } else {
-                    closedChunksProcessed++;
+                    executionStats.closedChunkCount++;
                 }
             }
 
@@ -370,20 +355,18 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             ChunkIterator.DecodeResult decodeResult = it.decodeSamples(minTimestamp, maxTimestamp);
             List<Sample> allSamples = decodeResult.samples();
 
-            totalSamplesProcessed += decodeResult.processedSampleCount();
+            // Track samples with clear semantics:
+            // - *Processed: total samples decoded (includes out-of-range timestamps)
+            // - *Filtered: samples after timestamp filtering (what survives)
+            executionStats.totalSamplesProcessed += decodeResult.processedSampleCount();
+            executionStats.totalSamplesFiltered += allSamples.size();
             if (isLiveReader) {
-                liveSamplesProcessed += decodeResult.processedSampleCount();
-                debugInfo.liveDocCount++;
-                debugInfo.liveChunkCount += chunkIterators.size();
-                debugInfo.liveSampleCount += allSamples.size();
+                executionStats.liveSamplesProcessed += decodeResult.processedSampleCount();
+                executionStats.liveSamplesFiltered += allSamples.size();
             } else {
-                closedSamplesProcessed += decodeResult.processedSampleCount();
-                debugInfo.closedDocCount++;
-                debugInfo.closedChunkCount += chunkIterators.size();
-                debugInfo.closedSampleCount += allSamples.size();
+                executionStats.closedSamplesProcessed += decodeResult.processedSampleCount();
+                executionStats.closedSamplesFiltered += allSamples.size();
             }
-
-            debugInfo.sampleCount += allSamples.size();
 
             if (allSamples.isEmpty()) {
                 return;
@@ -525,10 +508,10 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public void postCollection() throws IOException {
         // End collect phase timing and start postCollect timing
-        if (collectStartNanos > 0) {
-            collectDurationNanos = System.nanoTime() - collectStartNanos;
+        if (executionStats.collectStartNanos > 0) {
+            executionStats.collectDurationNanos = System.nanoTime() - executionStats.collectStartNanos;
         }
-        postCollectStartNanos = System.nanoTime();
+        executionStats.postCollectStartNanos = System.nanoTime();
 
         try {
             // Process each bucket's time series
@@ -539,7 +522,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Apply pipeline stages
                 List<TimeSeries> inputTimeSeries = entry.getValue();
-                debugInfo.inputSeriesCount += inputTimeSeries.size();
+                executionStats.inputSeriesCount += inputTimeSeries.size();
 
                 List<TimeSeries> processedTimeSeries = executeStages(inputTimeSeries);
 
@@ -558,7 +541,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             super.postCollection();
         } finally {
             // End postCollect timing
-            postCollectDurationNanos = System.nanoTime() - postCollectStartNanos;
+            executionStats.postCollectDurationNanos = System.nanoTime() - executionStats.postCollectStartNanos;
         }
     }
 
@@ -588,8 +571,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     timeSeriesList = executeStages(List.of());
                 }
 
-                debugInfo.outputSeriesCount += timeSeriesList.size();
-                outputSeriesCount += timeSeriesList.size();
+                executionStats.outputSeriesCount += timeSeriesList.size();
 
                 // Get the last stage to determine the reduce behavior
                 UnaryPipelineStage lastStage = (stages == null || stages.isEmpty()) ? null : stages.getLast();
@@ -611,7 +593,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             }
             return results;
         } finally {
-            recordMetrics();
+            // Emit all metrics in one batch - minimal overhead
+            executionStats.recordMetrics();
         }
     }
 
@@ -622,8 +605,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             logger.debug(
                 "Closing aggregator '{}': total circuit breaker bytes tracked={} ({} KB)",
                 name(),
-                circuitBreakerBytes,
-                circuitBreakerBytes / 1024
+                executionStats.circuitBreakerBytes,
+                executionStats.circuitBreakerBytes / 1024
             );
         }
 
@@ -636,117 +619,148 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         super.collectDebugInfo(add);
-        debugInfo.add(add);
+        executionStats.add(add);
         add.accept("stages", stages == null ? "" : stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
-        add.accept("circuit_breaker_bytes", circuitBreakerBytes);
     }
 
     /**
-     * Emit all collected metrics in one batch for minimal overhead.
-     * All metrics are batched and emitted together at the end in a finally block.
-     * Package-private for testing.
+     * Single source of truth for all aggregator metrics.
+     * Tracks timing, counts, and errors for both profiling (via collectDebugInfo) and
+     * telemetry (via recordMetrics).
      */
-    void recordMetrics() {
-        if (!TSDBMetrics.isInitialized()) {
-            return;
-        }
+    private static class ExecutionStats {
+        // Timing metrics
+        long collectStartNanos = 0;
+        long collectDurationNanos = 0;
+        long postCollectStartNanos = 0;
+        long postCollectDurationNanos = 0;
 
-        try {
-            // Record latencies (convert nanos to millis only at emission time)
-            if (collectDurationNanos > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.collectLatency, collectDurationNanos / 1_000_000.0);
-            }
+        // Document counts
+        long totalDocCount = 0;
+        long liveDocCount = 0;
+        long closedDocCount = 0;
 
-            if (postCollectDurationNanos > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.postCollectLatency, postCollectDurationNanos / 1_000_000.0);
-            }
+        // Chunk counts
+        long totalChunkCount = 0;
+        long liveChunkCount = 0;
+        long closedChunkCount = 0;
 
-            // Record document counts
-            if (totalDocsProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsTotal, totalDocsProcessed);
-            }
-            if (liveDocsProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsLive, liveDocsProcessed);
-            }
-            if (closedDocsProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsClosed, closedDocsProcessed);
-            }
+        // Sample counts - "Processed" includes all decoded samples (even out-of-range)
+        long totalSamplesProcessed = 0;
+        long liveSamplesProcessed = 0;
+        long closedSamplesProcessed = 0;
 
-            // Record chunk counts
-            if (totalChunksProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksTotal, totalChunksProcessed);
-            }
-            if (liveChunksProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksLive, liveChunksProcessed);
-            }
-            if (closedChunksProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksClosed, closedChunksProcessed);
-            }
+        // Sample counts - "Filtered" includes only samples after timestamp filtering
+        long totalSamplesFiltered = 0;
+        long liveSamplesFiltered = 0;
+        long closedSamplesFiltered = 0;
 
-            // Record sample counts
-            if (totalSamplesProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesTotal, totalSamplesProcessed);
-            }
-            if (liveSamplesProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesLive, liveSamplesProcessed);
-            }
-            if (closedSamplesProcessed > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesClosed, closedSamplesProcessed);
-            }
-
-            // Record errors
-            if (chunksForDocErrors > 0) {
-                TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.chunksForDocErrors, chunksForDocErrors);
-            }
-
-            // Record empty/hits metrics with tags
-            if (outputSeriesCount > 0) {
-                TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_HITS);
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.seriesTotal, outputSeriesCount);
-            } else {
-                TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_EMPTY);
-            }
-
-            // Record circuit breaker bytes
-            if (circuitBreakerBytes > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerBytes, circuitBreakerBytes);
-            }
-        } catch (Exception e) {
-            // Swallow exceptions in metrics recording to avoid impacting actual operation
-            // Metrics failures should never break the application
-        }
-    }
-
-    // profiler debug info
-    private static class DebugInfo {
-        // total number of chunks collected (1 lucene doc = 1 chunk)
-        long chunkCount = 0;
-        // total samples collected
-        long sampleCount = 0;
-        // total number of unique series processed
+        // Series counts
         long inputSeriesCount = 0;
-        // total number of series returned via InternalUnfold aggregation (if there is a reduce phase, it should be
-        // smaller than inputSeriesCount)
         long outputSeriesCount = 0;
-        // the number of doc/chunk/sample in LiveSeriesIndex or in ClosedChunkIndex
-        long liveDocCount;
-        long liveChunkCount;
-        long liveSampleCount;
-        long closedDocCount;
-        long closedChunkCount;
-        long closedSampleCount;
 
+        // Error counts
+        long chunksForDocErrors = 0;
+
+        // Circuit breaker tracking
+        long circuitBreakerBytes = 0; // package-private for testing
+
+        /**
+         * Add debug info to profiler output.
+         */
         void add(BiConsumer<String, Object> add) {
-            add.accept(ProfileInfoMapper.TOTAL_CHUNKS, chunkCount);
-            add.accept(ProfileInfoMapper.TOTAL_SAMPLES, sampleCount);
-            add.accept(ProfileInfoMapper.TOTAL_INPUT_SERIES, inputSeriesCount);
-            add.accept(ProfileInfoMapper.TOTAL_OUTPUT_SERIES, outputSeriesCount);
+            add.accept(ProfileInfoMapper.TOTAL_DOCS, totalDocCount);
             add.accept(ProfileInfoMapper.LIVE_DOC_COUNT, liveDocCount);
             add.accept(ProfileInfoMapper.CLOSED_DOC_COUNT, closedDocCount);
+            add.accept(ProfileInfoMapper.TOTAL_CHUNKS, totalChunkCount);
             add.accept(ProfileInfoMapper.LIVE_CHUNK_COUNT, liveChunkCount);
             add.accept(ProfileInfoMapper.CLOSED_CHUNK_COUNT, closedChunkCount);
-            add.accept(ProfileInfoMapper.LIVE_SAMPLE_COUNT, liveSampleCount);
-            add.accept(ProfileInfoMapper.CLOSED_SAMPLE_COUNT, closedSampleCount);
+            add.accept(ProfileInfoMapper.TOTAL_SAMPLES_PROCESSED, totalSamplesProcessed);
+            add.accept(ProfileInfoMapper.LIVE_SAMPLES_PROCESSED, liveSamplesProcessed);
+            add.accept(ProfileInfoMapper.CLOSED_SAMPLES_PROCESSED, closedSamplesProcessed);
+            add.accept(ProfileInfoMapper.TOTAL_SAMPLES_FILTERED, totalSamplesFiltered);
+            add.accept(ProfileInfoMapper.LIVE_SAMPLES_FILTERED, liveSamplesFiltered);
+            add.accept(ProfileInfoMapper.CLOSED_SAMPLES_FILTERED, closedSamplesFiltered);
+            add.accept(ProfileInfoMapper.TOTAL_INPUT_SERIES, inputSeriesCount);
+            add.accept(ProfileInfoMapper.TOTAL_OUTPUT_SERIES, outputSeriesCount);
+            add.accept(ProfileInfoMapper.CIRCUIT_BREAKER_BYTES, circuitBreakerBytes);
+        }
+
+        /**
+         * Emit all collected metrics to TSDBMetrics in one batch for minimal overhead.
+         * All metrics are batched and emitted together at the end in a finally block.
+         */
+        void recordMetrics() {
+            if (!TSDBMetrics.isInitialized()) {
+                return;
+            }
+
+            try {
+                // Record latencies (convert nanos to millis only at emission time)
+                if (collectDurationNanos > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.collectLatency, collectDurationNanos / 1_000_000.0);
+                }
+
+                if (postCollectDurationNanos > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.postCollectLatency, postCollectDurationNanos / 1_000_000.0);
+                }
+
+                // Record document counts
+                if (totalDocCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsTotal, totalDocCount);
+                }
+                if (liveDocCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsLive, liveDocCount);
+                }
+                if (closedDocCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.docsClosed, closedDocCount);
+                }
+
+                // Record chunk counts
+                if (totalChunkCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksTotal, totalChunkCount);
+                }
+                if (liveChunkCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksLive, liveChunkCount);
+                }
+                if (closedChunkCount > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.chunksClosed, closedChunkCount);
+                }
+
+                // Record sample counts (use "processed" for telemetry - includes all decoded samples)
+                if (totalSamplesProcessed > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesTotal, totalSamplesProcessed);
+                }
+                if (liveSamplesProcessed > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesLive, liveSamplesProcessed);
+                }
+                if (closedSamplesProcessed > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.samplesClosed, closedSamplesProcessed);
+                }
+
+                // TODO Record sample filtered?
+
+                // Record errors
+                if (chunksForDocErrors > 0) {
+                    TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.chunksForDocErrors, chunksForDocErrors);
+                }
+
+                // Record empty/hits metrics with tags
+                if (outputSeriesCount > 0) {
+                    TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_HITS);
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.seriesTotal, outputSeriesCount);
+                } else {
+                    TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_EMPTY);
+                }
+
+                // Record circuit breaker bytes
+                if (circuitBreakerBytes > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerBytes, circuitBreakerBytes);
+                }
+            } catch (Exception e) {
+                // Swallow exceptions in metrics recording to avoid impacting actual operation
+                // Metrics failures should never break the application
+            }
         }
     }
 }
