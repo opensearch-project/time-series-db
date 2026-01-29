@@ -59,7 +59,6 @@ public class Constants {
             "jainCP",
             "logarithm",
             "mapKey",
-            "mockFetch",
             "mockFetchLine",
             "mockFetchLinear",
             "mockFetchPeriodic",
@@ -87,7 +86,6 @@ public class Constants {
             "timestamp",
             "toHistogram",
             "toHistogramLinearBuckets",
-            "union",
             "where"
         );
 

@@ -1,0 +1,5 @@
+UNION
+  AGG(SUM, groupBy=[])
+    FETCH({name=[a]}, !{})
+  AGG(AVG, groupBy=[])
+    FETCH({name=[b]}, !{})

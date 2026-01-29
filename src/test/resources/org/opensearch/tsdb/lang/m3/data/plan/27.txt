@@ -1,0 +1,5 @@
+UNION
+  UNION
+    FETCH({name=[metric1]}, !{})
+    FETCH({name=[metric2]}, !{})
+  FETCH({name=[metric3]}, !{})
