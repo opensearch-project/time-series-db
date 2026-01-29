@@ -150,6 +150,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     }
 
     /**
+     * Get circuit breaker bytes for testing purposes.
+     * Package-private for testing.
+     */
+    long getCircuitBreakerBytesForTesting() {
+        return executionStats.circuitBreakerBytes;
+    }
+
+    /**
      * Track memory allocation with circuit breaker.
      * This method adds the specified bytes to the circuit breaker and tracks the total allocated.
      * Logs warnings if allocation exceeds thresholds for observability.

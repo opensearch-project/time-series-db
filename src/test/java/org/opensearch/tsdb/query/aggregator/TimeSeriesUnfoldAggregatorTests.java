@@ -725,7 +725,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         );
 
         // Set some test values
-        aggregator.circuitBreakerBytes = 1024;
+        aggregator.addCircuitBreakerBytesForTesting(1024);
 
         try {
             // Build aggregation (won't fail even with no data)
@@ -772,23 +772,23 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
             // Initially should be 0
-            assertEquals("Initial circuit breaker bytes should be 0", 0L, aggregator.circuitBreakerBytes);
+            assertEquals("Initial circuit breaker bytes should be 0", 0L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Add some bytes - this will trigger DEBUG logging
             aggregator.addCircuitBreakerBytesForTesting(1024);
-            assertEquals("Circuit breaker bytes should be updated", 1024L, aggregator.circuitBreakerBytes);
+            assertEquals("Circuit breaker bytes should be updated", 1024L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Add more bytes
             aggregator.addCircuitBreakerBytesForTesting(2048);
-            assertEquals("Circuit breaker bytes should accumulate", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Circuit breaker bytes should accumulate", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Adding 0 bytes should be a no-op
             aggregator.addCircuitBreakerBytesForTesting(0);
-            assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Adding negative bytes should be a no-op (checked by bytes > 0)
             aggregator.addCircuitBreakerBytesForTesting(-100);
-            assertEquals("Adding negative bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Adding negative bytes should not change total", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             aggregator.close();
         } finally {
@@ -810,11 +810,11 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
         // Add bytes
         aggregator.addCircuitBreakerBytesForTesting(500);
-        assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.circuitBreakerBytes);
+        assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.getCircuitBreakerBytesForTesting());
 
         // Add more bytes - should accumulate
         aggregator.addCircuitBreakerBytesForTesting(600);
-        assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.circuitBreakerBytes);
+        assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.getCircuitBreakerBytesForTesting());
 
         aggregator.close();
     }
