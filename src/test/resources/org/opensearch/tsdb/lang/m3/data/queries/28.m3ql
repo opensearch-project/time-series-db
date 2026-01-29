@@ -1,0 +1,3 @@
+# test union function with complex pipeline arguments
+# should be equivalent to: fetch name:a | sum | fetch name:b | avg
+union (fetch name:a | sum) (fetch name:b | avg)

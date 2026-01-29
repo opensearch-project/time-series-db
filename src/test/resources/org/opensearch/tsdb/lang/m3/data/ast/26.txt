@@ -1,0 +1,8 @@
+ROOT
+  PIPELINE
+    FUNCTION(fetch)
+      TAG_KEY(name)
+        TAG_VALUE(actions1)
+    FUNCTION(fetch)
+      TAG_KEY(name)
+        TAG_VALUE(actions2)

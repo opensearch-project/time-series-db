@@ -14,6 +14,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.GroupNormalizationTrans
 import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.MacroExpansionTransformation;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.MacroRemovalTransformation;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.PipelineFlatteningTransformation;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.UnionFunctionTransformation;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.transform.ValueInterpolationTransformation;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public class M3ASTProcessor {
             transformations.add(new MacroExpansionTransformation());
             transformations.add(new MacroRemovalTransformation());
         }
+        transformations.add(new UnionFunctionTransformation());
         transformations.add(new GroupNormalizationTransformation());
         transformations.add(new PipelineFlatteningTransformation());
         transformations.add(new ValueInterpolationTransformation());

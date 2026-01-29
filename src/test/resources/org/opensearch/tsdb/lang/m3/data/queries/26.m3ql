@@ -1,0 +1,3 @@
+# test union function syntax with two fetch expressions
+# should be equivalent to: fetch name:actions1 | fetch name:actions2
+union (fetch name:actions1) (fetch name:actions2)
