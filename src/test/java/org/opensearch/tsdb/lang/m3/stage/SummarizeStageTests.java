@@ -111,7 +111,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 210.0),
             new FloatSample(900L, 190.0)
         );
-        assertSamplesEqual("Sum Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Sum Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: [10], [30+50], [70], [90] -> 10, 80, 70, 90
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -121,7 +121,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Sum Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Sum Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result: no samples
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -142,7 +142,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 95.0)
         );
-        assertSamplesEqual("Avg Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Avg Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: avg([10])=10, avg([30,50])=40, avg([70])=70, avg([90])=90
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -152,7 +152,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Avg Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Avg Sparse", expectedSparse, sparseResult.getSamples().toList());
     }
 
     public void testSummarizeMax() {
@@ -169,7 +169,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 80.0),
             new FloatSample(900L, 100.0)
         );
-        assertSamplesEqual("Max Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Max Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: max([10])=10, max([30,50])=50, max([70])=70, max([90])=90
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -179,7 +179,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Max Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Max Sparse", expectedSparse, sparseResult.getSamples().toList());
     }
 
     public void testSummarizeMin() {
@@ -196,7 +196,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 60.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Min Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Min Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: min([10])=10, min([30,50])=30, min([70])=70, min([90])=90
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -206,7 +206,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Min Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Min Sparse", expectedSparse, sparseResult.getSamples().toList());
     }
 
     public void testSummarizeLast() {
@@ -223,7 +223,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 80.0),
             new FloatSample(900L, 100.0)
         );
-        assertSamplesEqual("Last Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Last Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: last([10])=10, last([30,50])=50, last([70])=70, last([90])=90
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -233,7 +233,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("Last Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Last Sparse", expectedSparse, sparseResult.getSamples().toList());
     }
 
     public void testSummarizeP50() {
@@ -250,7 +250,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 70.0),
             new FloatSample(900L, 90.0)
         );
-        assertSamplesEqual("P50 Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("P50 Dense", expectedDense, denseResult.getSamples().toList());
     }
 
     public void testSummarizeStdDev() {
@@ -267,7 +267,7 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(600L, 10.0),
             new FloatSample(900L, 7.0710678118654755)
         );
-        assertSamplesEqual("StdDev Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("StdDev Dense", expectedDense, denseResult.getSamples().toList());
     }
 
     public void testSummarizeAlignToFrom() {
@@ -286,12 +286,12 @@ public class SummarizeStageTests extends AbstractWireSerializingTestCase<Summari
             new FloatSample(700L, 240.0),
             new FloatSample(1000L, 100.0)
         );
-        assertSamplesEqual("AlignToFrom Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("AlignToFrom Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse: [10,30] -> 40, [50] -> 50, [70,90] -> 160, [] -> no bucket
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
         List<Sample> expectedSparse = List.of(new FloatSample(100L, 40.0), new FloatSample(400L, 50.0), new FloatSample(700L, 160.0));
-        assertSamplesEqual("AlignToFrom Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("AlignToFrom Sparse", expectedSparse, sparseResult.getSamples().toList());
     }
 
     public void testSummarizeIntervalSmallerThanResolution() {

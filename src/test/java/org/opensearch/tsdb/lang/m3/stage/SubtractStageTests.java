@@ -64,7 +64,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
                 new FloatSample(3000L, 30.0), // 30 -0
                 new FloatSample(4000L, -4.0)// 0 - 4
             ),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
 
         SubtractStage stageWithKeepNans = new SubtractStage("right_series", true, Collections.emptyList());
@@ -78,7 +78,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
                 new FloatSample(1000L, 9.0),// 10 - 1
                 new FloatSample(2000L, 18.0)// 20 - 2
             ),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -127,7 +127,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
                 new FloatSample(4000L, -400.0), // 0 - 400
                 new FloatSample(7000L, 100.0) // 100 - 0
             ),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
 
         SubtractStage stageWithKeepNans = new SubtractStage("right_series", true, Collections.emptyList());
@@ -138,7 +138,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
         assertSamplesEqual(
             "Multiple Right Series with keepNans = true",
             List.of(new FloatSample(1000L, 20.0), new FloatSample(2000L, 40.0)),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -193,7 +193,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
         assertSamplesEqual(
             "Selective Label Matching with keepNans = false",
             List.of(new FloatSample(1000L, 24.0)),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -227,7 +227,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
         assertSamplesEqual(
             "Selective Multiple Label Matching with keepNans = false",
             List.of(new FloatSample(1000L, 49.0)),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -270,7 +270,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
                 new FloatSample(2000L, 89.0), // 100 - 2 - 9
                 new FloatSample(3000L, 120.0)  // 150 - 3 - 27
             ),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -348,12 +348,12 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
 
         TimeSeries resultSeries = result.get(0);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(20, resultSeries.getSamples().get(0).getValue(), 0.001); // 25 - 5
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(20, resultSeries.getSamples().getValue(0), 0.001); // 25 - 5
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
         resultSeries = result.get(1);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(45, resultSeries.getSamples().get(0).getValue(), 0.001); // 50 - 5
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(45, resultSeries.getSamples().getValue(0), 0.001); // 50 - 5
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
     }
 
     public void testEdgeCases() {
@@ -433,7 +433,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
                 new FloatSample(2000L, -2.0),  // NaN -> 0.0 - 2.0
                 new FloatSample(3000L, 30.0)   // 30.0 - NaN -> 0.0
             ),
-            resultSeries.getSamples()
+            resultSeries.getSamples().toList()
         );
     }
 
@@ -553,7 +553,7 @@ public class SubtractStageTests extends AbstractWireSerializingTestCase<Subtract
             new FloatSample(2000L, -28.0),  // 2 - (20+10)
             new FloatSample(3000L, -42.0)   // 3 - (30+15)
         );
-        assertSamplesEqual("Subtract with merged right series", expectedSamples, resultSeries.getSamples(), 0.001);
+        assertSamplesEqual("Subtract with merged right series", expectedSamples, resultSeries.getSamples().toList(), 0.001);
 
         // Verify labels come from left series
         assertEquals("a", resultSeries.getLabels().get("tag1"));

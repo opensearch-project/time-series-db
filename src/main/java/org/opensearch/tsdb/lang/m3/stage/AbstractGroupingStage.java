@@ -15,6 +15,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
@@ -166,20 +167,26 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
 
     /**
      * Materializes samples in a time series by converting them to the final output format.
-     * Default implementation converts all samples to FloatSample in place.
+     * Default implementation converts all samples to FloatSample
      * Subclasses can override for custom sample materialization logic.
      *
      * @param timeSeries the time series to materialize samples for (modified in place)
      * @return the same time series reference (for consistency)
      */
     protected TimeSeries materializeSamples(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
-        for (int i = 0; i < samples.size(); i++) {
-            Sample sample = samples.get(i);
-            if (!(sample instanceof FloatSample)) {
-                // Replace with FloatSample in place
-                samples.set(i, new FloatSample(sample.getTimestamp(), sample.getValue()));
+        if (timeSeries.getSamples().getSampleType() != SampleType.FLOAT_SAMPLE) {
+            List<Sample> newSamples = new ArrayList<>(timeSeries.getSamples().size());
+            for (Sample sample : timeSeries.getSamples()) {
+                newSamples.add(new FloatSample(sample.getTimestamp(), sample.getValue()));
             }
+            return new TimeSeries(
+                newSamples,
+                timeSeries.getLabels(),
+                timeSeries.getMinTimestamp(),
+                timeSeries.getMaxTimestamp(),
+                timeSeries.getStep(),
+                timeSeries.getAlias()
+            );
         }
         return timeSeries;
     }

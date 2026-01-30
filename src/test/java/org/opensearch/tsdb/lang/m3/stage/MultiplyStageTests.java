@@ -52,7 +52,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Values should be multiplied correctly",
             List.of(new FloatSample(1000L, 3000.0), new FloatSample(2000L, 144000.0), new FloatSample(3000L, 1215000.0)),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -74,7 +74,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
                 new FloatSample(2000L, 800.0), // 20 * 40
                 new FloatSample(3000L, 1800.0)  // 30 * 60
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3)
@@ -84,7 +84,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service1 group values should match",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4)
@@ -94,7 +94,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service2 group values should match",
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -117,7 +117,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Values should be multiplied across aggregations",
             List.of(new FloatSample(1000L, 3000.0), new FloatSample(2000L, 144000.0), new FloatSample(3000L, 1215000.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -140,7 +140,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Values should be multiplied across aggregations",
             List.of(new FloatSample(1000L, 3000.0), new FloatSample(2000L, 144000.0), new FloatSample(3000L, 1215000.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -166,7 +166,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "api group values should be multiplied correctly",
             List.of(new FloatSample(1000L, 200.0), new FloatSample(2000L, 800.0), new FloatSample(3000L, 1800.0)),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // service1 group: ts3 only = [5, 15, 25]
@@ -179,7 +179,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service1 group values should match",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // service2 group: ts4 only = [3, 6, 9]
@@ -192,7 +192,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service2 group values should match",
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -218,7 +218,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "api group values should be multiplied correctly",
             List.of(new FloatSample(1000L, 200.0), new FloatSample(2000L, 800.0), new FloatSample(3000L, 1800.0)),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // service1 group: ts3 only = [5, 15, 25]
@@ -231,7 +231,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service1 group values should match",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // service2 group: ts4 only = [3, 6, 9]
@@ -244,7 +244,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service2 group values should match",
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -282,7 +282,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Values should be multiplied across aggregations",
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 12.0), new FloatSample(3000L, 27.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -334,7 +334,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
                 new FloatSample(20000L, 20.0),  // 20s: only ts1
                 new FloatSample(30000L, 40.0)   // 30s: only ts2
             ),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -360,7 +360,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
                 new FloatSample(20000L, 15.0),  // 20s: only ts1
                 new FloatSample(30000L, 35.0)   // 30s: only ts2
             ),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -388,7 +388,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
                 new FloatSample(2000L, 40.0),  // NaN skipped, only ts2 contributes: 40
                 new FloatSample(3000L, 30.0)   // NaN skipped, only ts1 contributes: 30
             ),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -411,7 +411,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
                 new FloatSample(1000L, 200.0),  // 10 * 20
                 new FloatSample(3000L, 1800.0)   // 30 * 60
             ),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -432,7 +432,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service1 group NaN values should be skipped",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(3000L, 25.0)),
-            service1.getSamples()
+            service1.getSamples().toList()
         );
 
         // Find service2 group
@@ -442,7 +442,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "service2 group NaN values should be skipped",
             List.of(new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2.getSamples()
+            service2.getSamples().toList()
         );
     }
 
@@ -471,7 +471,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Single time series group values should match",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 
@@ -487,7 +487,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         assertSamplesEqual(
             "Single time series group values should match",
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            multiplied.getSamples()
+            multiplied.getSamples().toList()
         );
     }
 

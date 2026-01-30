@@ -48,7 +48,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
                 new FloatSample(2000L, 2.0),  // min(20, 40, 15, 6, 2) = 2
                 new FloatSample(3000L, 3.0)   // min(30, 60, 25, 9, 3) = 3
             ),
-            minned.getSamples()
+            minned.getSamples().toList()
         );
     }
 
@@ -69,7 +69,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
                 new FloatSample(2000L, 20.0), // min(20, 40) = 20
                 new FloatSample(3000L, 30.0)  // min(30, 60) = 30
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3) - unchanged since single series
@@ -78,7 +78,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         assertEquals(3, service1Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4) - unchanged since single series
@@ -87,7 +87,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         assertEquals(3, service2Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -107,7 +107,10 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         assertEquals(3, reduced.getSamples().size());
 
         // Values should be minimum across aggregations
-        assertEquals(List.of(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0)), reduced.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0)),
+            reduced.getSamples().toList()
+        );
     }
 
     public void testReduceNonFinalReduce() throws Exception {
@@ -126,7 +129,10 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         assertEquals(3, reduced.getSamples().size());
 
         // Values should be minimum across aggregations
-        assertEquals(List.of(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0)), reduced.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0)),
+            reduced.getSamples().toList()
+        );
     }
 
     public void testFromArgsNoGrouping() {
@@ -176,7 +182,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
                 new FloatSample(20000L, 20.0),  // 20s: only ts1
                 new FloatSample(30000L, 40.0)   // 30s: only ts2
             ),
-            minned.getSamples()
+            minned.getSamples().toList()
         );
     }
 
@@ -201,7 +207,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
                 new FloatSample(20000L, 15.0),  // 20s: only ts1
                 new FloatSample(30000L, 35.0)   // 30s: only ts2
             ),
-            minned.getSamples()
+            minned.getSamples().toList()
         );
     }
 
@@ -231,7 +237,10 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         TimeSeries minned = result.get(0);
         assertEquals("service1", minned.getLabels().get("service"));
         assertEquals(3, minned.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), minned.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            minned.getSamples().toList()
+        );
     }
 
     public void testProcessGroupWithMultipleTimeSeries() {
@@ -243,7 +252,10 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         TimeSeries minned = result.get(0);
         assertEquals("service1", minned.getLabels().get("service"));
         assertEquals(3, minned.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), minned.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            minned.getSamples().toList()
+        );
     }
 
     // Comprehensive test data - all tests use this same dataset

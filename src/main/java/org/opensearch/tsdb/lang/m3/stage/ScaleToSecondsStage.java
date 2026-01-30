@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -91,7 +92,7 @@ public class ScaleToSecondsStage implements UnaryPipelineStage {
             double scaleFactor = seconds / stepSeconds;
 
             // Process samples with the calculated scale factor
-            List<Sample> originalSamples = series.getSamples();
+            SampleList originalSamples = series.getSamples();
             List<Sample> mappedSamples = new ArrayList<>(originalSamples.size());
 
             for (Sample sample : originalSamples) {

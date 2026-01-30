@@ -178,9 +178,9 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
 
         // === EXECUTE TESTS FOR ALL CONSOLIDATION METHODS ===
 
-        assertSamplesEqual("Series A SUM consolidation", expectedA_SUM, resultSum.get(0).getSamples());
-        assertSamplesEqual("Series B SUM consolidation", expectedB_SUM, resultSum.get(1).getSamples());
-        assertSamplesEqual("Series C SUM consolidation", expectedC_SUM, resultSum.get(2).getSamples());
+        assertSamplesEqual("Series A SUM consolidation", expectedA_SUM, resultSum.get(0).getSamples().toList());
+        assertSamplesEqual("Series B SUM consolidation", expectedB_SUM, resultSum.get(1).getSamples().toList());
+        assertSamplesEqual("Series C SUM consolidation", expectedC_SUM, resultSum.get(2).getSamples().toList());
 
         // Test AVG consolidation
         List<TimeSeries> resultAvg = TimeSeriesNormalizer.normalize(
@@ -188,9 +188,9 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
             TimeSeriesNormalizer.StepSizeStrategy.LCM,
             TimeSeriesNormalizer.ConsolidationStrategy.AVG
         );
-        assertSamplesEqual("Series A AVG consolidation", expectedA_AVG, resultAvg.get(0).getSamples());
-        assertSamplesEqual("Series B AVG consolidation", expectedB_AVG, resultAvg.get(1).getSamples());
-        assertSamplesEqual("Series C AVG consolidation", expectedC_AVG, resultAvg.get(2).getSamples());
+        assertSamplesEqual("Series A AVG consolidation", expectedA_AVG, resultAvg.get(0).getSamples().toList());
+        assertSamplesEqual("Series B AVG consolidation", expectedB_AVG, resultAvg.get(1).getSamples().toList());
+        assertSamplesEqual("Series C AVG consolidation", expectedC_AVG, resultAvg.get(2).getSamples().toList());
 
         // Test MAX consolidation
         List<TimeSeries> resultMax = TimeSeriesNormalizer.normalize(
@@ -198,9 +198,9 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
             TimeSeriesNormalizer.StepSizeStrategy.LCM,
             TimeSeriesNormalizer.ConsolidationStrategy.MAX
         );
-        assertSamplesEqual("Series A MAX consolidation", expectedA_MAX, resultMax.get(0).getSamples());
-        assertSamplesEqual("Series B MAX consolidation", expectedB_MAX, resultMax.get(1).getSamples());
-        assertSamplesEqual("Series C MAX consolidation", expectedC_MAX, resultMax.get(2).getSamples());
+        assertSamplesEqual("Series A MAX consolidation", expectedA_MAX, resultMax.get(0).getSamples().toList());
+        assertSamplesEqual("Series B MAX consolidation", expectedB_MAX, resultMax.get(1).getSamples().toList());
+        assertSamplesEqual("Series C MAX consolidation", expectedC_MAX, resultMax.get(2).getSamples().toList());
 
         // Test MIN consolidation
         List<TimeSeries> resultMin = TimeSeriesNormalizer.normalize(
@@ -208,9 +208,9 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
             TimeSeriesNormalizer.StepSizeStrategy.LCM,
             TimeSeriesNormalizer.ConsolidationStrategy.MIN
         );
-        assertSamplesEqual("Series A MIN consolidation", expectedA_MIN, resultMin.get(0).getSamples());
-        assertSamplesEqual("Series B MIN consolidation", expectedB_MIN, resultMin.get(1).getSamples());
-        assertSamplesEqual("Series C MIN consolidation", expectedC_MIN, resultMin.get(2).getSamples());
+        assertSamplesEqual("Series A MIN consolidation", expectedA_MIN, resultMin.get(0).getSamples().toList());
+        assertSamplesEqual("Series B MIN consolidation", expectedB_MIN, resultMin.get(1).getSamples().toList());
+        assertSamplesEqual("Series C MIN consolidation", expectedC_MIN, resultMin.get(2).getSamples().toList());
 
         // Test LAST consolidation
         List<TimeSeries> resultLast = TimeSeriesNormalizer.normalize(
@@ -218,9 +218,9 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
             TimeSeriesNormalizer.StepSizeStrategy.LCM,
             TimeSeriesNormalizer.ConsolidationStrategy.LAST
         );
-        assertSamplesEqual("Series A LAST consolidation", expectedA_LAST, resultLast.get(0).getSamples());
-        assertSamplesEqual("Series B LAST consolidation", expectedB_LAST, resultLast.get(1).getSamples());
-        assertSamplesEqual("Series C LAST consolidation", expectedC_LAST, resultLast.get(2).getSamples());
+        assertSamplesEqual("Series A LAST consolidation", expectedA_LAST, resultLast.get(0).getSamples().toList());
+        assertSamplesEqual("Series B LAST consolidation", expectedB_LAST, resultLast.get(1).getSamples().toList());
+        assertSamplesEqual("Series C LAST consolidation", expectedC_LAST, resultLast.get(2).getSamples().toList());
     }
 
     public void testNormalize_SkipsNaNValues() {
@@ -249,8 +249,8 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
         // Bucket [0, 10000): samples at 0(NaN) and 5000(20), only 20 counts = 20
         // Bucket [10000, 20000): samples at 10000(30), only 30 counts = 30
         assertEquals(2, normalized.getSamples().size());
-        assertEquals(20.0f, normalized.getSamples().get(0).getValue(), 0.001f);
-        assertEquals(30.0f, normalized.getSamples().get(1).getValue(), 0.001f);
+        assertEquals(20.0f, normalized.getSamples().getValue(0), 0.001f);
+        assertEquals(30.0f, normalized.getSamples().getValue(1), 0.001f);
     }
 
     public void testNormalize_EmptyBucketSkipped() {
@@ -268,10 +268,10 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
         // Bucket [0, 30000): contains sample at 0L (10.0)
         // Bucket [30000, 60000): contains sample at 30000L (30.0)
         assertEquals(2, normalized.getSamples().size());
-        assertEquals(0L, normalized.getSamples().get(0).getTimestamp());
-        assertEquals(10.0f, normalized.getSamples().get(0).getValue(), 0.001f);
-        assertEquals(30000L, normalized.getSamples().get(1).getTimestamp());
-        assertEquals(30.0f, normalized.getSamples().get(1).getValue(), 0.001f);
+        assertEquals(0L, normalized.getSamples().getTimestamp(0));
+        assertEquals(10.0f, normalized.getSamples().getValue(0), 0.001f);
+        assertEquals(30000L, normalized.getSamples().getTimestamp(1));
+        assertEquals(30.0f, normalized.getSamples().getValue(1), 0.001f);
     }
 
     public void testNormalize_AcceptsEmptyList() {
@@ -340,27 +340,27 @@ public class TimeSeriesNormalizerTests extends OpenSearchTestCase {
             new FloatSample(0L, 30.0f),      // sum(10, 20) = 30
             new FloatSample(10000L, 30.0f)   // sum(30) = 30
         );
-        assertSamplesEqual("Counter series TYPE_AWARE", expectedCounter, result.get(0).getSamples(), 0.001f);
+        assertSamplesEqual("Counter series TYPE_AWARE", expectedCounter, result.get(0).getSamples().toList(), 0.001f);
 
         // Counts series should use SUM: bucket [0, 10000) contains samples 15, 25 → sum = 40
         List<Sample> expectedCounts = List.of(
             new FloatSample(0L, 40.0f),      // sum(15, 25) = 40
             new FloatSample(10000L, 35.0f)   // sum(35) = 35
         );
-        assertSamplesEqual("Counts series TYPE_AWARE", expectedCounts, result.get(1).getSamples(), 0.001f);
+        assertSamplesEqual("Counts series TYPE_AWARE", expectedCounts, result.get(1).getSamples().toList(), 0.001f);
 
         // No type series should use AVG: bucket [0, 10000) contains samples 5, 10 → avg = 7.5
         List<Sample> expectedNoType = List.of(
             new FloatSample(0L, 7.5f),      // avg(5, 10) = 7.5
             new FloatSample(10000L, 15.0f)   // avg(15) = 15
         );
-        assertSamplesEqual("No type series TYPE_AWARE", expectedNoType, result.get(2).getSamples(), 0.001f);
+        assertSamplesEqual("No type series TYPE_AWARE", expectedNoType, result.get(2).getSamples().toList(), 0.001f);
 
         // Trigger series (no type label) should use AVG: bucket [0, 10000) contains sample 100 → avg = 100
         List<Sample> expectedTrigger = List.of(
             new FloatSample(0L, 100.0f),    // avg(100) = 100
             new FloatSample(10000L, 200.0f) // avg(200) = 200
         );
-        assertSamplesEqual("Trigger series TYPE_AWARE", expectedTrigger, result.get(3).getSamples(), 0.001f);
+        assertSamplesEqual("Trigger series TYPE_AWARE", expectedTrigger, result.get(3).getSamples().toList(), 0.001f);
     }
 }

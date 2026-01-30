@@ -10,12 +10,14 @@ package org.opensearch.tsdb.lang.m3.stage;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
 import org.opensearch.tsdb.query.stage.BinaryPipelineStage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -118,8 +120,8 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
             return null;
         }
 
-        List<Sample> leftSamples = leftSeries.getSamples();
-        List<Sample> rightSamples = rightSeries.getSamples();
+        SampleList leftSamples = leftSeries.getSamples();
+        SampleList rightSamples = rightSeries.getSamples();
 
         if (leftSamples == null || rightSamples == null) {
             return null;
@@ -130,20 +132,18 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
 
         // Find matching timestamps between the two sorted time series.
         // The input time series is expected to be sorted by timestamp in increasing order.
-        int leftIndex = 0;
-        int rightIndex = 0;
+        Iterator<Sample> leftIter = leftSamples.iterator();
+        Iterator<Sample> rightIter = rightSamples.iterator();
+        Sample leftSample = advanceIterOrNull(leftIter);
+        Sample rightSample = advanceIterOrNull(rightIter);
 
-        while (leftIndex < leftSamples.size() || rightIndex < rightSamples.size()) {
-            Sample leftSample = null;
-            Sample rightSample = null;
+        while (leftSample != null || rightSample != null) {
             Long leftTimestamp = Long.MAX_VALUE;
             Long rightTimestamp = Long.MAX_VALUE;
-            if (leftIndex < leftSamples.size()) {
-                leftSample = leftSamples.get(leftIndex);
+            if (leftSample != null) {
                 leftTimestamp = leftSample.getTimestamp();
             }
-            if (rightIndex < rightSamples.size()) {
-                rightSample = rightSamples.get(rightIndex);
+            if (rightSample != null) {
                 rightTimestamp = rightSample.getTimestamp();
             }
 
@@ -155,7 +155,7 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
                 } else {
                     resultSample = null;
                 }
-                leftIndex++;
+                leftSample = advanceIterOrNull(leftIter);
 
             } else if (rightTimestamp < leftTimestamp) {
                 // If stage doesn't have keepNans option, we skip processing
@@ -164,11 +164,11 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
                 } else {
                     resultSample = null;
                 }
-                rightIndex++;
+                rightSample = advanceIterOrNull(rightIter);
             } else {
                 resultSample = processSamples(leftSample, rightSample);
-                leftIndex++;
-                rightIndex++;
+                leftSample = advanceIterOrNull(leftIter);
+                rightSample = advanceIterOrNull(rightIter);
             }
             if (resultSample != null) {
                 resultSamples.add(resultSample);
@@ -507,5 +507,9 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
             return false;
         }
         return labelKeys.equals(thatLabelKeys);
+    }
+
+    private static <T> T advanceIterOrNull(Iterator<T> iter) {
+        return iter.hasNext() ? iter.next() : null;
     }
 }

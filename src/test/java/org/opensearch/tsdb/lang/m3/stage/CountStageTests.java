@@ -278,7 +278,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
         assertNotNull(actualTimeSeries);
         assertEquals(expectedTimestampCount, actualTimeSeries.getSamples().size());
         // Use allMatch() on a Stream
-        boolean allEqual = actualTimeSeries.getSamples().stream().allMatch(s -> s.getValue() == expectedCount);
+        boolean allEqual = actualTimeSeries.getSamples().toList().stream().allMatch(s -> s.getValue() == expectedCount);
         assertTrue("All value in the time series must be equal to " + expectedCount, allEqual);
     }
 }

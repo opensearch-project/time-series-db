@@ -90,56 +90,56 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // t=2000: [100,200,300,400] -> fractionalRank=0.0*4=0.0, ceil=0, <=1 -> 100
         // t=3000: [15,25,35] -> fractionalRank=0.0*3=0.0, ceil=0, <=1 -> 15
         List<Sample> expectedP0 = List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 100.0f), new FloatSample(3000L, 15.0f));
-        assertSamplesEqual("0th percentile (minimum)", expectedP0, p0Series.getSamples());
+        assertSamplesEqual("0th percentile (minimum)", expectedP0, p0Series.getSamples().toList());
 
         // Verify 30th percentile
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.3*5=1.5, ceil=2, index=1 -> 20
         // t=2000: [100,200,300,400] -> fractionalRank=0.3*4=1.2, ceil=2, index=1 -> 200
         // t=3000: [15,25,35] -> fractionalRank=0.3*3=0.9, ceil=1, <=1 -> 15
         List<Sample> expectedP30 = List.of(new FloatSample(1000L, 20.0f), new FloatSample(2000L, 200.0f), new FloatSample(3000L, 15.0f));
-        assertSamplesEqual("30th percentile", expectedP30, p30Series.getSamples());
+        assertSamplesEqual("30th percentile", expectedP30, p30Series.getSamples().toList());
 
         // Verify 50th percentile (median)
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.5*5=2.5, ceil=3, index=2 -> 30
         // t=2000: [100,200,300,400] -> fractionalRank=0.5*4=2.0, ceil=2, index=1 -> 200
         // t=3000: [15,25,35] -> fractionalRank=0.5*3=1.5, ceil=2, index=1 -> 25
         List<Sample> expectedP50 = List.of(new FloatSample(1000L, 30.0f), new FloatSample(2000L, 200.0f), new FloatSample(3000L, 25.0f));
-        assertSamplesEqual("50th percentile (median)", expectedP50, p50Series.getSamples());
+        assertSamplesEqual("50th percentile (median)", expectedP50, p50Series.getSamples().toList());
 
         // Verify 90th percentile
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.9*5=4.5, ceil=5, index=4 -> 50
         // t=2000: [100,200,300,400] -> fractionalRank=0.9*4=3.6, ceil=4, index=3 -> 400
         // t=3000: [15,25,35] -> fractionalRank=0.9*3=2.7, ceil=3, index=2 -> 35
         List<Sample> expectedP90 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
-        assertSamplesEqual("90th percentile", expectedP90, p90Series.getSamples());
+        assertSamplesEqual("90th percentile", expectedP90, p90Series.getSamples().toList());
 
         // Verify 95th percentile
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.95*5=4.75, ceil=5, index=4 -> 50
         // t=2000: [100,200,300,400] -> fractionalRank=0.95*4=3.8, ceil=4, index=3 -> 400
         // t=3000: [15,25,35] -> fractionalRank=0.95*3=2.85, ceil=3, index=2 -> 35
         List<Sample> expectedP95 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
-        assertSamplesEqual("95th percentile", expectedP95, p95Series.getSamples());
+        assertSamplesEqual("95th percentile", expectedP95, p95Series.getSamples().toList());
 
         // Verify 99th percentile
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.99*5=4.95, ceil=5, index=4 -> 50
         // t=2000: [100,200,300,400] -> fractionalRank=0.99*4=3.96, ceil=4, index=3 -> 400
         // t=3000: [15,25,35] -> fractionalRank=0.99*3=2.97, ceil=3, index=2 -> 35
         List<Sample> expectedP99 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
-        assertSamplesEqual("99th percentile", expectedP99, p99Series.getSamples());
+        assertSamplesEqual("99th percentile", expectedP99, p99Series.getSamples().toList());
 
         // Verify 99.5th percentile (validates decimal percentile label formatting)
         // t=1000: [10,20,30,40,50] -> fractionalRank=0.995*5=4.975, ceil=5, index=4 -> 50
         // t=2000: [100,200,300,400] -> fractionalRank=0.995*4=3.98, ceil=4, index=3 -> 400
         // t=3000: [15,25,35] -> fractionalRank=0.995*3=2.985, ceil=3, index=2 -> 35
         List<Sample> expectedP99_5 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
-        assertSamplesEqual("99.5th percentile", expectedP99_5, p99_5Series.getSamples());
+        assertSamplesEqual("99.5th percentile", expectedP99_5, p99_5Series.getSamples().toList());
 
         // Verify 100th percentile (maximum)
         // t=1000: [10,20,30,40,50] -> fractionalRank=1.0*5=5.0, ceil=5, index=4 -> 50
         // t=2000: [100,200,300,400] -> fractionalRank=1.0*4=4.0, ceil=4, index=3 -> 400
         // t=3000: [15,25,35] -> fractionalRank=1.0*3=3.0, ceil=3, index=2 -> 35
         List<Sample> expectedP100 = List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 400.0f), new FloatSample(3000L, 35.0f));
-        assertSamplesEqual("100th percentile (maximum)", expectedP100, p100Series.getSamples());
+        assertSamplesEqual("100th percentile (maximum)", expectedP100, p100Series.getSamples().toList());
     }
 
     /**
@@ -166,7 +166,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // t=1000: [10,20] -> median at index 0 (ceil(0.5*2)=1, index=0) -> 10
         // t=2000: [30,40] -> median at index 0 (ceil(0.5*2)=1, index=0) -> 30
         List<Sample> expected = List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 30.0f));
-        assertSamplesEqual("50th percentile", expected, p50Series.getSamples());
+        assertSamplesEqual("50th percentile", expected, p50Series.getSamples().toList());
     }
 
     /**
@@ -517,7 +517,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P0",
             List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 100.0f)),
-            group1P0List.get(0).getSamples()
+            group1P0List.get(0).getSamples().toList()
         );
 
         // 30th percentile: fractionalRank=0.3*3=0.9, ceil=1, rankAsInt=1, <=1 -> first element (no interpolation possible)
@@ -526,7 +526,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P30",
             List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 100.0f)),
-            group1P30List.get(0).getSamples()
+            group1P30List.get(0).getSamples().toList()
         );
 
         // 50th percentile: fractionalRank=0.5*3=1.5, ceil=2, rankAsInt=2, index=1 -> 20
@@ -536,7 +536,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P50",
             List.of(new FloatSample(1000L, 15.0f), new FloatSample(2000L, 150.0f)),
-            group1P50List.get(0).getSamples()
+            group1P50List.get(0).getSamples().toList()
         );
 
         // 70th percentile: fractionalRank=0.7*3=2.1, ceil=3, rankAsInt=3, index=2 -> 30
@@ -546,7 +546,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P70",
             List.of(new FloatSample(1000L, 21.0f), new FloatSample(2000L, 210.0f)),
-            group1P70List.get(0).getSamples()
+            group1P70List.get(0).getSamples().toList()
         );
 
         // 90th percentile: fractionalRank=0.9*3=2.7, ceil=3, rankAsInt=3, index=2 -> 30
@@ -556,7 +556,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P90",
             List.of(new FloatSample(1000L, 27.0f), new FloatSample(2000L, 270.0f)),
-            group1P90List.get(0).getSamples()
+            group1P90List.get(0).getSamples().toList()
         );
 
         // 100th percentile: fractionalRank=1.0*3=3.0, ceil=3, rankAsInt=3, index=2 -> 30
@@ -566,7 +566,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group1 P100",
             List.of(new FloatSample(1000L, 30.0f), new FloatSample(2000L, 300.0f)),
-            group1P100List.get(0).getSamples()
+            group1P100List.get(0).getSamples().toList()
         );
 
         // ========== Group 2: region=us-west, env=dev (values: [40,50]) ==========
@@ -577,7 +577,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P0",
             List.of(new FloatSample(1000L, 40.0f), new FloatSample(2000L, 400.0f)),
-            group2P0List.get(0).getSamples()
+            group2P0List.get(0).getSamples().toList()
         );
 
         // 30th percentile: fractionalRank=0.3*2=0.6, ceil=1, rankAsInt=1, <=1 -> first element
@@ -586,7 +586,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P30",
             List.of(new FloatSample(1000L, 40.0f), new FloatSample(2000L, 400.0f)),
-            group2P30List.get(0).getSamples()
+            group2P30List.get(0).getSamples().toList()
         );
 
         // 50th percentile: fractionalRank=0.5*2=1.0, ceil=1, rankAsInt=1, <=1 -> first element
@@ -595,7 +595,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P50",
             List.of(new FloatSample(1000L, 40.0f), new FloatSample(2000L, 400.0f)),
-            group2P50List.get(0).getSamples()
+            group2P50List.get(0).getSamples().toList()
         );
 
         // 70th percentile: fractionalRank=0.7*2=1.4, ceil=2, rankAsInt=2, index=1 -> 50
@@ -605,7 +605,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P70",
             List.of(new FloatSample(1000L, 44.0f), new FloatSample(2000L, 440.0f)),
-            group2P70List.get(0).getSamples()
+            group2P70List.get(0).getSamples().toList()
         );
 
         // 90th percentile: fractionalRank=0.9*2=1.8, ceil=2, rankAsInt=2, index=1 -> 50
@@ -615,7 +615,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P90",
             List.of(new FloatSample(1000L, 48.0f), new FloatSample(2000L, 480.0f)),
-            group2P90List.get(0).getSamples()
+            group2P90List.get(0).getSamples().toList()
         );
 
         // 100th percentile: fractionalRank=1.0*2=2.0, ceil=2, rankAsInt=2, index=1 -> 50
@@ -625,7 +625,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group2 P100",
             List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 500.0f)),
-            group2P100List.get(0).getSamples()
+            group2P100List.get(0).getSamples().toList()
         );
 
         // ========== Group 3: region=us-east, env=prod (values: [5,15,25]) ==========
@@ -636,7 +636,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P0",
             List.of(new FloatSample(1000L, 5.0f), new FloatSample(2000L, 50.0f)),
-            group3P0List.get(0).getSamples()
+            group3P0List.get(0).getSamples().toList()
         );
 
         // 30th percentile: fractionalRank=0.3*3=0.9, ceil=1, rankAsInt=1, <=1 -> first element
@@ -645,7 +645,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P30",
             List.of(new FloatSample(1000L, 5.0f), new FloatSample(2000L, 50.0f)),
-            group3P30List.get(0).getSamples()
+            group3P30List.get(0).getSamples().toList()
         );
 
         // 50th percentile: fractionalRank=0.5*3=1.5, ceil=2, rankAsInt=2, index=1 -> 15
@@ -655,7 +655,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P50",
             List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 100.0f)),
-            group3P50List.get(0).getSamples()
+            group3P50List.get(0).getSamples().toList()
         );
 
         // 70th percentile: fractionalRank=0.7*3=2.1, ceil=3, rankAsInt=3, index=2 -> 25
@@ -665,7 +665,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P70",
             List.of(new FloatSample(1000L, 16.0f), new FloatSample(2000L, 160.0f)),
-            group3P70List.get(0).getSamples()
+            group3P70List.get(0).getSamples().toList()
         );
 
         // 90th percentile: fractionalRank=0.9*3=2.7, ceil=3, rankAsInt=3, index=2 -> 25
@@ -675,7 +675,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P90",
             List.of(new FloatSample(1000L, 22.0f), new FloatSample(2000L, 220.0f)),
-            group3P90List.get(0).getSamples()
+            group3P90List.get(0).getSamples().toList()
         );
 
         // 100th percentile: fractionalRank=1.0*3=3.0, ceil=3, rankAsInt=3, index=2 -> 25
@@ -685,7 +685,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertSamplesEqual(
             "Group3 P100",
             List.of(new FloatSample(1000L, 25.0f), new FloatSample(2000L, 250.0f)),
-            group3P100List.get(0).getSamples()
+            group3P100List.get(0).getSamples().toList()
         );
     }
 

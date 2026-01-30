@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -72,7 +73,7 @@ public class IntegralStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries ts : input) {
-            List<Sample> samples = ts.getSamples();
+            SampleList samples = ts.getSamples();
             if (samples.isEmpty()) {
                 result.add(ts);
                 continue;

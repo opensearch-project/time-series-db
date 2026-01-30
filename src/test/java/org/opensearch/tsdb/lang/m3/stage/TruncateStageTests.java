@@ -95,14 +95,14 @@ public class TruncateStageTests extends AbstractWireSerializingTestCase<Truncate
         // Dense: keep samples in [20, 50) - excludes 50
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
         List<Sample> expectedDense = List.of(new FloatSample(20L, 3.0), new FloatSample(30L, 4.0), new FloatSample(40L, 5.0));
-        assertSamplesEqual("Both Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Both Dense", expectedDense, denseResult.getSamples().toList());
         assertEquals("Truncated minTimestamp should be 20", 20L, denseResult.getMinTimestamp());
         assertEquals("Truncated maxTimestamp should be 40 (largest aligned < 50)", 40L, denseResult.getMaxTimestamp());
 
         // Sparse: keep samples in [20, 50) (20 and 50 missing, only 30 and 40)
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
         List<Sample> expectedSparse = List.of(new FloatSample(30L, 4.0), new FloatSample(40L, 5.0));
-        assertSamplesEqual("Both Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Both Sparse", expectedSparse, sparseResult.getSamples().toList());
         assertEquals("Truncated minTimestamp should be 20", 20L, sparseResult.getMinTimestamp());
         assertEquals("Truncated maxTimestamp should be 40 (largest aligned < 50)", 40L, sparseResult.getMaxTimestamp());
 

@@ -43,7 +43,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
 
         assertEquals(1, result.size());
         assertEquals("input", result.get(0).getLabels().get("name"));
-        assertSamplesEqual("Input samples should match", inputSamples, result.get(0).getSamples());
+        assertSamplesEqual("Input samples should match", inputSamples, result.get(0).getSamples().toList());
     }
 
     /**
@@ -77,7 +77,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
             new FloatSample(10L, fallbackValue),
             new FloatSample(20L, fallbackValue)
         );
-        assertSamplesEqual("Constant series samples should match", expectedSamples, constantSeries.getSamples());
+        assertSamplesEqual("Constant series samples should match", expectedSamples, constantSeries.getSamples().toList());
     }
 
     /**
@@ -114,7 +114,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
 
         assertEquals(1, result.size());
         TimeSeries constantSeries = result.get(0);
-        assertEquals(-5.0, ((FloatSample) constantSeries.getSamples().get(0)).getValue(), 0.001);
+        assertEquals(-5.0, constantSeries.getSamples().getValue(0), 0.001);
     }
 
     /**
@@ -127,7 +127,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
 
         assertEquals(1, result.size());
         TimeSeries constantSeries = result.get(0);
-        assertEquals(0.0, ((FloatSample) constantSeries.getSamples().get(0)).getValue(), 0.001);
+        assertEquals(0.0, constantSeries.getSamples().getValue(0), 0.001);
         // Verify alias formatting: 0 -> "0.000"
         assertEquals("0.000", constantSeries.getAlias());
     }
@@ -175,7 +175,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
         // maxTimestamp in TimeSeries is the last sample timestamp (15), not the exclusive upper bound (30)
         assertEquals(15L, constantSeries.getMaxTimestamp());
         assertEquals(15L, constantSeries.getStep());
-        assertEquals(3.0, ((FloatSample) constantSeries.getSamples().get(0)).getValue(), 0.001);
+        assertEquals(3.0, constantSeries.getSamples().getValue(0), 0.001);
     }
 
     /**
@@ -319,7 +319,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
         // Verify by checking the stage processes correctly
         List<TimeSeries> result = ((FallbackSeriesUnaryStage) stage).process(List.of());
         assertEquals(1, result.size());
-        assertEquals(1.0, ((FloatSample) result.get(0).getSamples().get(0)).getValue(), 0.001);
+        assertEquals(1.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     @Override
@@ -342,7 +342,7 @@ public class UnaryFallbackSeriesStageTests extends AbstractWireSerializingTestCa
         // Extract values by processing an empty input to create a constant series
         List<TimeSeries> result = instance.process(List.of());
         TimeSeries constantSeries = result.get(0);
-        double fallbackValue = ((FloatSample) constantSeries.getSamples().get(0)).getValue();
+        double fallbackValue = constantSeries.getSamples().getValue(0);
 
         return new FallbackSeriesUnaryStage(
             fallbackValue + 1.0,

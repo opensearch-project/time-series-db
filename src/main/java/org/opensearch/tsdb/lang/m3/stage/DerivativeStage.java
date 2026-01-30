@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -56,7 +57,7 @@ public class DerivativeStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries ts : input) {
-            List<Sample> samples = ts.getSamples();
+            SampleList samples = ts.getSamples();
             if (samples.isEmpty()) {
                 result.add(ts);
                 continue;
@@ -67,20 +68,19 @@ public class DerivativeStage implements UnaryPipelineStage {
             // are exactly step size apart
             long step = ts.getStep();
             for (int i = 1; i < samples.size(); i++) {
-                Sample prevSample = samples.get(i - 1);
-                Sample currentSample = samples.get(i);
+                long prevTimestamp = samples.getTimestamp(i - 1);
+                long currTimestamp = samples.getTimestamp(i);
 
                 // The unfold stage aligns timestamps to step boundaries. If previous timestamp + step != current timestamp,
                 // this indicates a null data point in the input.
                 // This ensures that derivative only emits non-null values when there are 2 consecutive samples with no gap.
-                if (prevSample.getTimestamp() + step == currentSample.getTimestamp()) {
-                    double prevValue = prevSample.getValue();
-                    double currentValue = currentSample.getValue();
+                if (prevTimestamp + step == currTimestamp) {
+                    double prevValue = samples.getValue(i - 1);
+                    double currentValue = samples.getValue(i);
 
                     // If either value is NaN, result is NaN
-                    double derivative = Double.NaN;
                     if (!Double.isNaN(prevValue) && !Double.isNaN(currentValue)) {
-                        derivativeSamples.add(new FloatSample(currentSample.getTimestamp(), currentValue - prevValue));
+                        derivativeSamples.add(new FloatSample(currTimestamp, currentValue - prevValue));
                     }
                 }
             }
