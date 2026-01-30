@@ -169,6 +169,9 @@ public final class TSDBMetricsConstants {
     /** Histogram: Latency from minimum sample timestamp in bulk request to when data becomes searchable (refresh completion) */
     public static final String INGESTION_LAG_SEARCHABLE_LATENCY = "tsdb.ingestion.lag.searchable.latency";
 
+    /** Histogram: Time taken to parse bulk request and extract minimum sample timestamp */
+    public static final String INGESTION_LAG_PARSING_LATENCY = "tsdb.ingestion.lag.parsing.latency";
+
     // ============================================
     // Search Metrics (Query Cache)
     // ============================================
@@ -344,6 +347,8 @@ public final class TSDBMetricsConstants {
         "Data freshness latency: time from minimum sample timestamp in bulk request to arrival at coordinating node";
     public static final String INGESTION_LAG_SEARCHABLE_LATENCY_DESC =
         "Data freshness latency: time from minimum sample timestamp in bulk request to when data becomes searchable (refresh completion)";
+    public static final String INGESTION_LAG_PARSING_LATENCY_DESC =
+        "Time taken to parse bulk request and extract minimum sample timestamp from TSDB documents";
 
     // ============================================
     // Metric Tags
