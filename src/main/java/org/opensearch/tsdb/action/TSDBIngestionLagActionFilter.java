@@ -70,29 +70,24 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
         BulkRequest bulkRequest = (BulkRequest) request;
 
         try {
+            long parsingStartTime = System.nanoTime();
             Long minSampleTimestamp = extractMinSampleTimestamp(bulkRequest);
+            long parsingTimeMs = (System.nanoTime() - parsingStartTime) / 1_000_000;
 
             if (minSampleTimestamp != null) {
+                Tags parsingTags = Tags.create().addTag("index", getPrimaryIndex(bulkRequest));
+                TSDBMetrics.recordHistogram(metrics.parsingLatency, parsingTimeMs, parsingTags);
+
                 long arrivalTimeCoordinatingNode = System.currentTimeMillis();
                 long lagMs = arrivalTimeCoordinatingNode - minSampleTimestamp;
 
                 Tags tags = Tags.create().addTag("index", getPrimaryIndex(bulkRequest));
-                TSDBMetrics.recordHistogram(metrics.lagReachesOs, lagMs, tags);
+                TSDBMetrics.recordHistogram(metrics.lagUntilCoordinator, lagMs, tags);
 
                 String bulkRequestId = UUID.randomUUID().toString();
                 threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
                 threadContext.putHeader(HEADER_ARRIVAL_TIME, String.valueOf(arrivalTimeCoordinatingNode));
                 threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
-
-                if (logger.isTraceEnabled()) {
-                    logger.trace(
-                        "Recorded ingestion lag coordinator_arrival: {}ms (minTimestamp: {}, arrivalTime: {}, bulkRequestId: {})",
-                        lagMs,
-                        minSampleTimestamp,
-                        arrivalTimeCoordinatingNode,
-                        bulkRequestId
-                    );
-                }
             }
         } catch (Exception e) {
             logger.debug("Failed to extract ingestion lag metrics from bulk request", e);
@@ -147,26 +142,8 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                     skippedCount++;
                 }
             } catch (Exception e) {
-                if (logger.isTraceEnabled()) {
-                    logger.trace(
-                        "Failed to extract timestamp from IndexRequest source (index: {}, id: {})",
-                        indexRequest.index(),
-                        indexRequest.id(),
-                        e
-                    );
-                }
                 skippedCount++;
             }
-        }
-
-        if (logger.isTraceEnabled() && minTimestamp != null) {
-            logger.trace(
-                "Extracted minSampleTimestamp: {}ms from bulk request (processed: {}, skipped: {}, total: {})",
-                minTimestamp,
-                processedCount,
-                skippedCount,
-                bulkRequest.requests().size()
-            );
         }
 
         return minTimestamp;
