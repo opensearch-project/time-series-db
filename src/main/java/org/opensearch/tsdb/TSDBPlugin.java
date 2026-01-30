@@ -28,6 +28,7 @@ import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.env.ShardLock;
+import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.EngineFactory;
 import org.opensearch.index.engine.TSDBEngineFactory;
@@ -52,6 +53,7 @@ import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.tsdb.action.TSDBIngestionLagActionFilter;
+import org.opensearch.tsdb.action.TSDBIngestionLagIndexingListener;
 import org.opensearch.tsdb.lang.m3.M3QLMetrics;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -108,6 +110,8 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     // Cluster service for REST handlers
     private volatile ClusterService clusterService;
+    // ThreadPool for ingestion lag indexing listener
+    private volatile ThreadPool threadPool;
 
     // Singleton cache for remote index settings
     private volatile RemoteIndexSettingsCache remoteIndexSettingsCache;
@@ -640,6 +644,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             ingestionLagMetrics = new TSDBIngestionLagMetrics();
             ingestionLagMetrics.initialize(metricsRegistry);
             ingestionLagActionFilter = new TSDBIngestionLagActionFilter(threadPool.getThreadContext(), ingestionLagMetrics);
+            this.threadPool = threadPool;
         } else {
             logger.warn("MetricsRegistry is null; TSDB metrics not initialized");
         }
@@ -816,6 +821,18 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             DirectoryFactory directoryFactory
         ) throws IOException {
             return new TSDBStore(shardId, indexSettings, directory, shardLock, onClose, shardPath, directoryFactory);
+        }
+    }
+
+    @Override
+    public void onIndexModule(IndexModule indexModule) {
+        if (ingestionLagMetrics != null && threadPool != null) {
+            TSDBIngestionLagIndexingListener listener = new TSDBIngestionLagIndexingListener(
+                threadPool.getThreadContext(),
+                ingestionLagMetrics
+            );
+            indexModule.addIndexOperationListener(listener);
+            indexModule.addIndexEventListener(listener);
         }
     }
 
