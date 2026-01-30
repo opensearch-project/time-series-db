@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * Head storage implementation for active time series data.
@@ -841,7 +842,7 @@ public class Head implements Closeable {
         }
 
         @Override
-        public boolean append(Runnable callback, Runnable failureCallback) throws InterruptedException {
+        public boolean append(Consumer<Boolean> callback, Runnable failureCallback) throws InterruptedException {
             return appendSample(head.getAppendContext(), callback, failureCallback);
         }
 
@@ -851,13 +852,14 @@ public class Head implements Closeable {
          * and will not be executed together.
          *
          * @param context  the append context containing options for chunk management
-         * @param callback optional callback to execute under lock after appending the sample, this persists the series' labels
+         * @param callback callback to execute under lock after appending, receives true if a new chunk was created
          * @param failureCallback callback to execute in case of errors
          * @return true if sample was appended, false otherwise
          * @throws InterruptedException if the thread is interrupted while waiting for the series lock (append failed)
          * @throws RuntimeException if series creation or translog write fails
          */
-        protected boolean appendSample(AppendContext context, Runnable callback, Runnable failureCallback) throws InterruptedException {
+        protected boolean appendSample(AppendContext context, Consumer<Boolean> callback, Runnable failureCallback)
+            throws InterruptedException {
             if (series == null) {
                 failureCallback.run();
                 throw new RuntimeException("Append failed due to missing series");
@@ -877,15 +879,15 @@ public class Head implements Closeable {
 
                 series.lock();
                 try {
-                    // Execute the callback to write to translog under the series lock.
-                    executeCallback(callback, failureCallback);
-
-                    if (sample == null) {
-                        return false;
+                    // Append sample if present to determine if a new chunk was created
+                    boolean chunkCreated = false;
+                    if (sample != null) {
+                        chunkCreated = series.append(seqNo, sample.getTimestamp(), sample.getValue(), context.options());
                     }
 
-                    series.append(seqNo, sample.getTimestamp(), sample.getValue(), context.options());
-                    return true;
+                    // Execute the callback to write to translog under the series lock
+                    executeCallback(callback, chunkCreated, failureCallback);
+                    return sample != null;
                 } finally {
                     series.unlock();
                 }
@@ -896,12 +898,12 @@ public class Head implements Closeable {
         }
 
         /**
-         * Executes the callback. If callback execution fails, marks series as failed and executes the failure callback.
-         * This method is responsible for translog writes and updating status accordingly.
+         * Executes the callback with the chunk creation status. If callback execution fails, marks series as failed
+         * and executes the failure callback. This method is responsible for translog writes and updating status accordingly.
          */
-        private void executeCallback(Runnable callback, Runnable failureCallback) {
+        private void executeCallback(Consumer<Boolean> callback, boolean chunkCreated, Runnable failureCallback) {
             try {
-                callback.run();
+                callback.accept(chunkCreated);
             } catch (Exception e) {
                 if (seriesCreated) {
                     // this thread created the series, mark it as failed

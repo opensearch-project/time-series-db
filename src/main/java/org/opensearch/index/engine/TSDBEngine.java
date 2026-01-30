@@ -399,7 +399,7 @@ public class TSDBEngine extends Engine {
 
             // preprocess succeeded, now call append
             appender.append(
-                () -> writeIndexingOperationToTranslog(indexOp, seriesReference, metricDocument, context),
+                chunkCreated -> writeIndexingOperationToTranslog(indexOp, seriesReference, metricDocument, context, chunkCreated),
                 () -> writeNoopOperationToTranslog(indexOp, context)
             );
         } catch (TSDBEmptyLabelException e) {
@@ -465,19 +465,21 @@ public class TSDBEngine extends Engine {
      * @param seriesReference the series reference
      * @param metricDocument the parsed metric document
      * @param context the index operation context
+     * @param isNewChunkCreated whether a new chunk was created during append
      */
     private void writeIndexingOperationToTranslog(
         Index indexOp,
         long seriesReference,
         TSDBDocument metricDocument,
-        IndexOperationContext context
+        IndexOperationContext context,
+        boolean isNewChunkCreated
     ) {
         try {
             if (indexOp.origin().isFromTranslog()) {
                 localCheckpointTracker.markSeqNoAsPersisted(indexOp.seqNo());
                 return;
             }
-            rewriteParsedDocumentSource(indexOp, seriesReference, metricDocument, context.isNewSeriesCreated);
+            rewriteParsedDocumentSource(indexOp, seriesReference, metricDocument, context.isNewSeriesCreated, isNewChunkCreated);
             context.translogLocation = translogManager.add(
                 new Translog.Index(indexOp, new IndexResult(indexOp.version(), indexOp.primaryTerm(), indexOp.seqNo(), true))
             );
@@ -1383,24 +1385,31 @@ public class TSDBEngine extends Engine {
     /**
      * Rewrites the parsed document source to include series reference.
      *
-     * <p>For new series, includes labels in the source for deterministic replays.
-     * For existing series, skip labels and only include the series reference to save space. Sample timestamp and value are always included.
+     * <p>For new series or new chunks, includes labels in the source for deterministic replays.
+     * For existing series and chunks, skip labels and only include the series reference to save space.
+     * Sample timestamp and value are always included.
      *
      * @param index the index operation
      * @param seriesRef the series reference (stable hash of labels)
      * @param metricDocument the parsed metric document
      * @param isNewSeriesCreated whether a new series was created
+     * @param isNewChunkCreated whether a new chunk was created
      * @throws IOException if an I/O error occurs during rewriting
      */
-    private void rewriteParsedDocumentSource(Index index, long seriesRef, TSDBDocument metricDocument, boolean isNewSeriesCreated)
-        throws IOException {
-        // If no series were created, then rewrite the source without labels and with the seriesRef.
-        // If series was created, update the source to include the seriesRef so replay is deterministic.
+    private void rewriteParsedDocumentSource(
+        Index index,
+        long seriesRef,
+        TSDBDocument metricDocument,
+        boolean isNewSeriesCreated,
+        boolean isNewChunkCreated
+    ) throws IOException {
+        // Include labels when a new series or new chunk is created, ensuring each chunk range
+        // has at least one translog entry with labels for recovery purposes.
         try (XContentBuilder builder = SmileXContent.contentBuilder()) {
             builder.startObject();
             builder.field(Constants.IndexSchema.REFERENCE, seriesRef);
 
-            if (isNewSeriesCreated || localCheckpointTracker.hasProcessed(index.seqNo())) {
+            if (isNewSeriesCreated || isNewChunkCreated || localCheckpointTracker.hasProcessed(index.seqNo())) {
                 builder.field(Constants.IndexSchema.LABELS, metricDocument.rawLabelsString());
             }
 

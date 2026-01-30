@@ -187,7 +187,7 @@ public class HeadAppendBenchmark {
                         () -> {}
                     )
                 );
-                blackhole.consume(appender.append(() -> {}, () -> {}));
+                blackhole.consume(appender.append(chunkCreated -> {}, () -> {}));
                 appended++;
             }
         }
