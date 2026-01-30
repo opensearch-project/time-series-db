@@ -60,7 +60,7 @@ public class IntegralStageTests extends AbstractWireSerializingTestCase<Integral
             new FloatSample(4000L, 3.0), // Reset to 0, then 3
             new FloatSample(5000L, 7.0)
         );
-        assertSamplesEqual("ResetOnNull true", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("ResetOnNull true", expectedSamples, result.get(0).getSamples().toList());
     }
 
     public void testProcessWithResetOnNullFalse() {
@@ -83,7 +83,7 @@ public class IntegralStageTests extends AbstractWireSerializingTestCase<Integral
             new FloatSample(4000L, 6.0), // Continues: 3 + 3
             new FloatSample(5000L, 10.0)
         );
-        assertSamplesEqual("ResetOnNull false", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("ResetOnNull false", expectedSamples, result.get(0).getSamples().toList());
     }
 
     public void testProcessWithAllNaN() {
@@ -114,7 +114,7 @@ public class IntegralStageTests extends AbstractWireSerializingTestCase<Integral
             new FloatSample(2000L, 3.0),
             new FloatSample(5000L, 3.0) // Reset due to gap, then 3
         );
-        assertSamplesEqual("Gap test", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("Gap test", expectedSamples, result.get(0).getSamples().toList());
     }
 
     public void testDefaultConstructor() {

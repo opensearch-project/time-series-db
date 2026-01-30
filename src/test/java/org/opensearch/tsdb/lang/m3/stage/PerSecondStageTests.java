@@ -55,7 +55,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
 
         // Rate calculations: (1-0)/10s = 0.1/s, (2-1)/10s = 0.1/s, (3-2)/10s = 0.1/s
         List<Sample> expectedSamples = List.of(new FloatSample(10000L, 0.1), new FloatSample(20000L, 0.1), new FloatSample(30000L, 0.1));
-        assertSamplesEqual("Linearly increasing series", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Linearly increasing series", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -83,7 +83,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
 
         // Rate calculations: (10-0)/10s = 1/s, (30-10)/10s = 2/s, (60-30)/10s = 3/s
         List<Sample> expectedSamples = List.of(new FloatSample(10000L, 1.0), new FloatSample(20000L, 2.0), new FloatSample(30000L, 3.0));
-        assertSamplesEqual("Nonlinear increasing series", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Nonlinear increasing series", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -115,7 +115,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
             new FloatSample(20000L, 0.1),  // rate between 0s and 20s
             new FloatSample(30000L, 0.1)   // rate between 20s and 30s
         );
-        assertSamplesEqual("Missing data points test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Missing data points test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -139,7 +139,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
         assertEquals(1, resultSeries.getSamples().size()); // Only the valid positive rate
 
         List<Sample> expectedSamples = List.of(new FloatSample(3000L, 10.0));
-        assertSamplesEqual("Counter reset test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Counter reset test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -158,7 +158,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
         TimeSeries resultSeries = result.get(0);
         assertEquals(0, resultSeries.getSamples().size()); // Empty result - can't calculate rate with one point
 
-        assertSamplesEqual("Single sample test", List.of(), resultSeries.getSamples());
+        assertSamplesEqual("Single sample test", List.of(), resultSeries.getSamples().toList());
     }
 
     /**
@@ -177,7 +177,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
         TimeSeries resultSeries = result.get(0);
         assertEquals(0, resultSeries.getSamples().size());
 
-        assertSamplesEqual("Empty time series test", List.of(), resultSeries.getSamples());
+        assertSamplesEqual("Empty time series test", List.of(), resultSeries.getSamples().toList());
     }
 
     /**
@@ -209,11 +209,11 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
 
         // First time series result
         List<Sample> expectedSamples1 = List.of(new FloatSample(2000L, 20.0));
-        assertSamplesEqual("First time series", expectedSamples1, result.get(0).getSamples());
+        assertSamplesEqual("First time series", expectedSamples1, result.get(0).getSamples().toList());
 
         // Second time series result
         List<Sample> expectedSamples2 = List.of(new FloatSample(3000L, 25.0));
-        assertSamplesEqual("Second time series", expectedSamples2, result.get(1).getSamples());
+        assertSamplesEqual("Second time series", expectedSamples2, result.get(1).getSamples().toList());
     }
 
     /**
@@ -236,7 +236,7 @@ public class PerSecondStageTests extends AbstractWireSerializingTestCase<PerSeco
         assertEquals(1, resultSeries.getSamples().size());
 
         List<Sample> expectedSamples = List.of(new FloatSample(2000L, 0.0));
-        assertSamplesEqual("Zero rate test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Zero rate test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**

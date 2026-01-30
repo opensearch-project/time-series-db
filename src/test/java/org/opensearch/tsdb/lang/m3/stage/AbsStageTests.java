@@ -60,14 +60,14 @@ public class AbsStageTests extends AbstractWireSerializingTestCase<AbsStage> {
         assertEquals(1, result.size());
         TimeSeries absTimeSeries = result.getFirst();
         assertEquals(8, absTimeSeries.getSamples().size());
-        assertEquals(1.5, absTimeSeries.getSamples().get(0).getValue(), 0.0);
-        assertEquals(2.3, absTimeSeries.getSamples().get(1).getValue(), 0.0);
-        assertEquals(Double.NaN, absTimeSeries.getSamples().get(2).getValue(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, absTimeSeries.getSamples().get(3).getValue(), 0.0);
-        assertEquals(Double.POSITIVE_INFINITY, absTimeSeries.getSamples().get(4).getValue(), 0.0);
-        assertEquals(Double.MIN_VALUE, absTimeSeries.getSamples().get(5).getValue(), 0.0);
-        assertEquals(Double.MAX_VALUE, absTimeSeries.getSamples().get(6).getValue(), 0.0);
-        assertEquals(0.0, absTimeSeries.getSamples().get(7).getValue(), 0.0);
+        assertEquals(1.5, absTimeSeries.getSamples().getValue(0), 0.0);
+        assertEquals(2.3, absTimeSeries.getSamples().getValue(1), 0.0);
+        assertEquals(Double.NaN, absTimeSeries.getSamples().getValue(2), 0.0);
+        assertEquals(Double.POSITIVE_INFINITY, absTimeSeries.getSamples().getValue(3), 0.0);
+        assertEquals(Double.POSITIVE_INFINITY, absTimeSeries.getSamples().getValue(4), 0.0);
+        assertEquals(Double.MIN_VALUE, absTimeSeries.getSamples().getValue(5), 0.0);
+        assertEquals(Double.MAX_VALUE, absTimeSeries.getSamples().getValue(6), 0.0);
+        assertEquals(0.0, absTimeSeries.getSamples().getValue(7), 0.0);
     }
 
     public void testProcessWithEmptyInput() {
@@ -130,11 +130,7 @@ public class AbsStageTests extends AbstractWireSerializingTestCase<AbsStage> {
         List<TimeSeries> secondAbs = absStage.process(firstAbs);
 
         // Results should be identical
-        assertEquals(
-            firstAbs.getFirst().getSamples().getFirst().getValue(),
-            secondAbs.getFirst().getSamples().getFirst().getValue(),
-            0.000
-        );
+        assertEquals(firstAbs.getFirst().getSamples().getValue(0), secondAbs.getFirst().getSamples().getValue(0), 0.000);
     }
 
     public void testNonNegativeOutput() {

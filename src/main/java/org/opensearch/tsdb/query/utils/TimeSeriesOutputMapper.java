@@ -10,6 +10,7 @@ package org.opensearch.tsdb.query.utils;
 import org.opensearch.search.aggregations.Aggregation;
 import org.opensearch.search.aggregations.Aggregations;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 
@@ -136,7 +137,7 @@ public class TimeSeriesOutputMapper {
      * @param samples List of samples to transform
      * @return List of [timestamp, value] pairs
      */
-    public static List<List<Object>> transformSamplesToValues(List<Sample> samples) {
+    public static List<List<Object>> transformSamplesToValues(SampleList samples) {
         List<List<Object>> values = samples != null ? new ArrayList<>(samples.size()) : new ArrayList<>();
         if (samples != null) {
             for (Sample sample : samples) {

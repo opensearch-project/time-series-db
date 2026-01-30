@@ -79,7 +79,7 @@ public class ScaleToSecondsStageTests extends AbstractWireSerializingTestCase<Sc
             new FloatSample(20000L, 3.0),   // 30 * 0.1 = 3
             new FloatSample(30000L, 4.0)    // 40 * 0.1 = 4
         );
-        assertSamplesEqual("Series1 with 10s step", expectedSamples1, resultSeries1.getSamples());
+        assertSamplesEqual("Series1 with 10s step", expectedSamples1, resultSeries1.getSamples().toList());
 
         // Verify series2: 20s step, scaleFactor = 0.05
         TimeSeries resultSeries2 = findSeriesByLabel(result, "id", "series2");
@@ -88,7 +88,7 @@ public class ScaleToSecondsStageTests extends AbstractWireSerializingTestCase<Sc
             new FloatSample(20000L, 10.0),  // 200 * 0.05 = 10
             new FloatSample(40000L, 15.0)   // 300 * 0.05 = 15
         );
-        assertSamplesEqual("Series2 with 20s step", expectedSamples2, resultSeries2.getSamples());
+        assertSamplesEqual("Series2 with 20s step", expectedSamples2, resultSeries2.getSamples().toList());
 
         // Verify series3: sparse samples with 10s step
         TimeSeries resultSeries3 = findSeriesByLabel(result, "id", "series3");
@@ -96,7 +96,7 @@ public class ScaleToSecondsStageTests extends AbstractWireSerializingTestCase<Sc
             new FloatSample(0L, 5.0),       // 50 * 0.1 = 5
             new FloatSample(20000L, 6.0)    // 60 * 0.1 = 6
         );
-        assertSamplesEqual("Series3 with sparse samples", expectedSamples3, resultSeries3.getSamples());
+        assertSamplesEqual("Series3 with sparse samples", expectedSamples3, resultSeries3.getSamples().toList());
 
         // Verify series4: empty series
         TimeSeries resultSeries4 = findSeriesByLabel(result, "id", "series4");

@@ -80,12 +80,12 @@ public class TimeshiftStageTests extends AbstractWireSerializingTestCase<Timeshi
         assertEquals(1, result.size());
         TimeSeries shiftedTimeSeries = result.get(0);
         assertEquals(3, shiftedTimeSeries.getSamples().size());
-        assertEquals(3601000L, shiftedTimeSeries.getSamples().get(0).getTimestamp());
-        assertEquals(3602000L, shiftedTimeSeries.getSamples().get(1).getTimestamp());
-        assertEquals(3603000L, shiftedTimeSeries.getSamples().get(2).getTimestamp());
-        assertEquals(10.0, shiftedTimeSeries.getSamples().get(0).getValue(), 0.001);
-        assertEquals(20.0, shiftedTimeSeries.getSamples().get(1).getValue(), 0.001);
-        assertEquals(30.0, shiftedTimeSeries.getSamples().get(2).getValue(), 0.001);
+        assertEquals(3601000L, shiftedTimeSeries.getSamples().getTimestamp(0));
+        assertEquals(3602000L, shiftedTimeSeries.getSamples().getTimestamp(1));
+        assertEquals(3603000L, shiftedTimeSeries.getSamples().getTimestamp(2));
+        assertEquals(10.0, shiftedTimeSeries.getSamples().getValue(0), 0.001);
+        assertEquals(20.0, shiftedTimeSeries.getSamples().getValue(1), 0.001);
+        assertEquals(30.0, shiftedTimeSeries.getSamples().getValue(2), 0.001);
         assertEquals(labels, shiftedTimeSeries.getLabels());
         assertEquals("test-series", shiftedTimeSeries.getAlias());
     }
@@ -104,10 +104,10 @@ public class TimeshiftStageTests extends AbstractWireSerializingTestCase<Timeshi
 
         // Assert
         assertEquals(2, result.size());
-        assertEquals(1801000L, result.get(0).getSamples().get(0).getTimestamp()); // 1000 + 30*60*1000
-        assertEquals(1802000L, result.get(1).getSamples().get(0).getTimestamp()); // 2000 + 30*60*1000
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(10.0, result.get(1).getSamples().get(0).getValue(), 0.001);
+        assertEquals(1801000L, result.get(0).getSamples().getTimestamp(0)); // 1000 + 30*60*1000
+        assertEquals(1802000L, result.get(1).getSamples().getTimestamp(0)); // 2000 + 30*60*1000
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(10.0, result.get(1).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithEmptyInput() {
@@ -154,8 +154,8 @@ public class TimeshiftStageTests extends AbstractWireSerializingTestCase<Timeshi
 
         // Assert
         assertEquals(1, result.size());
-        assertEquals(1100L, result.get(0).getSamples().get(0).getTimestamp()); // 1000 + 100
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(1100L, result.get(0).getSamples().getTimestamp(0)); // 1000 + 100
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithZeroShift() {
@@ -171,10 +171,10 @@ public class TimeshiftStageTests extends AbstractWireSerializingTestCase<Timeshi
         // Assert
         assertEquals(1, result.size());
         assertEquals(2, result.get(0).getSamples().size());
-        assertEquals(1000L, result.get(0).getSamples().get(0).getTimestamp());
-        assertEquals(2000L, result.get(0).getSamples().get(1).getTimestamp());
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(20.0, result.get(0).getSamples().get(1).getValue(), 0.001);
+        assertEquals(1000L, result.get(0).getSamples().getTimestamp(0));
+        assertEquals(2000L, result.get(0).getSamples().getTimestamp(1));
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(20.0, result.get(0).getSamples().getValue(1), 0.001);
     }
 
     // ========== FromArgs Method Tests ==========

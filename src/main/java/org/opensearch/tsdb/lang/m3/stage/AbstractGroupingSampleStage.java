@@ -12,6 +12,7 @@ import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 
@@ -197,7 +198,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     /**
      * Helper method to aggregate samples into an existing timestamp map.
      */
-    private void aggregateSamplesIntoMap(List<Sample> samples, Map<Long, Sample> timestampToSample) {
+    private void aggregateSamplesIntoMap(SampleList samples, Map<Long, Sample> timestampToSample) {
         for (Sample sample : samples) {
             // Skip NaN values - treat them as null/missing
             if (Double.isNaN(sample.getValue())) {

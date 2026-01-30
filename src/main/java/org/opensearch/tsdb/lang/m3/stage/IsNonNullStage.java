@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -123,13 +124,13 @@ public class IsNonNullStage implements UnaryPipelineStage {
         // This same pointer-based iteration pattern is used in TransformNullStage and could be shared
 
         // Build dense samples in one pass using a pointer into existing samples
-        List<Sample> existingSamples = series.getSamples();
+        SampleList existingSamples = series.getSamples();
         int sampleIndex = 0;
         long timestamp = minTimestamp;
 
         for (int i = 0; i < arraySize; i++) {
             // Check if current existing sample matches this timestamp
-            if (sampleIndex < existingSamples.size() && existingSamples.get(sampleIndex).getTimestamp() == timestamp) {
+            if (sampleIndex < existingSamples.size() && existingSamples.getTimestamp(sampleIndex) == timestamp) {
                 // Sample exists at this timestamp -> 1.0
                 denseSamples.add(new FloatSample(timestamp, 1.0));
                 sampleIndex++;

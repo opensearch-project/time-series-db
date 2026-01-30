@@ -13,6 +13,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -97,7 +98,7 @@ public class SustainStage implements UnaryPipelineStage {
      * @return a new time series with filtered samples
      */
     private TimeSeries filterSamples(TimeSeries series) {
-        List<Sample> samples = series.getSamples();
+        SampleList samples = series.getSamples();
 
         if (samples == null || samples.isEmpty()) {
             return series;

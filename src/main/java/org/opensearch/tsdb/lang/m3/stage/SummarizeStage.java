@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.lang.m3.common.WindowAggregationType;
 import org.opensearch.tsdb.lang.m3.stage.summarize.AvgBucketSummarizer;
 import org.opensearch.tsdb.lang.m3.stage.summarize.BucketMapper;
@@ -178,7 +179,7 @@ public class SummarizeStage implements UnaryPipelineStage {
      * Process a single time series, summarizing its samples into buckets.
      */
     private TimeSeries processSeries(TimeSeries series) {
-        List<Sample> samples = series.getSamples();
+        SampleList samples = series.getSamples();
         if (samples.isEmpty()) {
             return series;
         }
@@ -221,8 +222,7 @@ public class SummarizeStage implements UnaryPipelineStage {
 
             // Accumulate all samples that fall within this bucket
             while (sampleIdx < samples.size()) {
-                Sample sample = samples.get(sampleIdx);
-                long sampleTimestamp = sample.getTimestamp();
+                long sampleTimestamp = samples.getTimestamp(sampleIdx);
 
                 if (sampleTimestamp >= currentBucketEnd) {
                     break; // This sample belongs to a future bucket
@@ -230,7 +230,7 @@ public class SummarizeStage implements UnaryPipelineStage {
 
                 if (sampleTimestamp >= currentBucketStart) {
                     // Only add if sample exists (null values are represented by absence)
-                    summarizer.accumulate(sample.getValue());
+                    summarizer.accumulate(samples.getValue(sampleIdx));
                 }
 
                 sampleIdx++;

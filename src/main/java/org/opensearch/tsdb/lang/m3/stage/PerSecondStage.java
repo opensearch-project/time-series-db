@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -65,14 +66,16 @@ public class PerSecondStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries ts : input) {
-            List<Sample> samples = ts.getSamples();
+            SampleList samples = ts.getSamples();
             List<Sample> perSecondSamples = new ArrayList<>(Math.max(0, samples.size() - 1));
 
             for (int i = 1; i < samples.size(); i++) {
-                Sample prevSample = samples.get(i - 1);
-                Sample currentSample = samples.get(i);
-                long timeDiffMs = currentSample.getTimestamp() - prevSample.getTimestamp();
-                double valueDiff = currentSample.getValue() - prevSample.getValue();
+                long prevTs = samples.getTimestamp(i - 1);
+                double prevVal = samples.getValue(i - 1);
+                long currentTs = samples.getTimestamp(i);
+                double currentVal = samples.getValue(i);
+                long timeDiffMs = currentTs - prevTs;
+                double valueDiff = currentVal - prevVal;
 
                 // Skip negative differences (counter resets) - don't emit any sample
                 if (valueDiff < 0) {
@@ -82,7 +85,7 @@ public class PerSecondStage implements UnaryPipelineStage {
                 double timeDiffSeconds = timeDiffMs / 1000.0;
                 double ratePerSecond = valueDiff / timeDiffSeconds;
 
-                perSecondSamples.add(new FloatSample(currentSample.getTimestamp(), ratePerSecond));
+                perSecondSamples.add(new FloatSample(currentTs, ratePerSecond));
             }
 
             // Create new time series with perSecond result, preserving original labels

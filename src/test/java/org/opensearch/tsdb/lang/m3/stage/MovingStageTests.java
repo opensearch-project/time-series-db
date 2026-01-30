@@ -81,7 +81,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 12.0),  // sum([3,4,5])
             new FloatSample(60L, 15.0)   // sum([4,5,6])
         );
-        assertSamplesEqual("Sum Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Sum Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -93,7 +93,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 8.0),   // sum([3,null,5])
             new FloatSample(60L, 5.0)    // sum([null,5,null])
         );
-        assertSamplesEqual("Sum Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Sum Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result: no samples
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -150,7 +150,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 40.0),  // avg([30,40,50]) = 40
             new FloatSample(60L, 50.0)   // avg([40,50,60]) = 50
         );
-        assertSamplesEqual("Avg Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Avg Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: average only over non-null values
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -162,7 +162,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 40.0),  // avg([30,50]) = 40
             new FloatSample(60L, 50.0)   // avg([50]) = 50
         );
-        assertSamplesEqual("Avg Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Avg Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -219,7 +219,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 1.0),   // min([7,1,8]) = 1
             new FloatSample(60L, 1.0)    // min([1,8,2]) = 1
         );
-        assertSamplesEqual("Min Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Min Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: nulls treated as +infinity
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -231,7 +231,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 7.0),   // min([7,+inf,8]) = 7
             new FloatSample(60L, 8.0)    // min([+inf,8,+inf]) = 8
         );
-        assertSamplesEqual("Min Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Min Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -288,7 +288,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 9.0),   // max([2,9,3]) = 9
             new FloatSample(60L, 9.0)    // max([9,3,7]) = 9
         );
-        assertSamplesEqual("Max Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Max Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: nulls treated as -infinity
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -300,7 +300,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 3.0),   // max([2,-inf,3]) = 3
             new FloatSample(60L, 3.0)    // max([-inf,3,-inf]) = 3
         );
-        assertSamplesEqual("Max Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Max Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -357,7 +357,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 5.0),   // median([3,7,5]) = 5 (sorted: [3,5,7], midpoint=1)
             new FloatSample(60L, 5.0)    // median([7,5,2]) = 5 (sorted: [2,5,7], midpoint=1)
         );
-        assertSamplesEqual("Median Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("Median Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: nulls excluded from median calculation
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -369,7 +369,7 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
             new FloatSample(50L, 3.0),   // median([3,5]) = 3 (midpoint=0)
             new FloatSample(60L, 5.0)    // median([5]) = 5
         );
-        assertSamplesEqual("Median Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("Median Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");

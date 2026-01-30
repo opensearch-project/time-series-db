@@ -29,6 +29,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -483,9 +484,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             if (existingSeries != null) {
                 // Merge samples from same time series using helper
                 // Assume data points within each chunk are sorted by timestamp
-                List<Sample> mergedSamples = MERGE_HELPER.merge(
+                SampleList mergedSamples = MERGE_HELPER.merge(
                     existingSeries.getSamples(),
-                    alignedSamples,
+                    SampleList.fromList(alignedSamples),
                     true // assumeSorted - data points within each chunk are sorted
                 );
 

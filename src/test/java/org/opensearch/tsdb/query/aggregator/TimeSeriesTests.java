@@ -34,7 +34,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, minTimestamp, maxTimestamp, step, alias);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(labels, timeSeries.getLabels());
         assertEquals(minTimestamp, timeSeries.getMinTimestamp());
         assertEquals(maxTimestamp, timeSeries.getMaxTimestamp());
@@ -202,7 +202,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(labels, timeSeries.getLabels());
         assertEquals(1000L, timeSeries.getMinTimestamp());
         assertEquals(2000L, timeSeries.getMaxTimestamp());
@@ -218,10 +218,10 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(2, timeSeries.getSamples().size());
-        assertTrue(timeSeries.getSamples().get(0) instanceof FloatSample);
-        assertTrue(timeSeries.getSamples().get(1) instanceof SumCountSample);
+        assertTrue(timeSeries.getSamples().getSample(0) instanceof FloatSample);
+        assertTrue(timeSeries.getSamples().getSample(1) instanceof SumCountSample);
     }
 
     public void testWithEmptySamples() {
@@ -233,7 +233,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(emptySamples, labels, 0L, 0L, 0L, null);
 
         // Assert
-        assertEquals(emptySamples, timeSeries.getSamples());
+        assertEquals(emptySamples, timeSeries.getSamples().toList());
         assertTrue(timeSeries.getSamples().isEmpty());
     }
 

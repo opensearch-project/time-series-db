@@ -54,7 +54,7 @@ public class RemoveEmptyStageTests extends AbstractWireSerializingTestCase<Remov
         assertEquals(1, firstResult.size());
         TimeSeries timeSeries = firstResult.getFirst();
         assertEquals(1, timeSeries.getSamples().size());
-        assertEquals(2.0, timeSeries.getSamples().get(0).getValue(), 0.0);
+        assertEquals(2.0, timeSeries.getSamples().getValue(0), 0.0);
 
         // Test Idempotent
         // Act
@@ -64,7 +64,7 @@ public class RemoveEmptyStageTests extends AbstractWireSerializingTestCase<Remov
         assertEquals(1, secondResult.size());
         timeSeries = secondResult.getFirst();
         assertEquals(1, timeSeries.getSamples().size());
-        assertEquals(2.0, timeSeries.getSamples().get(0).getValue(), 0.0);
+        assertEquals(2.0, timeSeries.getSamples().getValue(0), 0.0);
 
     }
 
@@ -104,7 +104,7 @@ public class RemoveEmptyStageTests extends AbstractWireSerializingTestCase<Remov
             new FloatSample(2000L, Double.NaN),
             new FloatSample(3000L, 4.0)
         );
-        assertSamplesEqual("Remaining series should contain valid samples", expectedSamples, remainingSeries.getSamples(), 0.001);
+        assertSamplesEqual("Remaining series should contain valid samples", expectedSamples, remainingSeries.getSamples().toList(), 0.001);
     }
 
     public void testProcessWithEmptyInput() {

@@ -9,6 +9,7 @@ package org.opensearch.tsdb.query.aggregator;
 
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -92,7 +93,7 @@ public class TimeSeries {
      */
     public static final long ESTIMATED_SAMPLE_SIZE = 16;
 
-    private final List<Sample> samples;
+    private final SampleList samples;
     private final Labels labels; // Store all labels and their values
     private String alias; // Optional alias name for renamed series
 
@@ -116,6 +117,18 @@ public class TimeSeries {
      * Clients should fill with null samples if dense representation is required.</p>
      */
     public TimeSeries(List<Sample> samples, Labels labels, long minTimestamp, long maxTimestamp, long step, String alias) {
+        this.samples = SampleList.fromList(samples);
+        this.labels = labels;
+        this.minTimestamp = minTimestamp;
+        this.maxTimestamp = maxTimestamp;
+        this.step = step;
+        this.alias = alias;
+    }
+
+    /**
+     * Similar to {@link #TimeSeries(List, Labels, long, long, long, String)}
+     */
+    public TimeSeries(SampleList samples, Labels labels, long minTimestamp, long maxTimestamp, long step, String alias) {
         this.samples = samples;
         this.labels = labels;
         this.minTimestamp = minTimestamp;
@@ -129,7 +142,7 @@ public class TimeSeries {
      *
      * @return List of time series samples
      */
-    public List<Sample> getSamples() {
+    public SampleList getSamples() {
         return samples;
     }
 

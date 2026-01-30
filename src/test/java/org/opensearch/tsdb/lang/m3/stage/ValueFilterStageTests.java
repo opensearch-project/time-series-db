@@ -73,7 +73,7 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessNeOperator() {
@@ -87,8 +87,8 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(2, result.get(0).getSamples().size());
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(15.0, result.get(0).getSamples().get(1).getValue(), 0.001);
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(15.0, result.get(0).getSamples().getValue(1), 0.001);
     }
 
     public void testProcessGtOperator() {
@@ -102,7 +102,7 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(15.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(15.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessGeOperator() {
@@ -116,8 +116,8 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(2, result.get(0).getSamples().size());
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(15.0, result.get(0).getSamples().get(1).getValue(), 0.001);
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(15.0, result.get(0).getSamples().getValue(1), 0.001);
     }
 
     public void testProcessLtOperator() {
@@ -131,7 +131,7 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessLeOperator() {
@@ -145,8 +145,8 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(2, result.get(0).getSamples().size());
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(10.0, result.get(0).getSamples().get(1).getValue(), 0.001);
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(10.0, result.get(0).getSamples().getValue(1), 0.001);
     }
 
     public void testProcessWithNaNValues() {
@@ -167,7 +167,7 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithNullSamples() {
@@ -184,7 +184,7 @@ public class ValueFilterStageTests extends AbstractWireSerializingTestCase<Value
         // Assert
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(10.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(10.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     // ========== Serialization Tests ==========

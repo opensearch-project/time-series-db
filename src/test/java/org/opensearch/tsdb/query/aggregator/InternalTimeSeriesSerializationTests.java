@@ -123,8 +123,8 @@ public class InternalTimeSeriesSerializationTests extends AbstractWireTestCase<I
 
                 // Verify mixed sample types are preserved
                 for (int i = 0; i < origSeries.getSamples().size(); i++) {
-                    Sample origSample = origSeries.getSamples().get(i);
-                    Sample deserSample = deserSeries.getSamples().get(i);
+                    Sample origSample = origSeries.getSamples().getSample(i);
+                    Sample deserSample = deserSeries.getSamples().getSample(i);
 
                     assertEquals(origSample.getClass(), deserSample.getClass());
                     assertEquals(origSample.getTimestamp(), deserSample.getTimestamp());

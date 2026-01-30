@@ -238,7 +238,7 @@ public class TSDBEngineSingleNodeTests extends OpenSearchSingleNodeTestCase {
 
             String serverValue = labels.get("server");
             String regionValue = labels.get("region");
-            List<Sample> actualSamples = series.getSamples();
+            List<Sample> actualSamples = series.getSamples().toList();
             assertNotNull("Samples should not be null", actualSamples);
 
             // Build expected samples and compare

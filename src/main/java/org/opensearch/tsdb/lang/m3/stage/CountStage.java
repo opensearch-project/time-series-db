@@ -120,7 +120,7 @@ public class CountStage extends AbstractGroupingStage {
                 ByteLabels groupLabels = extractGroupLabelsDirect(series);
                 // groupLabels shouldn't be null from aggregation, but just be safe
                 if (groupLabels != null) {
-                    groupToCount.merge(groupLabels, series.getSamples().get(0).getValue(), Double::sum);
+                    groupToCount.merge(groupLabels, series.getSamples().getValue(0), Double::sum);
                 }
             }
         }
