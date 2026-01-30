@@ -160,6 +160,16 @@ public final class TSDBMetricsConstants {
     public static final String ACTION_REST_QUERIES_SHARD_LATENCY_MAX = "tsdb.action.rest.queries.shard.latency.max";
 
     // ============================================
+    // Ingestion Lag Metrics (Data Freshness)
+    // ============================================
+
+    /** Histogram: Latency from minimum sample timestamp in bulk request to arrival at coordinating node */
+    public static final String INGESTION_LAG_COORDINATOR_LATENCY = "tsdb.ingestion.lag.coordinator.latency";
+
+    /** Histogram: Latency from minimum sample timestamp in bulk request to when data becomes searchable (refresh completion) */
+    public static final String INGESTION_LAG_SEARCHABLE_LATENCY = "tsdb.ingestion.lag.searchable.latency";
+
+    // ============================================
     // Search Metrics (Query Cache)
     // ============================================
 
@@ -328,6 +338,12 @@ public final class TSDBMetricsConstants {
     public static final String COMPACTION_FAILURE_TOTAL_DESC = "Total number of failed compactions";
     public static final String COMPACTION_LATENCY_DESC = "Latency (ms) of compaction operations";
     public static final String COMPACTION_DELETED_TOTAL_DESC = "Total number of indexes deleted by compaction";
+
+    // Ingestion Lag Metrics (Data Freshness)
+    public static final String INGESTION_LAG_COORDINATOR_LATENCY_DESC =
+        "Data freshness latency: time from minimum sample timestamp in bulk request to arrival at coordinating node";
+    public static final String INGESTION_LAG_SEARCHABLE_LATENCY_DESC =
+        "Data freshness latency: time from minimum sample timestamp in bulk request to when data becomes searchable (refresh completion)";
 
     // ============================================
     // Metric Tags
