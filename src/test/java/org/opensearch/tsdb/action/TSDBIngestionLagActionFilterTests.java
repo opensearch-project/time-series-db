@@ -142,6 +142,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         verify(mockHistogram, times(1)).record(anyDouble(), any(Tags.class));
+        verify(mockParsingLatencyHistogram, times(1)).record(anyDouble(), any(Tags.class));
 
         String minTimestamp = threadContext.getHeader("tsdb.min_sample_timestamp_ms");
         assertNotNull(minTimestamp);

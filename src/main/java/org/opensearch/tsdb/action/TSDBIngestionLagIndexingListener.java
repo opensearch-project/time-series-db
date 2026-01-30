@@ -133,17 +133,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
                 long lagMs = refreshCompletionTime - finalMinTimestamp;
 
                 Tags tags = Tags.create().addTag("index", tracker.indexName);
-                TSDBMetrics.recordHistogram(metrics.lagBecomesSearchable, lagMs, tags);
-
-                if (logger.isTraceEnabled()) {
-                    logger.trace(
-                        "Recorded ingestion lag searchable: {}ms (minTimestamp: {}, refreshTime: {}, bulkRequestId: {})",
-                        lagMs,
-                        finalMinTimestamp,
-                        refreshCompletionTime,
-                        finalBulkRequestId
-                    );
-                }
+                TSDBMetrics.recordHistogram(metrics.lagUntilSearchable, lagMs, tags);
 
                 activeBulkRequests.remove(finalBulkRequestId);
             }

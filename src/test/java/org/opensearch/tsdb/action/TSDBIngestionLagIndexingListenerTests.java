@@ -45,7 +45,7 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         threadContext = new ThreadContext(org.opensearch.common.settings.Settings.EMPTY);
         metrics = new TSDBIngestionLagMetrics();
         mockHistogram = mock(Histogram.class);
-        metrics.lagBecomesSearchable = mockHistogram;
+        metrics.lagUntilSearchable = mockHistogram;
         listener = new TSDBIngestionLagIndexingListener(threadContext, metrics);
         mockIndexShard = mock(IndexShard.class);
         shardId = new ShardId(randomAlphaOfLength(10), randomAlphaOfLength(10), randomIntBetween(0, 10));

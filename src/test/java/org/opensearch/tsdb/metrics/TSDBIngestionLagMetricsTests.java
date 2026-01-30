@@ -35,6 +35,7 @@ public class TSDBIngestionLagMetricsTests extends OpenSearchTestCase {
 
     public void testInitialize() {
         Histogram coordinatorLatency = mock(Histogram.class);
+        Histogram searchableLatency = mock(Histogram.class);
         Histogram parsingLatency = mock(Histogram.class);
 
         when(
@@ -47,6 +48,14 @@ public class TSDBIngestionLagMetricsTests extends OpenSearchTestCase {
 
         when(
             registry.createHistogram(
+                eq(TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY),
+                eq(TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY_DESC),
+                eq(TSDBMetricsConstants.UNIT_MILLISECONDS)
+            )
+        ).thenReturn(searchableLatency);
+
+        when(
+            registry.createHistogram(
                 eq(TSDBMetricsConstants.INGESTION_LAG_PARSING_LATENCY),
                 eq(TSDBMetricsConstants.INGESTION_LAG_PARSING_LATENCY_DESC),
                 eq(TSDBMetricsConstants.UNIT_MILLISECONDS)
@@ -56,11 +65,17 @@ public class TSDBIngestionLagMetricsTests extends OpenSearchTestCase {
         metrics.initialize(registry);
 
         assertSame(coordinatorLatency, metrics.lagUntilCoordinator);
+        assertSame(searchableLatency, metrics.lagUntilSearchable);
         assertSame(parsingLatency, metrics.parsingLatency);
 
         verify(registry).createHistogram(
             TSDBMetricsConstants.INGESTION_LAG_COORDINATOR_LATENCY,
             TSDBMetricsConstants.INGESTION_LAG_COORDINATOR_LATENCY_DESC,
+            TSDBMetricsConstants.UNIT_MILLISECONDS
+        );
+        verify(registry).createHistogram(
+            TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY,
+            TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY_DESC,
             TSDBMetricsConstants.UNIT_MILLISECONDS
         );
         verify(registry).createHistogram(
@@ -81,6 +96,14 @@ public class TSDBIngestionLagMetricsTests extends OpenSearchTestCase {
 
         when(
             registry.createHistogram(
+                eq(TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY),
+                eq(TSDBMetricsConstants.INGESTION_LAG_SEARCHABLE_LATENCY_DESC),
+                eq(TSDBMetricsConstants.UNIT_MILLISECONDS)
+            )
+        ).thenReturn(mock(Histogram.class));
+
+        when(
+            registry.createHistogram(
                 eq(TSDBMetricsConstants.INGESTION_LAG_PARSING_LATENCY),
                 eq(TSDBMetricsConstants.INGESTION_LAG_PARSING_LATENCY_DESC),
                 eq(TSDBMetricsConstants.UNIT_MILLISECONDS)
@@ -89,21 +112,25 @@ public class TSDBIngestionLagMetricsTests extends OpenSearchTestCase {
 
         metrics.initialize(registry);
         assertNotNull(metrics.lagUntilCoordinator);
+        assertNotNull(metrics.lagUntilSearchable);
         assertNotNull(metrics.parsingLatency);
 
         metrics.cleanup();
 
         assertNull(metrics.lagUntilCoordinator);
+        assertNull(metrics.lagUntilSearchable);
         assertNull(metrics.parsingLatency);
     }
 
     public void testCleanupBeforeInitialization() {
         assertNull(metrics.lagUntilCoordinator);
+        assertNull(metrics.lagUntilSearchable);
         assertNull(metrics.parsingLatency);
 
         metrics.cleanup();
 
         assertNull(metrics.lagUntilCoordinator);
+        assertNull(metrics.lagUntilSearchable);
         assertNull(metrics.parsingLatency);
     }
 }
