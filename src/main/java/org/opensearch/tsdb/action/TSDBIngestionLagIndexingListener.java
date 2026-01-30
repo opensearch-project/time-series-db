@@ -10,12 +10,15 @@ package org.opensearch.tsdb.action;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexingOperationListener;
 import org.opensearch.index.translog.Translog;
+import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -70,13 +73,41 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
     }
 
     @Override
+    public void beforeIndexShardClosed(ShardId shardId, IndexShard indexShard, org.opensearch.common.settings.Settings indexSettings) {
+        // Clean up pending bulk requests BEFORE shard closes to prevent blocking the close operation
+        // This is critical because refresh listeners can block shard closure
+        String indexName = shardId.getIndexName();
+        activeBulkRequests.entrySet().removeIf(entry -> {
+            BulkRequestTracker tracker = entry.getValue();
+            return tracker.indexName.equals(indexName);
+        });
+        logger.debug("Cleaned up pending bulk requests BEFORE closing shard {} in index {}", shardId, indexName);
+    }
+
+    @Override
     public void afterIndexShardClosed(ShardId shardId, IndexShard indexShard, org.opensearch.common.settings.Settings indexSettings) {
         shardMap.remove(shardId);
     }
 
     @Override
+    public void afterIndexRemoved(Index index, IndexSettings indexSettings, IndexRemovalReason reason) {
+        // Clean up pending bulk request trackers for the removed index to prevent memory leaks
+        // and avoid race conditions during test teardown where refresh listeners may still be active
+        String indexName = index.getName();
+        activeBulkRequests.entrySet().removeIf(entry -> {
+            BulkRequestTracker tracker = entry.getValue();
+            return tracker.indexName.equals(indexName);
+        });
+        logger.debug("Cleaned up {} pending bulk requests for removed index {}", activeBulkRequests.size(), indexName);
+    }
+
+    @Override
     public void postIndex(ShardId shardId, Engine.Index index, Engine.IndexResult result) {
         if (result.getFailure() != null || result.getTranslogLocation() == null) {
+            return;
+        }
+
+        if (index.origin() != null && index.origin().isFromTranslog()) {
             return;
         }
 
@@ -127,12 +158,17 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);
         final long finalMinTimestamp = minTimestamp;
         final String finalBulkRequestId = bulkRequestId;
+        final String finalIndexName = tracker.indexName;
         indexShard.addRefreshListener(location, (forcedRefresh) -> {
+
+            if (!activeBulkRequests.containsKey(finalBulkRequestId)) {
+                return;
+            }
             if (tracker.metricRecorded.compareAndSet(false, true)) {
                 long refreshCompletionTime = System.currentTimeMillis();
                 long lagMs = refreshCompletionTime - finalMinTimestamp;
 
-                Tags tags = Tags.create().addTag("index", tracker.indexName);
+                Tags tags = Tags.create().addTag("index", finalIndexName);
                 TSDBMetrics.recordHistogram(metrics.lagUntilSearchable, lagMs, tags);
 
                 activeBulkRequests.remove(finalBulkRequestId);
