@@ -49,6 +49,8 @@ import java.util.stream.Collectors;
 
 import org.opensearch.tsdb.query.utils.ProfileInfoMapper;
 
+import static org.opensearch.tsdb.metrics.TSDBMetricsConstants.NANOS_PER_MILLI;
+
 /**
  * Aggregator that unfolds samples from chunks and applies linear pipeline stages.
  * This operates on buckets created by its parent and processes documents within each bucket.
@@ -365,15 +367,15 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Track samples with clear semantics:
             // - *Processed: total samples decoded (includes out-of-range timestamps)
-            // - *Filtered: samples after timestamp filtering (what survives)
+            // - *PostFilter: samples after timestamp filtering (what survives)
             executionStats.totalSamplesProcessed += decodeResult.processedSampleCount();
-            executionStats.totalSamplesFiltered += allSamples.size();
+            executionStats.totalSamplesPostFilter += allSamples.size();
             if (isLiveReader) {
                 executionStats.liveSamplesProcessed += decodeResult.processedSampleCount();
-                executionStats.liveSamplesFiltered += allSamples.size();
+                executionStats.liveSamplesPostFilter += allSamples.size();
             } else {
                 executionStats.closedSamplesProcessed += decodeResult.processedSampleCount();
-                executionStats.closedSamplesFiltered += allSamples.size();
+                executionStats.closedSamplesPostFilter += allSamples.size();
             }
 
             if (allSamples.isEmpty()) {
@@ -658,10 +660,10 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         long liveSamplesProcessed = 0;
         long closedSamplesProcessed = 0;
 
-        // Sample counts - "Filtered" includes only samples after timestamp filtering
-        long totalSamplesFiltered = 0;
-        long liveSamplesFiltered = 0;
-        long closedSamplesFiltered = 0;
+        // Sample counts - "PostFilter" includes only samples after timestamp filtering
+        long totalSamplesPostFilter = 0;
+        long liveSamplesPostFilter = 0;
+        long closedSamplesPostFilter = 0;
 
         // Series counts
         long inputSeriesCount = 0;
@@ -686,9 +688,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             add.accept(ProfileInfoMapper.TOTAL_SAMPLES_PROCESSED, totalSamplesProcessed);
             add.accept(ProfileInfoMapper.LIVE_SAMPLES_PROCESSED, liveSamplesProcessed);
             add.accept(ProfileInfoMapper.CLOSED_SAMPLES_PROCESSED, closedSamplesProcessed);
-            add.accept(ProfileInfoMapper.TOTAL_SAMPLES_FILTERED, totalSamplesFiltered);
-            add.accept(ProfileInfoMapper.LIVE_SAMPLES_FILTERED, liveSamplesFiltered);
-            add.accept(ProfileInfoMapper.CLOSED_SAMPLES_FILTERED, closedSamplesFiltered);
+            add.accept(ProfileInfoMapper.TOTAL_SAMPLES_FILTERED, totalSamplesPostFilter);
+            add.accept(ProfileInfoMapper.LIVE_SAMPLES_FILTERED, liveSamplesPostFilter);
+            add.accept(ProfileInfoMapper.CLOSED_SAMPLES_FILTERED, closedSamplesPostFilter);
             add.accept(ProfileInfoMapper.TOTAL_INPUT_SERIES, inputSeriesCount);
             add.accept(ProfileInfoMapper.TOTAL_OUTPUT_SERIES, outputSeriesCount);
             add.accept(ProfileInfoMapper.CIRCUIT_BREAKER_BYTES, circuitBreakerBytes);
@@ -706,11 +708,11 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             try {
                 // Record latencies (convert nanos to millis only at emission time)
                 if (collectDurationNanos > 0) {
-                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.collectLatency, collectDurationNanos / 1_000_000.0);
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.collectLatency, collectDurationNanos / NANOS_PER_MILLI);
                 }
 
                 if (postCollectDurationNanos > 0) {
-                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.postCollectLatency, postCollectDurationNanos / 1_000_000.0);
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.postCollectLatency, postCollectDurationNanos / NANOS_PER_MILLI);
                 }
 
                 // Record document counts
