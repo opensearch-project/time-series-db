@@ -44,7 +44,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
     private static class BulkRequestTracker {
         final AtomicLong minTimestamp;
-        final AtomicReference<Translog.Location> lastLocation;
         final AtomicReference<Translog.Location> registeredLocation;
         final AtomicBoolean metricRecorded;
         final String indexName;
@@ -52,7 +51,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
         BulkRequestTracker(String indexName, ShardId shardId, long minTimestamp) {
             this.minTimestamp = new AtomicLong(minTimestamp);
-            this.lastLocation = new AtomicReference<>();
             this.registeredLocation = new AtomicReference<>();
             this.metricRecorded = new AtomicBoolean(false);
             this.indexName = indexName;
@@ -94,11 +92,13 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         // Clean up pending bulk request trackers for the removed index to prevent memory leaks
         // and avoid race conditions during test teardown where refresh listeners may still be active
         String indexName = index.getName();
+        int sizeBefore = activeBulkRequests.size();
         activeBulkRequests.entrySet().removeIf(entry -> {
             BulkRequestTracker tracker = entry.getValue();
             return tracker.indexName.equals(indexName);
         });
-        logger.debug("Cleaned up {} pending bulk requests for removed index {}", activeBulkRequests.size(), indexName);
+        int removed = sizeBefore - activeBulkRequests.size();
+        logger.debug("Cleaned up {} pending bulk requests for removed index {}", removed, indexName);
     }
 
     @Override
@@ -130,48 +130,54 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             );
 
             Translog.Location currentLocation = result.getTranslogLocation();
-            tracker.lastLocation.set(currentLocation);
 
-            if (tracker.registeredLocation.compareAndSet(null, currentLocation)) {
-                registerRefreshListener(tracker, currentLocation);
-            } else {
-                Translog.Location registered = tracker.registeredLocation.get();
-                if (registered != null && currentLocation.compareTo(registered) > 0) {
-                    tracker.registeredLocation.set(currentLocation);
-                    registerRefreshListener(tracker, currentLocation);
+            // Use CAS loop to atomically update registered location and register listener
+            Translog.Location registered;
+            do {
+                registered = tracker.registeredLocation.get();
+                if (registered != null && currentLocation.compareTo(registered) <= 0) {
+                    // Current location is not newer, skip registration
+                    return;
                 }
-            }
+            } while (!tracker.registeredLocation.compareAndSet(registered, currentLocation));
+
+            registerRefreshListener(tracker, currentLocation, bulkRequestId);
         } catch (Exception e) {
             logger.debug("Failed to process ingestion lag metric for bulk request {}", bulkRequestId, e);
         }
     }
 
-    private void registerRefreshListener(BulkRequestTracker tracker, Translog.Location location) {
+    private void registerRefreshListener(BulkRequestTracker tracker, Translog.Location location, String bulkRequestId) {
         IndexShard indexShard = shardMap.get(tracker.shardId);
         if (indexShard == null) {
             logger.debug("IndexShard not found for {} shard {}", tracker.indexName, tracker.shardId.id());
             return;
         }
 
-        long minTimestamp = tracker.minTimestamp.get();
-
-        String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);
-        final long finalMinTimestamp = minTimestamp;
+        final long finalMinTimestamp = tracker.minTimestamp.get();
         final String finalBulkRequestId = bulkRequestId;
         final String finalIndexName = tracker.indexName;
+
         indexShard.addRefreshListener(location, (forcedRefresh) -> {
+            try {
+                // Check if tracker was cleaned up (e.g., during shard/index close)
+                if (!activeBulkRequests.containsKey(finalBulkRequestId)) {
+                    return;
+                }
 
-            if (!activeBulkRequests.containsKey(finalBulkRequestId)) {
-                return;
-            }
-            if (tracker.metricRecorded.compareAndSet(false, true)) {
-                long refreshCompletionTime = System.currentTimeMillis();
-                long lagMs = refreshCompletionTime - finalMinTimestamp;
+                // Ensure metric is recorded only once per bulk request
+                if (tracker.metricRecorded.compareAndSet(false, true)) {
+                    long refreshCompletionTime = System.currentTimeMillis();
+                    long lagMs = refreshCompletionTime - finalMinTimestamp;
 
-                Tags tags = Tags.create().addTag("index", finalIndexName);
-                TSDBMetrics.recordHistogram(metrics.lagUntilSearchable, lagMs, tags);
+                    Tags tags = Tags.create().addTag("index", finalIndexName);
+                    TSDBMetrics.recordHistogram(metrics.lagUntilSearchable, lagMs, tags);
 
-                activeBulkRequests.remove(finalBulkRequestId);
+                    activeBulkRequests.remove(finalBulkRequestId);
+                }
+            } catch (Exception e) {
+                // Swallow exceptions during refresh callback to prevent blocking shard close
+                logger.debug("Exception in refresh listener callback for bulk request {}", finalBulkRequestId, e);
             }
         });
     }
