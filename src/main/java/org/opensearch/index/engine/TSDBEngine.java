@@ -247,6 +247,13 @@ public class TSDBEngine extends Engine {
             this.mappedChunksManager = new MMappedChunksManager(head.getMemSeriesReader());
             this.tsdbReaderManager = getTSDBReaderManager();
 
+            for (ReferenceManager.RefreshListener listener : engineConfig.getExternalRefreshListener()) {
+                tsdbReaderManager.addListener(listener);
+            }
+            for (ReferenceManager.RefreshListener listener : engineConfig.getInternalRefreshListener()) {
+                tsdbReaderManager.addListener(listener);
+            }
+
             success = true;
         } finally {
             if (success == false) {
