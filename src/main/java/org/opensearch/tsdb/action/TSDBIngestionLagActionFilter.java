@@ -30,6 +30,7 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -72,7 +73,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
         try {
             long parsingStartTime = System.nanoTime();
             Long minSampleTimestamp = extractMinSampleTimestamp(bulkRequest);
-            long parsingTimeMs = (System.nanoTime() - parsingStartTime) / 1_000_000;
+            double parsingTimeMs = (System.nanoTime() - parsingStartTime) / TSDBMetricsConstants.NANOS_PER_MILLI;
 
             if (minSampleTimestamp != null) {
                 Tags parsingTags = Tags.create().addTag("index", getPrimaryIndex(bulkRequest));
