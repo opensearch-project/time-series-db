@@ -7,7 +7,6 @@
  */
 package org.opensearch.tsdb.query.aggregator;
 
-import org.opensearch.common.settings.Settings;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.aggregations.Aggregator;
 import org.opensearch.search.aggregations.AggregatorFactories;
@@ -15,8 +14,6 @@ import org.opensearch.search.aggregations.AggregatorFactory;
 import org.opensearch.search.aggregations.CardinalityUpperBound;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
-
-import static org.opensearch.tsdb.TSDBPlugin.TSDB_ENGINE_AGGREGATION_CIRCUIT_BREAKER_WARN_THRESHOLD;
 
 import java.io.IOException;
 import java.util.List;
@@ -48,7 +45,6 @@ public class TimeSeriesUnfoldAggregatorFactory extends AggregatorFactory {
     private final long minTimestamp;
     private final long maxTimestamp;
     private final long step;
-    private final long circuitBreakerWarnThreshold;
 
     /**
      * Create a time series unfold aggregator factory.
@@ -80,11 +76,6 @@ public class TimeSeriesUnfoldAggregatorFactory extends AggregatorFactory {
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.step = step;
-        // Read circuit breaker warning threshold from cluster settings
-        // Use default value if queryShardContext is null (e.g., in tests)
-        this.circuitBreakerWarnThreshold = (queryShardContext != null && queryShardContext.getIndexSettings() != null)
-            ? TSDB_ENGINE_AGGREGATION_CIRCUIT_BREAKER_WARN_THRESHOLD.get(queryShardContext.getIndexSettings().getNodeSettings())
-            : TSDB_ENGINE_AGGREGATION_CIRCUIT_BREAKER_WARN_THRESHOLD.getDefault(Settings.EMPTY);
     }
 
     @Override
@@ -104,7 +95,6 @@ public class TimeSeriesUnfoldAggregatorFactory extends AggregatorFactory {
             minTimestamp,
             maxTimestamp,
             step,
-            circuitBreakerWarnThreshold,
             metadata
         );
     }
