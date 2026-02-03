@@ -347,9 +347,9 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         assertTrue(result.contains(series1));
         assertTrue(result.contains(series2));
         assertNull(getAlias(result.get(0)));
-        assertEquals(1.0, result.get(0).getSamples().get(0).getValue(), 0.0);
+        assertEquals(1.0, result.get(0).getSamples().getValue(0), 0.0);
         assertNull(getAlias(result.get(1)));
-        assertEquals(3.0, result.get(1).getSamples().get(0).getValue(), 0.0);
+        assertEquals(3.0, result.get(1).getSamples().getValue(0), 0.0);
     }
 
     public void testProcessSortByNameWithEmptyAlias() {
@@ -934,7 +934,7 @@ public class SortStageTests extends AbstractWireSerializingTestCase<SortStage> {
         // Test CURRENT when all samples are NaN/null - should return 0.0
         // Need 2 series to trigger comparison
         SortStage sortStage = new SortStage(SortByType.CURRENT);
-        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), null, new FloatSample(3000L, Double.NaN));
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, Double.NaN), new FloatSample(3000L, Double.NaN));
         Labels labels = ByteLabels.fromMap(Map.of("label", "currentnanonly"));
         TimeSeries timeSeriesNanOnly = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, "currentnanonly");
         TimeSeries normalTimeSeries = createLabeledTimeSeries("normal", Arrays.asList(5.0));

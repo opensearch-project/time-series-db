@@ -22,6 +22,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -87,7 +88,7 @@ public class KeepLastValueStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>();
 
         for (TimeSeries ts : input) {
-            List<Sample> filledSamples = fillMissingValues(ts);
+            SampleList filledSamples = fillMissingValues(ts);
 
             // Create new time series with filled values, preserving original metadata
             result.add(
@@ -98,8 +99,8 @@ public class KeepLastValueStage implements UnaryPipelineStage {
         return result;
     }
 
-    private List<Sample> fillMissingValues(TimeSeries ts) {
-        List<Sample> originalSamples = ts.getSamples();
+    private SampleList fillMissingValues(TimeSeries ts) {
+        SampleList originalSamples = ts.getSamples();
         if (originalSamples.isEmpty()) {
             return originalSamples;
         }
@@ -113,9 +114,9 @@ public class KeepLastValueStage implements UnaryPipelineStage {
         while (tsIt.hasNext()) {
             long timestamp = tsIt.next();
             Sample existingSample = null;
-            if (originalSampleIndex < originalSamples.size() && originalSamples.get(originalSampleIndex).getTimestamp() == timestamp) {
+            if (originalSampleIndex < originalSamples.size() && originalSamples.getTimestamp(originalSampleIndex) == timestamp) {
                 // there exists a sample for this timestamp already
-                existingSample = originalSamples.get(originalSampleIndex);
+                existingSample = originalSamples.getSample(originalSampleIndex);
                 originalSampleIndex++;
             }
 
@@ -132,7 +133,7 @@ public class KeepLastValueStage implements UnaryPipelineStage {
                 // else skip this timestamp (remains null/missing)
             }
         }
-        return filledSamples;
+        return SampleList.fromList(filledSamples);
     }
 
     /**

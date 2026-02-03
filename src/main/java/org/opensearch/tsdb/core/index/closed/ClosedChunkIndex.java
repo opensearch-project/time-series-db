@@ -175,11 +175,14 @@ public class ClosedChunkIndex implements Closeable {
     }
 
     /**
-     * Force a merge of the index segments. This is an expensive operation and should be used sparingly.
+     * Force a merge of the index segments to the specified number of segments.
+     * This is an expensive operation and should be used sparingly.
+     *
+     * @param maxNumSegments the maximum number of segments to merge down to
      */
-    public void forceMerge() {
+    public void forceMerge(int maxNumSegments) {
         try {
-            indexWriter.forceMerge(1);
+            indexWriter.forceMerge(maxNumSegments);
         } catch (Exception e) {
             throw ExceptionsHelper.convertToRuntime(e);
         }
@@ -203,6 +206,21 @@ public class ClosedChunkIndex implements Closeable {
      */
     public ReaderManager getDirectoryReaderManager() {
         return directoryReaderManager;
+    }
+
+    /**
+     * Get the number of segments in this index.
+     *
+     * @return the number of segments
+     * @throws IOException if there's an error accessing the reader
+     */
+    public int getSegmentCount() throws IOException {
+        DirectoryReader reader = (DirectoryReader) directoryReaderManager.acquire();
+        try {
+            return reader.leaves().size();
+        } finally {
+            directoryReaderManager.release(reader);
+        }
     }
 
     public void commit() {

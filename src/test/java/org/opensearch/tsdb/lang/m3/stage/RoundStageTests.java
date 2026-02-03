@@ -42,7 +42,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         Labels labels = ByteLabels.fromMap(Map.of("test", "value"));
         TimeSeries inputSeries = new TimeSeries(Arrays.asList(new FloatSample(1000L, 1.7)), labels, 1000L, 1000L, 1000L, "test");
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputSeries));
-        assertEquals(2.0, result.get(0).getSamples().get(0).getValue(), 0.001); // 1.7 -> 2 (precision=0)
+        assertEquals(2.0, result.get(0).getSamples().getValue(0), 0.001); // 1.7 -> 2 (precision=0)
     }
 
     public void testConstructorWithPrecision() {
@@ -56,7 +56,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         Labels labels = ByteLabels.fromMap(Map.of("test", "value"));
         TimeSeries inputSeries = new TimeSeries(Arrays.asList(new FloatSample(1000L, 1.234)), labels, 1000L, 1000L, 1000L, "test");
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputSeries));
-        assertEquals(1.23, result.get(0).getSamples().get(0).getValue(), 0.001); // 1.234 -> 1.23 (precision=2)
+        assertEquals(1.23, result.get(0).getSamples().getValue(0), 0.001); // 1.234 -> 1.23 (precision=2)
     }
 
     public void testConstructorWithNegativePrecision() {
@@ -70,7 +70,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         Labels labels = ByteLabels.fromMap(Map.of("test", "value"));
         TimeSeries inputSeries = new TimeSeries(Arrays.asList(new FloatSample(1000L, 150.0)), labels, 1000L, 1000L, 1000L, "test");
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputSeries));
-        assertEquals(150.0, result.get(0).getSamples().get(0).getValue(), 0.001); // 150 -> 150 (precision=-2)
+        assertEquals(150.0, result.get(0).getSamples().getValue(0), 0.001); // 150 -> 150 (precision=-2)
     }
 
     // ========== Basic Functionality Tests ==========
@@ -89,9 +89,9 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         assertEquals(1, result.size());
         TimeSeries roundedTimeSeries = result.get(0);
         assertEquals(3, roundedTimeSeries.getSamples().size());
-        assertEquals(2.0, roundedTimeSeries.getSamples().get(0).getValue(), 0.001); // 1.7 -> 2
-        assertEquals(2.0, roundedTimeSeries.getSamples().get(1).getValue(), 0.001); // 2.3 -> 2
-        assertEquals(4.0, roundedTimeSeries.getSamples().get(2).getValue(), 0.001); // 3.8 -> 4
+        assertEquals(2.0, roundedTimeSeries.getSamples().getValue(0), 0.001); // 1.7 -> 2
+        assertEquals(2.0, roundedTimeSeries.getSamples().getValue(1), 0.001); // 2.3 -> 2
+        assertEquals(4.0, roundedTimeSeries.getSamples().getValue(2), 0.001); // 3.8 -> 4
         assertEquals(labels, roundedTimeSeries.getLabels());
         assertEquals("test-series", roundedTimeSeries.getAlias());
     }
@@ -110,9 +110,9 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         assertEquals(1, result.size());
         TimeSeries roundedTimeSeries = result.get(0);
         assertEquals(3, roundedTimeSeries.getSamples().size());
-        assertEquals(1.23, roundedTimeSeries.getSamples().get(0).getValue(), 0.001); // 1.234 -> 1.23
-        assertEquals(2.57, roundedTimeSeries.getSamples().get(1).getValue(), 0.001); // 2.567 -> 2.57
-        assertEquals(3.89, roundedTimeSeries.getSamples().get(2).getValue(), 0.001); // 3.891 -> 3.89
+        assertEquals(1.23, roundedTimeSeries.getSamples().getValue(0), 0.001); // 1.234 -> 1.23
+        assertEquals(2.57, roundedTimeSeries.getSamples().getValue(1), 0.001); // 2.567 -> 2.57
+        assertEquals(3.89, roundedTimeSeries.getSamples().getValue(2), 0.001); // 3.891 -> 3.89
     }
 
     public void testProcessWithNegativePrecision() {
@@ -133,9 +133,9 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         assertEquals(1, result.size());
         TimeSeries roundedTimeSeries = result.get(0);
         assertEquals(3, roundedTimeSeries.getSamples().size());
-        assertEquals(123.45, roundedTimeSeries.getSamples().get(0).getValue(), 0.001); // 123.45 -> 123.45 (unchanged)
-        assertEquals(267.89, roundedTimeSeries.getSamples().get(1).getValue(), 0.001); // 267.89 -> 267.89 (unchanged)
-        assertEquals(391.23, roundedTimeSeries.getSamples().get(2).getValue(), 0.001); // 391.23 -> 391.23 (unchanged)
+        assertEquals(123.45, roundedTimeSeries.getSamples().getValue(0), 0.001); // 123.45 -> 123.45 (unchanged)
+        assertEquals(267.89, roundedTimeSeries.getSamples().getValue(1), 0.001); // 267.89 -> 267.89 (unchanged)
+        assertEquals(391.23, roundedTimeSeries.getSamples().getValue(2), 0.001); // 391.23 -> 391.23 (unchanged)
     }
 
     public void testProcessWithMultipleTimeSeries() {
@@ -152,8 +152,8 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
 
         // Assert
         assertEquals(2, result.size());
-        assertEquals(4.3, result.get(0).getSamples().get(0).getValue(), 0.001); // 4.25 -> 4.3
-        assertEquals(8.8, result.get(1).getSamples().get(0).getValue(), 0.001); // 8.76 -> 8.8
+        assertEquals(4.3, result.get(0).getSamples().getValue(0), 0.001); // 4.25 -> 4.3
+        assertEquals(8.8, result.get(1).getSamples().getValue(0), 0.001); // 8.76 -> 8.8
     }
 
     public void testProcessWithEmptyInput() {
@@ -177,7 +177,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputTimeSeries));
 
         // Assert
-        assertEquals(0.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(0.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithNegativeValues() {
@@ -197,8 +197,8 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputTimeSeries));
 
         // Assert
-        assertEquals(-3.3, result.get(0).getSamples().get(0).getValue(), 0.001); // -3.27 -> -3.3
-        assertEquals(-5.8, result.get(0).getSamples().get(1).getValue(), 0.001); // -5.83 -> -5.8
+        assertEquals(-3.3, result.get(0).getSamples().getValue(0), 0.001); // -3.27 -> -3.3
+        assertEquals(-5.8, result.get(0).getSamples().getValue(1), 0.001); // -5.83 -> -5.8
     }
 
     // ========== Edge Cases Tests ==========
@@ -220,7 +220,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         List<TimeSeries> result = roundStage.process(Arrays.asList(inputTimeSeries));
 
         // Assert
-        assertEquals(0.000012, result.get(0).getSamples().get(0).getValue(), 0.0000001);
+        assertEquals(0.000012, result.get(0).getSamples().getValue(0), 0.0000001);
     }
 
     // ========== Metadata Preservation Tests ==========
@@ -296,7 +296,7 @@ public class RoundStageTests extends AbstractWireSerializingTestCase<RoundStage>
         List<TimeSeries> secondRound = roundStage.process(firstRound);
 
         // Results should be identical
-        assertEquals(firstRound.get(0).getSamples().get(0).getValue(), secondRound.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(firstRound.get(0).getSamples().getValue(0), secondRound.get(0).getSamples().getValue(0), 0.001);
     }
 
     // ========== Null Input Tests ==========

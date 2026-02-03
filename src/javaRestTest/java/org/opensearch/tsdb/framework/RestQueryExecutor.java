@@ -7,7 +7,11 @@
  */
 package org.opensearch.tsdb.framework;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.opensearch.client.Request;
@@ -16,16 +20,11 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.client.RestClient;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.rest.RestRequest;
 import org.opensearch.tsdb.framework.models.QueryConfig;
 import org.opensearch.tsdb.query.utils.TimeSeriesOutputMapper.TimeSeriesResult;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import org.opensearch.rest.RestRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.opensearch.tsdb.framework.Common.FIELD_DATA;
 import static org.opensearch.tsdb.framework.Common.FIELD_METRIC;
@@ -53,7 +52,6 @@ public class RestQueryExecutor extends BaseQueryExecutor {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String RESULT_TYPE_MATRIX = "matrix";
-    private static final String QUERY_PARAM_FORMAT = "%s?start=%d&end=%d&step=%d";
 
     private static final String FIELD_RESOLVED_PARTITIONS = "resolved_partitions";
     private static final String FIELD_PARTITIONS = "partitions";
@@ -116,10 +114,17 @@ public class RestQueryExecutor extends BaseQueryExecutor {
     private Request buildRequest(QueryConfig queryConfig, String indexName) throws IOException {
         long startMillis = queryConfig.config().minTimestamp().toEpochMilli();
         long endMillis = queryConfig.config().maxTimestamp().toEpochMilli();
-        long stepMillis = queryConfig.config().step().toMillis();
 
         String endpoint = queryConfig.type().getRestEndpoint();
-        String url = String.format(Locale.ROOT, QUERY_PARAM_FORMAT, endpoint, startMillis, endMillis, stepMillis);
+        // Build URL with start and end, step is optional
+        String url = String.format(Locale.ROOT, "%s?start=%d&end=%d", endpoint, startMillis, endMillis);
+
+        // Add step parameter if provided and should be sent (optional - allows testing index setting fallback)
+        // send_step_param can be set to false in YAML to test reading step from index settings
+        if (queryConfig.config().step() != null && queryConfig.config().shouldSendStepParam()) {
+            long stepMillis = queryConfig.config().step().toMillis();
+            url = url + "&step=" + stepMillis;
+        }
 
         // Add partitions parameter with the index name for better performance and test isolation
         // Note: This is optional - without it, OpenSearch searches all indices

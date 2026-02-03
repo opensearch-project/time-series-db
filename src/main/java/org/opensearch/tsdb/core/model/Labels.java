@@ -100,6 +100,20 @@ public interface Labels {
     Labels deepCopy();
 
     /**
+     * Estimate the memory footprint of this Labels instance in bytes.
+     *
+     * <p>The estimate includes:
+     * <ul>
+     *   <li>Object overhead for the Labels implementation</li>
+     *   <li>Internal data structures (byte arrays, strings, etc.)</li>
+     *   <li>Label names and values</li>
+     * </ul>
+     *
+     * @return estimated size in bytes
+     */
+    long estimateBytes();
+
+    /**
      * Extract sorted names (label names) from this Labels instance.
      * Returns a list of all label names sorted by name.
      *

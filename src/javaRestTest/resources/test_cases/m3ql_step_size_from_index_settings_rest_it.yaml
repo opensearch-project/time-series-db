@@ -1,0 +1,132 @@
+# TSDB REST Integration Test - M3QL Step Size from Index Settings
+# Tests that M3QL queries correctly read and use the step size from index settings
+
+test_setup:
+  name: "M3QL Step Size from Index Settings Tests"
+  description: "Validates that M3QL queries use step size from index.tsdb_engine.lang.m3.default_step_size setting"
+
+  index_configs:
+    # 2d retention index with 10s step size
+    - name: "2d"
+      shards: 1
+      replicas: 0
+
+    # 40d retention index with 60s step size for large aggregation testing
+    - name: "40d"
+      shards: 1
+      replicas: 0
+      settings:
+        index.refresh_interval: "1s"
+        index.tsdb_engine.enabled: true
+        index.tsdb_engine.labels.storage_type: binary
+        index.tsdb_engine.lang.m3.default_step_size: "60s"
+        index.tsdb_engine.ooo_cutoff: "1d"
+        index.queries.cache.enabled: false
+        index.requests.cache.enable: false
+        index.translog.durability: async
+        index.translog.sync_interval: "1s"
+
+test_case:
+  name: "Step Size from Index Settings Test"
+
+  # Input data: Simple counter metrics over 2 minutes with different step sizes
+  input_data_list:
+    # Data in 2d retention index with 10s step
+    - index_name: "2d"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "10s"  # Data ingested every 10s
+      regular_metrics:
+        - labels: "__name__:default_metric,type:counter,service:api"
+          values: [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220]
+
+    # Data in 40d retention index with 60s step
+    - index_name: "40d"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "60s"  # Data ingested every 60s to match index setting
+      regular_metrics:
+        - labels: "__name__:large_step_metric,type:counter,service:batch"
+          values: [200, 260, 320]  # 3 points at 0s, 60s, 120s
+
+  # M3QL queries - test various step size scenarios
+  queries:
+    # Test 1: Query without step parameter - should use index setting (10s)
+    # Data ingested at 10s intervals, index setting is 10s, perfect alignment
+    # Time range: 0-120s gives timestamps: 0s, 10s, 20s, 30s, 40s, 50s, 60s, 70s, 80s, 90s, 100s, 110s (12 points)
+    - name: "fetch with 10s step from index setting (2d retention)"
+      type: "m3ql"
+      indices: "2d"
+      query: "fetch __name__:default_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "10s"  # For validation - matches index setting
+        send_step_param: false  # Don't send step in query, let it use index setting
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+            values: [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210]
+
+    # Test 2: Query with 25s step parameter (overrides 10s index setting)
+    # This validates consolidation/aggregation logic
+    # Data ingested at 10s intervals (0s=100, 10s=110, 20s=120, ...)
+    # With 25s step from index setting, timestamps align at: 0s, 25s, 50s, 75s, 100s
+    # Expected values at those points: 120, 140, 170, 190, 210
+    - name: "fetch with 25s step overriding 2d index setting"
+      type: "m3ql"
+      indices: "2d"
+      query: "fetch __name__:default_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "25s"  # Override index setting (10s) with explicit 25s step
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+            values: [120, 140, 170, 190, 210]
+
+    # Test 3: Query with 1 minute (60s) step parameter
+    # Tests larger step size with data ingested at 10s intervals
+    # Data ingested at 10s: 0s=100, 10s=110, 20s=120, ..., 120s=220
+    # Time range: 0-120s with 60s step gives timestamps: 0s, 60s (120s excluded as it equals max)
+    # With lookback mechanism: gets values at 50s=150, 110s=210
+    - name: "fetch with 60s step overriding 2d index setting"
+      type: "m3ql"
+      indices: "2d"
+      query: "fetch __name__:default_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "60s"  # 1 minute step
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+            values: [150, 210]  # 2 points at lookback from 0s (→50s), 60s (→110s)
+
+    # Test 4: Query without step parameter on 40d retention index with 60s setting
+    # Should use the 60s step from index setting
+    # Data ingested at 60s: 0s=200, 60s=260, 120s=320
+    # With 60s step from index setting: timestamps at 0s, 60s (120s excluded as endpoint)
+    # Perfect alignment - data points match query timestamps
+    - name: "fetch with 60s step from 40d index setting"
+      type: "m3ql"
+      indices: "40d"
+      query: "fetch __name__:large_step_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "60s"  # For validation - matches index setting
+        send_step_param: false  # Don't send step, use index setting
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "large_step_metric", type: "counter", service: "batch"}
+            values: [200, 260]  # 2 points at 0s, 60s - perfect alignment

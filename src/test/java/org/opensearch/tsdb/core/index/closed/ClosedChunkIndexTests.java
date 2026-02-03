@@ -215,7 +215,7 @@ public class ClosedChunkIndexTests extends OpenSearchTestCase {
         closedChunkIndex.getDirectoryReaderManager().release(reader);
         assertTrue("Should have multiple segments before merge", segmentCountBefore > 1);
 
-        closedChunkIndex.forceMerge();
+        closedChunkIndex.forceMerge(1);
         closedChunkIndex.getDirectoryReaderManager().maybeRefreshBlocking();
 
         // Verify single segment, after force merge
@@ -456,6 +456,6 @@ public class ClosedChunkIndexTests extends OpenSearchTestCase {
         // Close the index first to make forceMerge throw IOException
         closedChunkIndex.close();
 
-        expectThrows(AlreadyClosedException.class, closedChunkIndex::forceMerge);
+        expectThrows(AlreadyClosedException.class, () -> closedChunkIndex.forceMerge(1));
     }
 }

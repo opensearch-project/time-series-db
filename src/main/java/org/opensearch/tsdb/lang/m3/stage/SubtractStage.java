@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
@@ -94,7 +95,7 @@ public class SubtractStage extends AbstractBinaryProjectionStage {
         }
         Map<Long, Double> timestampToValue = new HashMap<>();
         for (TimeSeries timeSeries : rightTimeSeriesList) {
-            List<Sample> samples = timeSeries.getSamples();
+            SampleList samples = timeSeries.getSamples();
             for (Sample sample : samples) {
                 timestampToValue.merge(sample.getTimestamp(), sample.getValue(), Double::sum);
             }

@@ -49,7 +49,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
 
         // All values should be filled with 10.0
         List<Sample> expectedSamples = List.of(new FloatSample(10L, 10.0), new FloatSample(20L, 10.0), new FloatSample(30L, 10.0));
-        assertSamplesEqual("All null values test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("All null values test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -83,7 +83,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
             new FloatSample(40L, 5.0),  // filled
             new FloatSample(50L, 5.0)   // filled
         );
-        assertSamplesEqual("Mixed values test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Mixed values test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -111,7 +111,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
             new FloatSample(30L, 0.0),   // filled
             new FloatSample(40L, 0.0)    // filled
         );
-        assertSamplesEqual("Default fill value test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Default fill value test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -145,7 +145,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
             new FloatSample(40L, 7.0),  // NaN replaced with fill value
             new FloatSample(50L, 5.0)   // original
         );
-        assertSamplesEqual("NaN values test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("NaN values test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -178,7 +178,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
             new FloatSample(40L, 4.0),  // original
             new FloatSample(50L, 9.0)   // missing, filled
         );
-        assertSamplesEqual("Mixed NaN and missing values test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("Mixed NaN and missing values test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -204,7 +204,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
 
         // All NaN values should be replaced with 3.0
         List<Sample> expectedSamples = List.of(new FloatSample(10L, 3.0), new FloatSample(20L, 3.0), new FloatSample(30L, 3.0));
-        assertSamplesEqual("All NaN values test", expectedSamples, resultSeries.getSamples());
+        assertSamplesEqual("All NaN values test", expectedSamples, resultSeries.getSamples().toList());
     }
 
     /**
@@ -241,14 +241,14 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
             new FloatSample(10L, 2.0),  // filled
             new FloatSample(20L, 5.0)   // original
         );
-        assertSamplesEqual("First time series samples", expectedSamples1, result.get(0).getSamples());
+        assertSamplesEqual("First time series samples", expectedSamples1, result.get(0).getSamples().toList());
 
         // Second time series: expected [10.0 at 100L, 2.0 at 110L]
         List<Sample> expectedSamples2 = List.of(
             new FloatSample(100L, 10.0), // original
             new FloatSample(110L, 2.0)   // filled
         );
-        assertSamplesEqual("Second time series samples", expectedSamples2, result.get(1).getSamples());
+        assertSamplesEqual("Second time series samples", expectedSamples2, result.get(1).getSamples().toList());
     }
 
     /**
@@ -288,7 +288,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
         List<TimeSeries> result = stage.process(List.of(timeSeries));
 
         List<Sample> expectedSamples = List.of(new FloatSample(10L, 3.5));
-        assertSamplesEqual("fromArgs test", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("fromArgs test", expectedSamples, result.get(0).getSamples().toList());
     }
 
     /**
@@ -306,7 +306,7 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
         List<TimeSeries> result = stage.process(List.of(timeSeries));
 
         List<Sample> expectedSamples = List.of(new FloatSample(10L, 0.0));
-        assertSamplesEqual("fromArgs with default value test", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("fromArgs with default value test", expectedSamples, result.get(0).getSamples().toList());
     }
 
     /**

@@ -60,9 +60,9 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         assertEquals(1, result.size());
         TimeSeries scaledTimeSeries = result.get(0);
         assertEquals(3, scaledTimeSeries.getSamples().size());
-        assertEquals(2.0, scaledTimeSeries.getSamples().get(0).getValue(), 0.001);
-        assertEquals(4.0, scaledTimeSeries.getSamples().get(1).getValue(), 0.001);
-        assertEquals(6.0, scaledTimeSeries.getSamples().get(2).getValue(), 0.001);
+        assertEquals(2.0, scaledTimeSeries.getSamples().getValue(0), 0.001);
+        assertEquals(4.0, scaledTimeSeries.getSamples().getValue(1), 0.001);
+        assertEquals(6.0, scaledTimeSeries.getSamples().getValue(2), 0.001);
         assertEquals(labels, scaledTimeSeries.getLabels());
         assertEquals("test-series", scaledTimeSeries.getAlias());
     }
@@ -81,8 +81,8 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
 
         // Assert
         assertEquals(2, result.size());
-        assertEquals(2.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(4.0, result.get(1).getSamples().get(0).getValue(), 0.001);
+        assertEquals(2.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(4.0, result.get(1).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithEmptyInput() {
@@ -106,7 +106,7 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         List<TimeSeries> result = scaleStage.process(Arrays.asList(inputTimeSeries));
 
         // Assert
-        assertEquals(0.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(0.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testProcessWithNegativeFactor() {
@@ -119,7 +119,7 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         List<TimeSeries> result = scaleStage.process(Arrays.asList(inputTimeSeries));
 
         // Assert
-        assertEquals(-3.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(-3.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testFromArgs() {
@@ -326,8 +326,8 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
                 assertEquals("Results should have same size", originalResult.size(), readResult.size());
                 assertEquals(
                     "Results should have same scaled value",
-                    originalResult.get(0).getSamples().get(0).getValue(),
-                    readResult.get(0).getSamples().get(0).getValue(),
+                    originalResult.get(0).getSamples().getValue(0),
+                    readResult.get(0).getSamples().getValue(0),
                     0.001
                 );
             }
@@ -647,7 +647,7 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         assertEquals("First stage should return one time series", 1, result1.size());
 
         // Verify first stage scaling: 10.0 * 2.0 = 20.0, 20.0 * 2.0 = 40.0, 30.0 * 2.0 = 60.0
-        List<Sample> scaledSamples1 = result1.get(0).getSamples();
+        List<Sample> scaledSamples1 = result1.get(0).getSamples().toList();
         assertEquals("First sample should be scaled by 2.0", 20.0, scaledSamples1.get(0).getValue(), 0.001);
         assertEquals("Second sample should be scaled by 2.0", 40.0, scaledSamples1.get(1).getValue(), 0.001);
         assertEquals("Third sample should be scaled by 2.0", 60.0, scaledSamples1.get(2).getValue(), 0.001);
@@ -658,7 +658,7 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         assertEquals("Second stage should return one time series", 1, result2.size());
 
         // Verify second stage scaling: 10.0 * 3.0 = 30.0, 20.0 * 3.0 = 60.0, 30.0 * 3.0 = 90.0
-        List<Sample> scaledSamples2 = result2.get(0).getSamples();
+        List<Sample> scaledSamples2 = result2.get(0).getSamples().toList();
         assertEquals("First sample should be scaled by 3.0", 30.0, scaledSamples2.get(0).getValue(), 0.001);
         assertEquals("Second sample should be scaled by 3.0", 60.0, scaledSamples2.get(1).getValue(), 0.001);
         assertEquals("Third sample should be scaled by 3.0", 90.0, scaledSamples2.get(2).getValue(), 0.001);
@@ -681,7 +681,7 @@ public class ScaleStageTests extends AbstractWireSerializingTestCase<ScaleStage>
         assertEquals("Should return one time series", 1, output.size());
 
         // Verify scaling: 4.0 * 2.5 = 10.0, 8.0 * 2.5 = 20.0
-        List<Sample> scaledSamples = output.get(0).getSamples();
+        List<Sample> scaledSamples = output.get(0).getSamples().toList();
         assertEquals("First sample should be scaled by 2.5", 10.0, scaledSamples.get(0).getValue(), 0.001);
         assertEquals("Second sample should be scaled by 2.5", 20.0, scaledSamples.get(1).getValue(), 0.001);
     }

@@ -22,5 +22,15 @@ import java.time.Instant;
  */
 public record TimeConfig(@JsonProperty("min_timestamp") @JsonDeserialize(using = TimestampDeserializer.class) Instant minTimestamp,
     @JsonProperty("max_timestamp") @JsonDeserialize(using = TimestampDeserializer.class) Instant maxTimestamp,
-    @JsonProperty("step") @JsonDeserialize(using = DurationDeserializer.class) Duration step) {
+    @JsonProperty("step") @JsonDeserialize(using = DurationDeserializer.class) Duration step,
+    @JsonProperty("send_step_param") Boolean sendStepParam) {
+
+    /**
+     * Returns whether the step parameter should be sent in the query request.
+     * Defaults to true if not explicitly set to false.
+     * When false, allows testing index setting fallback for step size.
+     */
+    public boolean shouldSendStepParam() {
+        return sendStepParam == null || sendStepParam;
+    }
 }

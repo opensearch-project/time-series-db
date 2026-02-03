@@ -18,7 +18,7 @@ public interface Retention {
     /**
      * Plan returns the indexes that can be removed as per the configured policy.
      *
-     * @param indexes List of indexes
+     * @param indexes list of closed chunk indexes sorted in ascending order by max timestamp
      * @return List of indexes that match the configured policy.
      */
     List<ClosedChunkIndex> plan(List<ClosedChunkIndex> indexes);

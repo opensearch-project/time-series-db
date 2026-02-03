@@ -7,8 +7,10 @@
  */
 package org.opensearch.tsdb.framework;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,11 +22,8 @@ import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.framework.models.IndexConfig;
 import org.opensearch.tsdb.framework.models.TestCase;
 import org.opensearch.tsdb.framework.models.TestSetup;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import static org.opensearch.tsdb.framework.Common.ENDPOINT_REFRESH;
 
@@ -66,6 +65,7 @@ public abstract class RestTimeSeriesTestFramework extends OpenSearchRestTestCase
         index.refresh_interval: "1s"
         index.tsdb_engine.enabled: true
         index.tsdb_engine.labels.storage_type: binary
+        index.tsdb_engine.lang.m3.default_step_size: "10s"
         index.tsdb_engine.ooo_cutoff: "1d"
         index.queries.cache.enabled: false
         index.requests.cache.enable: false

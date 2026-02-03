@@ -7,15 +7,15 @@
  */
 package org.opensearch.tsdb.query.rest;
 
+import java.io.IOException;
+import java.util.List;
+
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.query.rest.ResolvedPartitions.PartitionWindow;
 import org.opensearch.tsdb.query.rest.ResolvedPartitions.ResolvedPartition;
 import org.opensearch.tsdb.query.rest.ResolvedPartitions.RoutingKey;
-
-import java.io.IOException;
-import java.util.List;
 
 /**
  * Unit tests for {@link ResolvedPartitions} and related data structures.
@@ -699,5 +699,34 @@ public class ResolvedPartitionsTests extends OpenSearchTestCase {
         try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
             assertThrows(IOException.class, () -> ResolvedPartitions.parse(parser, () -> fixedNowMs));
         }
+    }
+
+    // ========== getPartitionIds Tests ==========
+
+    /**
+     * Test getPartitionIds returns unique partition IDs preserving all formats:
+     * remote (cluster:index), local with colon (:index), and local without colon (index).
+     */
+    public void testGetPartitionIds() {
+        RoutingKey serviceApi = new RoutingKey("service", "api");
+
+        // Multiple windows with different partition ID formats and duplicates
+        PartitionWindow window1 = new PartitionWindow("cluster1:remote-index", 1000000L, 2000000L, List.of(serviceApi));
+        PartitionWindow window2 = new PartitionWindow(":local-with-colon", 1000000L, 2000000L, List.of(serviceApi));
+        PartitionWindow window3 = new PartitionWindow("local-standalone", 1000000L, 2000000L, List.of(serviceApi));
+        PartitionWindow window4 = new PartitionWindow("cluster1:remote-index", 2000000L, 3000000L, List.of(serviceApi)); // Duplicate
+
+        ResolvedPartition partition = new ResolvedPartition("service:api", List.of(window1, window2, window3, window4));
+        ResolvedPartitions resolvedPartitions = new ResolvedPartitions(List.of(partition));
+
+        List<String> partitionIds = resolvedPartitions.getPartitionIds();
+
+        // Verify we get 3 unique partition IDs (duplicate removed)
+        assertEquals("Should have 3 unique partition IDs", 3, partitionIds.size());
+
+        // Verify all formats are preserved as-is
+        assertTrue("Should preserve remote cluster format", partitionIds.contains("cluster1:remote-index"));
+        assertTrue("Should preserve local cluster notation with colon", partitionIds.contains(":local-with-colon"));
+        assertTrue("Should preserve standalone local index", partitionIds.contains("local-standalone"));
     }
 }

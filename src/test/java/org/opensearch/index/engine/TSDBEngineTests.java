@@ -169,6 +169,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.tsdb_engine.max_closeable_chunks_per_chunk_range_percentage", 100)
@@ -306,6 +307,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.translog.flush_threshold_size", "128b")
@@ -1095,6 +1097,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.translog.generation_threshold_size", "1kb")  // Low threshold to trigger roll
@@ -1138,6 +1141,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.translog.generation_threshold_size", "10mb")  // High threshold to prevent roll
@@ -1290,6 +1294,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.tsdb_engine.commit_interval", commitInterval.getStringRep())
@@ -1371,6 +1376,7 @@ public class TSDBEngineTests extends EngineTestCase {
             "index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .put("index.tsdb_engine.commit_interval", commitInterval.getStringRep())

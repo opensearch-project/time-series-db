@@ -7,6 +7,12 @@
  */
 package org.opensearch.tsdb.query.rest;
 
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.HashSet;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.mockito.ArgumentCaptor;
 import org.opensearch.action.search.SearchRequest;
@@ -15,8 +21,16 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.index.Index;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.rest.RestHandler.Route;
 import org.opensearch.rest.RestRequest;
@@ -36,11 +50,6 @@ import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -51,6 +60,7 @@ import static org.mockito.ArgumentMatchers.assertArg;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +83,8 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
     private RestM3QLAction action;
     private NodeClient mockClient;
     private ClusterSettings clusterSettings;
+    private ClusterService mockClusterService;
+    private IndexNameExpressionResolver mockIndexNameExpressionResolver;
 
     @Override
     public void setUp() throws Exception {
@@ -84,7 +96,33 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
             plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
         );
 
-        action = new RestM3QLAction(clusterSettings);
+        // Setup mock cluster service and resolver
+        mockClusterService = mock(ClusterService.class);
+        mockIndexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
+
+        // Setup default mock behavior for ClusterService to return a ClusterState
+        // that doesn't have any indices (so getDefaultStepFromIndexSettings returns default)
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+
+        // Setup default mock behavior for IndexNameExpressionResolver to return empty array
+        // (so getDefaultStepFromIndexSettings returns DEFAULT_STEP_MS)
+        when(
+            mockIndexNameExpressionResolver.concreteIndices(
+                any(ClusterState.class),
+                any(org.opensearch.action.support.IndicesOptions.class),
+                anyString()
+            )
+        ).thenReturn(new Index[0]);
+
+        // Create action with mocked dependencies
+        // Create a mock RemoteIndexSettingsCache
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
         // Default mock client that doesn't assert (for tests that don't need custom assertions)
         mockClient = setupMockClientWithAssertion(searchRequest -> {
             // No-op assertion - just let the request pass through
@@ -102,13 +140,32 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
      * @return a mocked NodeClient
      */
     private NodeClient setupMockClientWithAssertion(Consumer<SearchRequest> assertSearchRequest) {
+        return setupMockClientWithAssertion(assertSearchRequest, null);
+    }
+
+    /**
+     * Helper method to setup a mock client with custom assertion logic and a latch.
+     * This allows each test to validate the SearchRequest contents and wait for the assertion to complete.
+     *
+     * @param assertSearchRequest Consumer that asserts on the SearchRequest
+     * @param latch Optional latch to countdown when assertion completes (null if not needed)
+     * @return a mocked NodeClient
+     */
+    private NodeClient setupMockClientWithAssertion(Consumer<SearchRequest> assertSearchRequest, CountDownLatch latch) {
         NodeClient mockClient = mock(NodeClient.class);
         doAnswer(invocation -> {
             SearchRequest searchRequest = invocation.getArgument(0);
             ActionListener<SearchResponse> listener = invocation.getArgument(1);
 
-            // Execute the test's custom assertion
-            assertSearchRequest.accept(searchRequest);
+            try {
+                // Execute the test's custom assertion
+                assertSearchRequest.accept(searchRequest);
+            } finally {
+                // Countdown latch after assertion (success or failure)
+                if (latch != null) {
+                    latch.countDown();
+                }
+            }
 
             // Return a mock response
             SearchResponse mockResponse = mock(SearchResponse.class);
@@ -399,7 +456,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
 
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
             .withPath("/_m3ql")
-            .withParams(Map.of("query", "fetch service:api", "partitions", "metrics-2024-01,metrics-2024-02"))
+            .withParams(Map.of("query", "fetch service:api", "partitions", "metrics-2024-01,metrics-2024-02", "step", "10000"))
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
 
@@ -558,8 +615,12 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
 
-        // Should throw exception during request handling
-        expectThrows(Exception.class, () -> action.handleRequest(request, channel, mockClient));
+        // With async flow, errors are sent via channel
+        action.handleRequest(request, channel, mockClient);
+
+        // Verify error response was sent
+        assertNotNull("Should have error response", channel.capturedResponse());
+        assertEquals("Should return BAD_REQUEST status", RestStatus.BAD_REQUEST, channel.capturedResponse().status());
     }
 
     // ========== Request Body Priority Tests ==========
@@ -680,6 +741,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
 
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
             .withPath("/_m3ql")
+            .withParams(Map.of("step", "10000"))
             .withContent(new BytesArray(jsonBody), XContentType.JSON)
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
@@ -756,6 +818,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
 
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
             .withPath("/_m3ql")
+            .withParams(Map.of("step", "10000"))
             .withContent(new BytesArray(jsonBody), XContentType.JSON)
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
@@ -830,7 +893,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         // resolved_partitions
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
             .withPath("/_m3ql")
-            .withParams(Map.of("pushdown", "true"))
+            .withParams(Map.of("pushdown", "true", "step", "10000"))
             .withContent(new BytesArray(jsonBody), XContentType.JSON)
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
@@ -918,7 +981,8 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         ArgumentCaptor<Tags> tagsCaptor = ArgumentCaptor.forClass(Tags.class);
 
         // Verify counter was incremented and capture tags
-        verify(mockCounter).add(eq(1.0d), tagsCaptor.capture());
+        // Using timeout() to handle any potential async delays in the handler
+        verify(mockCounter, timeout(1000)).add(eq(1.0d), tagsCaptor.capture());
         Tags capturedTags = tagsCaptor.getValue();
         assertThat(capturedTags.getTagsMap(), equalTo(Map.of("pushdown", "true", "reached_step", "search", "explain", "false")));
 
@@ -952,7 +1016,8 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         action.handleRequest(request, channel, mockClient);
 
         // Verify counter was incremented and capture tags
-        verify(mockCounter).add(eq(1.0d), assertArg(tags -> {
+        // Using timeout() to handle any potential async delays in the handler
+        verify(mockCounter, timeout(1000)).add(eq(1.0d), assertArg(tags -> {
             assertThat(tags.getTagsMap(), equalTo(Map.of("explain", "true", "pushdown", "true", "reached_step", "explain")));
         }));
 
@@ -986,7 +1051,8 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         action.handleRequest(request, channel, mockClient);
 
         // Verify counter was incremented and capture tags
-        verify(mockCounter).add(eq(1.0d), assertArg(tags -> {
+        // Using timeout() to handle any potential async delays in the handler
+        verify(mockCounter, timeout(1000)).add(eq(1.0d), assertArg(tags -> {
             assertThat(tags.getTagsMap(), equalTo(Map.of("explain", "false", "pushdown", "true", "reached_step", "error__missing_query")));
         }));
 
@@ -1020,7 +1086,8 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         action.handleRequest(request, channel, mockClient);
 
         // Verify counter was incremented with proper error tag
-        verify(mockCounter).add(eq(1.0d), assertArg(tags -> {
+        // Using timeout() to handle any potential async delays in the handler
+        verify(mockCounter, timeout(1000)).add(eq(1.0d), assertArg(tags -> {
             Map<String, ?> tagMap = tags.getTagsMap();
             assertThat(tagMap.get("explain"), equalTo("false"));
             assertThat(tagMap.get("pushdown"), equalTo("true"));
@@ -1133,7 +1200,15 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
             initialSettings,
             plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
         );
-        RestM3QLAction actionWithDynamicSetting = new RestM3QLAction(testClusterSettings);
+        ClusterService mockClusterServiceForTest = mock(ClusterService.class);
+        IndexNameExpressionResolver mockResolverForTest = mock(IndexNameExpressionResolver.class);
+        RemoteIndexSettingsCache mockCacheForTest = mock(RemoteIndexSettingsCache.class);
+        RestM3QLAction actionWithDynamicSetting = new RestM3QLAction(
+            testClusterSettings,
+            mockClusterServiceForTest,
+            mockResolverForTest,
+            mockCacheForTest
+        );
 
         // First, verify that with force_no_pushdown=false, pushdown works normally
         NodeClient mockClientPushdownEnabled = setupMockClientWithAssertion(searchRequest -> {
@@ -1207,4 +1282,651 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         actionWithDynamicSetting.handleRequest(request2, channel2, mockClientPushdownDisabled);
         assertThat(channel2.capturedResponse().status(), equalTo(RestStatus.OK));
     }
+    // ========== Resolved Partitions Tests ==========
+
+    /**
+     * Test that resolved partitions correctly reads index names from various partition ID formats:
+     * remote (cluster:index), local with colon (:index), and local without colon (index).
+     */
+    public void testResolvedPartitionsReadIndexNames() throws Exception {
+        CountDownLatch assertionLatch = new CountDownLatch(1);
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify all three partition ID formats are converted correctly for search
+            String[] indices = searchRequest.indices();
+            assertNotNull("Indices should not be null", indices);
+            assertEquals("Should have 3 indices", 3, indices.length);
+
+            // Check that all formats are converted correctly:
+            // - "cluster1:metrics" (remote) stays as-is for CCS
+            // - ":logs" (local with colon) is stripped to "logs"
+            // - "traces" (local without colon) stays as-is
+            List<String> indicesList = List.of(indices);
+            assertTrue("Should contain remote cluster format", indicesList.contains("cluster1:metrics"));
+            assertTrue("Should strip leading colon from local partition", indicesList.contains("logs"));
+            assertTrue("Should contain local without colon", indicesList.contains("traces"));
+        }, assertionLatch);
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "cluster1:metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": ":logs",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": "traces",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withParams(Map.of("step", "10000"))
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        // Wait for assertion to complete
+        assertTrue("Assertion should complete", assertionLatch.await(5, TimeUnit.SECONDS));
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that resolved partitions override URL partitions parameter.
+     */
+    public void testResolvedPartitionsOverrideUrlParams() throws Exception {
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify resolved partitions are used, not URL partitions
+            String[] indices = searchRequest.indices();
+            assertNotNull("Indices should not be null", indices);
+            assertEquals("Should have 1 index from resolved partitions", 1, indices.length);
+            assertEquals("Should use resolved partition, not URL partition", "resolved-index", indices[0]);
+        });
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "resolved-index",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withParams(Map.of("partitions", "url-partition-should-be-ignored", "step", "10000"))
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that URL partitions parameter is used when no resolved partitions are present.
+     */
+    public void testUrlParamsUsedWhenNoResolvedPartitions() throws Exception {
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify URL partitions are used
+            String[] indices = searchRequest.indices();
+            assertNotNull("Indices should not be null", indices);
+            assertEquals("Should have indices from URL param", 2, indices.length);
+
+            List<String> indicesList = List.of(indices);
+            assertTrue("Should contain index1", indicesList.contains("index1"));
+            assertTrue("Should contain index2", indicesList.contains("index2"));
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "partitions", "index1,index2", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    // ========== Step Size Tests ==========
+
+    /**
+     * Helper to setup mock cluster service with step size configuration for indices.
+     */
+    private void setupMockClusterServiceWithStepSize(Map<String, String> indexToStepSize) {
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+
+        for (Map.Entry<String, String> entry : indexToStepSize.entrySet()) {
+            String indexName = entry.getKey();
+            String stepSize = entry.getValue();
+
+            IndexMetadata mockIndexMetadata = mock(IndexMetadata.class);
+            Settings indexSettings = Settings.builder().put(TSDBPlugin.TSDB_ENGINE_DEFAULT_STEP.getKey(), stepSize).build();
+            Index index = new Index(indexName, "test-uuid-" + indexName);
+
+            // Mock the IndexNameExpressionResolver to resolve partition ID to concrete index
+            when(
+                mockIndexNameExpressionResolver.concreteIndices(
+                    eq(mockClusterState),
+                    any(org.opensearch.action.support.IndicesOptions.class),
+                    eq(indexName)
+                )
+            ).thenReturn(new Index[] { index });
+
+            when(mockMetadata.index(index)).thenReturn(mockIndexMetadata);
+            when(mockIndexMetadata.getSettings()).thenReturn(indexSettings);
+            when(mockIndexMetadata.getIndex()).thenReturn(index);
+        }
+    }
+
+    /**
+     * Test that step size is read from local indices when they have consistent step sizes.
+     */
+    public void testStepSizeFromLocalIndicesConsistent() throws Exception {
+        // Setup two local indices with same step size (30s)
+        setupMockClusterServiceWithStepSize(Map.of("metrics-1", "30s", "metrics-2", "30s"));
+
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify step size is 30s (30000ms)
+            SearchSourceBuilder source = searchRequest.source();
+            TimeSeriesUnfoldAggregationBuilder unfoldAgg = (TimeSeriesUnfoldAggregationBuilder) source.aggregations()
+                .getAggregatorFactories()
+                .stream()
+                .filter(agg -> agg instanceof TimeSeriesUnfoldAggregationBuilder)
+                .findFirst()
+                .orElse(null);
+
+            assertNotNull("Unfold aggregation should exist", unfoldAgg);
+            assertEquals("Step should be 30s from index settings", 30000L, unfoldAgg.getStep());
+        });
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "metrics-1",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": "metrics-2",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that inconsistent step sizes across local indices throws an error.
+     */
+    public void testStepSizeFromLocalIndicesInconsistent() throws Exception {
+        // Setup two local indices with DIFFERENT step sizes
+        setupMockClusterServiceWithStepSize(
+            Map.of(
+                "metrics-1",
+                "30s",
+                "metrics-2",
+                "60s"  // Different!
+            )
+        );
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "metrics-1",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": "metrics-2",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        // Verify error response
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.BAD_REQUEST));
+        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("Inconsistent step sizes"));
+    }
+
+    /**
+     * Test step size from mixed local and remote indices with consistent step sizes.
+     */
+    public void testStepSizeFromMixedLocalAndRemote() throws Exception {
+        // Setup local index with 30s step (without colon - that's what the resolver sees)
+        setupMockClusterServiceWithStepSize(Map.of("local-metrics", "30s"));
+
+        // Setup mock cache for remote index also with 30s step
+        // Create a new action with a mock cache that returns 30s step
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+        // Mock async version
+        doAnswer(invocation -> {
+            ActionListener<Map<String, RemoteIndexSettingsCache.IndexSettingsEntry>> listener = invocation.getArgument(1);
+            listener.onResponse(Map.of("cluster1:remote-metrics", new RemoteIndexSettingsCache.IndexSettingsEntry(30_000L))); // 30s =
+                                                                                                                              // 30000ms
+            return null;
+        }).when(mockCache).getIndexSettingsAsync(any(), any());
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify step size is consistent 30s
+            SearchSourceBuilder source = searchRequest.source();
+            TimeSeriesUnfoldAggregationBuilder unfoldAgg = (TimeSeriesUnfoldAggregationBuilder) source.aggregations()
+                .getAggregatorFactories()
+                .stream()
+                .filter(agg -> agg instanceof TimeSeriesUnfoldAggregationBuilder)
+                .findFirst()
+                .orElse(null);
+
+            assertNotNull("Unfold aggregation should exist", unfoldAgg);
+            assertEquals("Step should be 30s from both local and remote", 30000L, unfoldAgg.getStep());
+        });
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": ":local-metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": "cluster1:remote-metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test step size from remote indices using mocked cache.
+     */
+    public void testStepSizeFromRemoteIndices() throws Exception {
+        // Setup mock cache for remote indices
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+        // Mock async version
+        doAnswer(invocation -> {
+            ActionListener<Map<String, RemoteIndexSettingsCache.IndexSettingsEntry>> listener = invocation.getArgument(1);
+            listener.onResponse(
+                Map.of(
+                    "cluster1:metrics",
+                    new RemoteIndexSettingsCache.IndexSettingsEntry(60_000L), // 60s = 60000ms
+                    "cluster2:logs",
+                    new RemoteIndexSettingsCache.IndexSettingsEntry(60_000L) // 60s = 60000ms
+                )
+            );
+            return null;
+        }).when(mockCache).getIndexSettingsAsync(any(), any());
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
+        CountDownLatch assertionLatch = new CountDownLatch(1);
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify step size is 60s from remote cache
+            SearchSourceBuilder source = searchRequest.source();
+            TimeSeriesUnfoldAggregationBuilder unfoldAgg = (TimeSeriesUnfoldAggregationBuilder) source.aggregations()
+                .getAggregatorFactories()
+                .stream()
+                .filter(agg -> agg instanceof TimeSeriesUnfoldAggregationBuilder)
+                .findFirst()
+                .orElse(null);
+
+            assertNotNull("Unfold aggregation should exist", unfoldAgg);
+            assertEquals("Step should be 60s from remote settings", 60000L, unfoldAgg.getStep());
+        }, assertionLatch);
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "cluster1:metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      },
+                      {
+                        "partition_id": "cluster2:logs",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        // Wait for assertion to complete (ensures the mock client's assertion lambda was actually called)
+        assertTrue("Assertion should complete", assertionLatch.await(5, TimeUnit.SECONDS));
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that when step size is not configured for a remote partition, it falls back to default (10s).
+     */
+    public void testStepSizeNotConfiguredForRemotePartition() throws Exception {
+        // Setup mock cache to return sentinel value indicating step size not configured
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+        doAnswer(invocation -> {
+            ActionListener<Map<String, RemoteIndexSettingsCache.IndexSettingsEntry>> listener = invocation.getArgument(1);
+            listener.onResponse(
+                Map.of(
+                    "cluster1:metrics",
+                    new RemoteIndexSettingsCache.IndexSettingsEntry(RemoteIndexSettingsCache.IndexSettingsEntry.STEP_SIZE_NOT_CONFIGURED)
+                )
+            );
+            return null;
+        }).when(mockCache).getIndexSettingsAsync(any(), any());
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
+        CountDownLatch assertionLatch = new CountDownLatch(1);
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify step size falls back to default (10s = 10000ms)
+            SearchSourceBuilder source = searchRequest.source();
+            TimeSeriesUnfoldAggregationBuilder unfoldAgg = (TimeSeriesUnfoldAggregationBuilder) source.aggregations()
+                .getAggregatorFactories()
+                .stream()
+                .filter(agg -> agg instanceof TimeSeriesUnfoldAggregationBuilder)
+                .findFirst()
+                .orElse(null);
+
+            assertNotNull("Unfold aggregation should exist", unfoldAgg);
+            assertEquals("Step should fall back to default 10s when not configured", 10000L, unfoldAgg.getStep());
+        }, assertionLatch);
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "cluster1:metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        // Wait for assertion to complete
+        assertTrue("Assertion should complete", assertionLatch.await(5, TimeUnit.SECONDS));
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that when remote settings fetch fails with an exception, an error is returned.
+     */
+    public void testRemoteSettingsFetchFailure() throws Exception {
+        // Setup mock cache to fail with exception
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+        doAnswer(invocation -> {
+            ActionListener<Map<String, RemoteIndexSettingsCache.IndexSettingsEntry>> listener = invocation.getArgument(1);
+            listener.onFailure(new RuntimeException("Remote cluster unavailable"));
+            return null;
+        }).when(mockCache).getIndexSettingsAsync(any(), any());
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
+        NodeClient mockClient = mock(NodeClient.class);
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "cluster1:metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.BAD_REQUEST));
+        String responseContent = channel.capturedResponse().content().utf8ToString();
+        assertTrue(
+            "Response should mention failed to fetch settings",
+            responseContent.contains("Failed to fetch settings from remote partitions")
+        );
+    }
+
+    /**
+     * Test fallback to default step size when no valid settings found for any partition.
+     */
+    public void testNoValidSettingsFoundFallbackToDefault() throws Exception {
+        // Setup mock cache to return empty map (no settings found)
+        RemoteIndexSettingsCache mockCache = mock(RemoteIndexSettingsCache.class);
+        doAnswer(invocation -> {
+            ActionListener<Map<String, RemoteIndexSettingsCache.IndexSettingsEntry>> listener = invocation.getArgument(1);
+            listener.onResponse(Map.of()); // Empty map means no settings found
+            return null;
+        }).when(mockCache).getIndexSettingsAsync(any(), any());
+        action = new RestM3QLAction(clusterSettings, mockClusterService, mockIndexNameExpressionResolver, mockCache);
+
+        CountDownLatch assertionLatch = new CountDownLatch(1);
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertContainsTimeSeriesUnfoldAggregation(searchRequest);
+
+            // Verify step size falls back to default (10s = 10000ms)
+            SearchSourceBuilder source = searchRequest.source();
+            TimeSeriesUnfoldAggregationBuilder unfoldAgg = (TimeSeriesUnfoldAggregationBuilder) source.aggregations()
+                .getAggregatorFactories()
+                .stream()
+                .filter(agg -> agg instanceof TimeSeriesUnfoldAggregationBuilder)
+                .findFirst()
+                .orElse(null);
+
+            assertNotNull("Unfold aggregation should exist", unfoldAgg);
+            assertEquals("Step should fall back to default 10s", 10000L, unfoldAgg.getStep());
+        }, assertionLatch);
+
+        String jsonBody = """
+            {
+              "query": "fetch service:api",
+              "resolved_partitions": {
+                "partitions": [
+                  {
+                    "fetch_statement": "fetch service:api",
+                    "partition_windows": [
+                      {
+                        "partition_id": "cluster1:metrics",
+                        "start": 1000000,
+                        "end": 2000000,
+                        "routing_keys": [{"key": "service", "value": "api"}]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.POST)
+            .withPath("/_m3ql")
+            .withContent(new BytesArray(jsonBody), XContentType.JSON)
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        // Wait for assertion to complete
+        assertTrue("Assertion should complete", assertionLatch.await(5, TimeUnit.SECONDS));
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    // ========== Helper Methods ==========
+
+    /**
+     * Helper method to setup mock cluster service with step size for a single index.
+     */
+    private void setupMockClusterServiceWithStepSize(String indexName, String stepSize) {
+        setupMockClusterServiceWithStepSize(Map.of(indexName, stepSize));
+    }
+
 }

@@ -16,6 +16,7 @@ import org.opensearch.tsdb.core.model.SumCountSample;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class TimeSeriesTests extends OpenSearchTestCase {
@@ -33,7 +34,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, minTimestamp, maxTimestamp, step, alias);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(labels, timeSeries.getLabels());
         assertEquals(minTimestamp, timeSeries.getMinTimestamp());
         assertEquals(maxTimestamp, timeSeries.getMaxTimestamp());
@@ -201,7 +202,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(labels, timeSeries.getLabels());
         assertEquals(1000L, timeSeries.getMinTimestamp());
         assertEquals(2000L, timeSeries.getMaxTimestamp());
@@ -217,10 +218,10 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
 
         // Assert
-        assertEquals(samples, timeSeries.getSamples());
+        assertEquals(samples, timeSeries.getSamples().toList());
         assertEquals(2, timeSeries.getSamples().size());
-        assertTrue(timeSeries.getSamples().get(0) instanceof FloatSample);
-        assertTrue(timeSeries.getSamples().get(1) instanceof SumCountSample);
+        assertTrue(timeSeries.getSamples().getSample(0) instanceof FloatSample);
+        assertTrue(timeSeries.getSamples().getSample(1) instanceof SumCountSample);
     }
 
     public void testWithEmptySamples() {
@@ -232,7 +233,7 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries timeSeries = new TimeSeries(emptySamples, labels, 0L, 0L, 0L, null);
 
         // Assert
-        assertEquals(emptySamples, timeSeries.getSamples());
+        assertEquals(emptySamples, timeSeries.getSamples().toList());
         assertTrue(timeSeries.getSamples().isEmpty());
     }
 
@@ -281,5 +282,101 @@ public class TimeSeriesTests extends OpenSearchTestCase {
             () -> TimeSeries.calculateAlignedMaxTimestamp(2000L, 1000L, 100L)
         );
         assertTrue(exception.getMessage().contains("Query end must be greater than query start"));
+    }
+
+    /**
+     * Validate that ESTIMATED_MEMORY_OVERHEAD constant matches actual JVM object layout.
+     * This test uses JOL (Java Object Layout) to calculate the actual memory overhead.
+     *
+     * <p>If this test fails, update TimeSeries.ESTIMATED_MEMORY_OVERHEAD to the value
+     * shown in the failure message.</p>
+     */
+    public void testEstimatedMemoryOverheadIsAccurate() {
+        try {
+            // Create a minimal TimeSeries instance
+            Labels labels = ByteLabels.fromStrings();
+            List<Sample> samples = List.of();
+            TimeSeries timeSeries = new TimeSeries(samples, labels, 0L, 0L, 1L, null);
+
+            // Get actual JVM layout
+            org.openjdk.jol.info.ClassLayout layout = org.openjdk.jol.info.ClassLayout.parseInstance(timeSeries);
+            long actualOverhead = layout.instanceSize();
+
+            long constantOverhead = TimeSeries.getEstimatedMemoryOverhead();
+
+            // Allow small variance for JVM-specific differences
+            long allowedDelta = 8;
+            long difference = Math.abs(actualOverhead - constantOverhead);
+
+            if (difference > allowedDelta) {
+                fail(
+                    String.format(
+                        Locale.ROOT,
+                        "ESTIMATED_MEMORY_OVERHEAD constant (%d bytes) does not match actual JVM layout (%d bytes)!\n"
+                            + "\n"
+                            + "TimeSeries object layout:\n%s\n"
+                            + "\n"
+                            + "ACTION REQUIRED: Update TimeSeries.ESTIMATED_MEMORY_OVERHEAD to %d\n"
+                            + "\n"
+                            + "This usually happens when:\n"
+                            + "  1. Fields were added/removed from TimeSeries\n"
+                            + "  2. JVM version or vendor changed\n"
+                            + "  3. JVM flags changed (e.g., -XX:+UseCompressedOops)",
+                        constantOverhead,
+                        actualOverhead,
+                        layout.toPrintable(),
+                        actualOverhead
+                    )
+                );
+            }
+
+            // Test passes - log for documentation
+            logger.info(
+                "TimeSeries memory overhead validation passed:\n"
+                    + "  ESTIMATED_MEMORY_OVERHEAD: {} bytes\n"
+                    + "  Actual JVM layout: {} bytes",
+                constantOverhead,
+                actualOverhead
+            );
+
+        } catch (Exception e) {
+            fail("Failed to validate TimeSeries memory overhead using JOL: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Validate that ESTIMATED_SAMPLE_SIZE is reasonable.
+     * Note: Sample size cannot be precisely validated with JOL because:
+     * 1. Sample is an interface, not a concrete class
+     * 2. JVM may apply scalar replacement optimization (no object allocation)
+     * 3. Different Sample implementations have different sizes
+     *
+     * <p>This test validates the constant is in a reasonable range and documents
+     * the expected behavior.</p>
+     */
+    public void testEstimatedSampleSizeIsReasonable() {
+        long sampleSize = TimeSeries.getEstimatedSampleSize();
+
+        // Sample should be at least the data size (timestamp + value = 16 bytes)
+        assertTrue("ESTIMATED_SAMPLE_SIZE should be at least 16 bytes (timestamp + value)", sampleSize >= 16);
+
+        // Sample should not exceed full object size (with header ~32 bytes is max reasonable)
+        assertTrue("ESTIMATED_SAMPLE_SIZE should not exceed 32 bytes (object header + data)", sampleSize <= 32);
+
+        // Validate documented assumption: favors scalar replacement (16 bytes)
+        assertEquals(
+            "ESTIMATED_SAMPLE_SIZE assumes scalar replacement optimization (16 bytes). "
+                + "If changing this, update the Javadoc in TimeSeries.java",
+            16,
+            sampleSize
+        );
+
+        logger.info(
+            "Sample size constant validation passed: {} bytes\n"
+                + "  Assumes JVM scalar replacement for hot path optimization\n"
+                + "  Without scalar replacement: ~32 bytes (object header + data)\n"
+                + "  With scalar replacement: 16 bytes (just timestamp + value)",
+            sampleSize
+        );
     }
 }

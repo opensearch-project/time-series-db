@@ -339,4 +339,127 @@ public class CompactionFactoryTests extends OpenSearchTestCase {
 
         assertEquals(Duration.ofMinutes(1).toMillis(), compaction.getFrequency());
     }
+
+    /**
+     * Test create with ForceMergeCompaction type and default settings
+     */
+    public void testCreateWithForceMergeCompactionType() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "ForceMergeCompaction")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "7d")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+        Compaction compaction = CompactionFactory.create(indexSettings);
+        assertNotNull(compaction);
+        assertTrue("Should create ForceMergeCompaction", compaction instanceof ForceMergeCompaction);
+        assertEquals("Default frequency should be 15 minutes", Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
+        assertTrue("ForceMergeCompaction should be in-place", compaction.isInPlaceCompaction());
+    }
+
+    /**
+     * Test create with ForceMergeCompaction type and custom frequency
+     */
+    public void testCreateWithForceMergeCompactionAndCustomFrequency() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "ForceMergeCompaction")
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey(), "30m")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "7d")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+        Compaction compaction = CompactionFactory.create(indexSettings);
+        assertNotNull(compaction);
+        assertTrue("Should create ForceMergeCompaction", compaction instanceof ForceMergeCompaction);
+        assertEquals("Custom frequency should be 30 minutes", Duration.ofMinutes(30).toMillis(), compaction.getFrequency());
+        assertTrue("ForceMergeCompaction should be in-place", compaction.isInPlaceCompaction());
+    }
+
+    /**
+     * Test create with ForceMergeCompaction type and custom min segment count
+     */
+    public void testCreateWithForceMergeCompactionAndCustomMinSegmentCount() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "ForceMergeCompaction")
+            .put(TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MIN_SEGMENT_COUNT.getKey(), 5)
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "7d")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+        Compaction compaction = CompactionFactory.create(indexSettings);
+        assertNotNull(compaction);
+        assertTrue("Should create ForceMergeCompaction", compaction instanceof ForceMergeCompaction);
+        assertTrue("ForceMergeCompaction should be in-place", compaction.isInPlaceCompaction());
+    }
+
+    /**
+     * Test dynamic frequency update for ForceMergeCompaction
+     */
+    public void testUpdateForceMergeCompactionFrequency() {
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.getKey(), "ForceMergeCompaction")
+            .put(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey(), "15m")
+            .put(TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.getKey(), "7d")
+            .build();
+
+        IndexSettings indexSettings = new IndexSettings(
+            IndexMetadata.builder("test-index").settings(settings).numberOfShards(1).numberOfReplicas(0).build(),
+            Settings.EMPTY
+        );
+
+        indexSettings.getScopedSettings().registerSetting(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY);
+        Compaction compaction = CompactionFactory.create(indexSettings);
+        assertTrue("Should create ForceMergeCompaction", compaction instanceof ForceMergeCompaction);
+        assertEquals("Initial frequency should be 15 minutes", Duration.ofMinutes(15).toMillis(), compaction.getFrequency());
+
+        // Update the frequency dynamically
+        Settings updatedSettings = Settings.builder().put(settings).put(TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.getKey(), "1h").build();
+
+        IndexMetadata updatedMetadata = IndexMetadata.builder(indexSettings.getIndexMetadata())
+            .settings(updatedSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .build();
+
+        indexSettings.updateIndexMetadata(updatedMetadata);
+
+        assertEquals("Frequency should be updated to 1 hour", Duration.ofHours(1).toMillis(), compaction.getFrequency());
+    }
+
+    /**
+     * Test CompactionType.from method with valid types
+     */
+    public void testCompactionTypeFromValidTypes() {
+        assertEquals(CompactionFactory.CompactionType.SizeTieredCompaction, CompactionFactory.CompactionType.from("SizeTieredCompaction"));
+        assertEquals(CompactionFactory.CompactionType.ForceMergeCompaction, CompactionFactory.CompactionType.from("ForceMergeCompaction"));
+        assertEquals(CompactionFactory.CompactionType.Noop, CompactionFactory.CompactionType.from("Noop"));
+    }
+
+    /**
+     * Test CompactionType.from method with invalid type
+     */
+    public void testCompactionTypeFromInvalidType() {
+        assertEquals(CompactionFactory.CompactionType.Invalid, CompactionFactory.CompactionType.from("InvalidType"));
+        assertEquals(CompactionFactory.CompactionType.Invalid, CompactionFactory.CompactionType.from(""));
+        assertEquals(CompactionFactory.CompactionType.Invalid, CompactionFactory.CompactionType.from("random"));
+    }
 }

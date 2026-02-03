@@ -9,6 +9,7 @@ package org.opensearch.tsdb.query.aggregator;
 
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,7 +60,40 @@ import java.util.Objects;
  *
  */
 public class TimeSeries {
-    private final List<Sample> samples;
+    /**
+     * Estimated memory overhead for a TimeSeries object in bytes.
+     * This includes the object header, references to samples/labels/alias, and primitive fields.
+     * <strong>IMPORTANT:</strong> Update this constant when adding/removing fields from TimeSeries.
+     *
+     * <p>Memory breakdown (with compressed oops enabled):
+     * <ul>
+     *   <li>Object header: 12 bytes (mark word 8 + class pointer 4)</li>
+     *   <li>Field: List&lt;Sample&gt; samples reference: 4 bytes (compressed)</li>
+     *   <li>Field: Labels labels reference: 4 bytes (compressed)</li>
+     *   <li>Field: String alias reference: 4 bytes (compressed)</li>
+     *   <li>Field: long minTimestamp: 8 bytes</li>
+     *   <li>Field: long maxTimestamp: 8 bytes</li>
+     *   <li>Field: long step: 8 bytes</li>
+     * </ul>
+     * <p>Total: 48 bytes (with compressed oops)</p>
+     *
+     * <p>Note: Without compressed oops (-XX:-UseCompressedOops), this would be ~64 bytes.
+     * The constant reflects the typical production JVM configuration with compressed oops enabled.</p>
+     */
+    public static final long ESTIMATED_MEMORY_OVERHEAD = 48;
+
+    /**
+     * Estimated memory size per Sample object in bytes.
+     * Assumes JVM scalar replacement optimization for short-lived Sample objects in hot paths.
+     *
+     * <p>With scalar replacement: 16 bytes (8-byte timestamp + 8-byte value)</p>
+     * <p>Without scalar replacement: ~32 bytes (16-byte object header + 16 bytes data)</p>
+     *
+     * <p>Conservative estimate favors scalar replacement as it's common in aggregation hot paths.</p>
+     */
+    public static final long ESTIMATED_SAMPLE_SIZE = 16;
+
+    private final SampleList samples;
     private final Labels labels; // Store all labels and their values
     private String alias; // Optional alias name for renamed series
 
@@ -83,6 +117,18 @@ public class TimeSeries {
      * Clients should fill with null samples if dense representation is required.</p>
      */
     public TimeSeries(List<Sample> samples, Labels labels, long minTimestamp, long maxTimestamp, long step, String alias) {
+        this.samples = SampleList.fromList(samples);
+        this.labels = labels;
+        this.minTimestamp = minTimestamp;
+        this.maxTimestamp = maxTimestamp;
+        this.step = step;
+        this.alias = alias;
+    }
+
+    /**
+     * Similar to {@link #TimeSeries(List, Labels, long, long, long, String)}
+     */
+    public TimeSeries(SampleList samples, Labels labels, long minTimestamp, long maxTimestamp, long step, String alias) {
         this.samples = samples;
         this.labels = labels;
         this.minTimestamp = minTimestamp;
@@ -96,7 +142,7 @@ public class TimeSeries {
      *
      * @return List of time series samples
      */
-    public List<Sample> getSamples() {
+    public SampleList getSamples() {
         return samples;
     }
 
@@ -240,5 +286,25 @@ public class TimeSeries {
             newSamples.add(sample.deepCopy());
         }
         return new TimeSeries(newSamples, labels.deepCopy(), minTimestamp, maxTimestamp, step, alias);
+    }
+
+    /**
+     * Get the estimated memory overhead constant for testing.
+     * Package-private for test validation.
+     *
+     * @return the ESTIMATED_MEMORY_OVERHEAD constant
+     */
+    static long getEstimatedMemoryOverhead() {
+        return ESTIMATED_MEMORY_OVERHEAD;
+    }
+
+    /**
+     * Get the estimated sample size constant for testing.
+     * Package-private for test validation.
+     *
+     * @return the ESTIMATED_SAMPLE_SIZE constant
+     */
+    static long getEstimatedSampleSize() {
+        return ESTIMATED_SAMPLE_SIZE;
     }
 }

@@ -125,12 +125,14 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
      * @param executionLatency histogram for overall query execution time (can be null)
      * @param collectPhaseLatencyMax histogram for max collect phase latency across shards (can be null)
      * @param reducePhaseLatencyMax histogram for max reduce phase latency across shards (can be null)
+     * @param postCollectionPhaseLatencyMax histogram for max post collection phase latency across shards (can be null)
      * @param collectPhaseCpuTimeMs histogram for total collect CPU time across all shards in milliseconds (can be null)
      * @param reducePhaseCpuTimeMs histogram for total reduce CPU time across all shards in milliseconds (can be null)
      * @param shardLatencyMax histogram for max total shard processing time (can be null)
      */
     public record QueryMetrics(Histogram executionLatency, Histogram collectPhaseLatencyMax, Histogram reducePhaseLatencyMax,
-        Histogram collectPhaseCpuTimeMs, Histogram reducePhaseCpuTimeMs, Histogram shardLatencyMax) {
+        Histogram postCollectionPhaseLatencyMax, Histogram collectPhaseCpuTimeMs, Histogram reducePhaseCpuTimeMs,
+        Histogram shardLatencyMax) {
     }
 
     /**
@@ -251,7 +253,7 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
      * <ul>
      *   <li><b>Overall query execution latency</b> - Always recorded (end-to-end time at REST layer)</li>
      *   <li><b>Shard latency MAX</b> - Max total shard processing time (collect + reduce on slowest shard, profiling required)</li>
-     *   <li><b>Collect/Reduce phase latency MAX</b> - Slowest shard (user-perceived latency, profiling required)</li>
+     *   <li><b>Collect/Reduce/Post collection phase latency MAX</b> - Slowest shard (user-perceived latency, profiling required)</li>
      *   <li><b>Collect/Reduce phase work TOTAL</b> - Sum across all shards (total CPU work, profiling required)</li>
      * </ul>
      *
@@ -284,6 +286,7 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
             // Extract and record collect and reduce phase metrics from profile results
             boolean needsPhaseMetrics = queryMetrics.collectPhaseLatencyMax != null
                 || queryMetrics.reducePhaseLatencyMax != null
+                || queryMetrics.postCollectionPhaseLatencyMax != null
                 || queryMetrics.collectPhaseCpuTimeMs != null
                 || queryMetrics.reducePhaseCpuTimeMs != null
                 || queryMetrics.shardLatencyMax != null;
@@ -291,6 +294,7 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
             if (needsPhaseMetrics && response.getProfileResults() != null && !response.getProfileResults().isEmpty()) {
                 double maxCollectTimeMillis = 0.0;
                 double maxReduceTimeMillis = 0.0;
+                double maxPostCollectionTimeMillis = 0.0;
                 double totalCollectTimeMillis = 0.0;
                 double totalReduceTimeMillis = 0.0;
                 double maxShardTotalTimeMillis = 0.0;
@@ -299,6 +303,7 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
                     // Accumulate times for all aggregators on this shard
                     double currentShardCollectTimeMillis = 0.0;
                     double currentShardReduceTimeMillis = 0.0;
+                    double currentShardPostCollectionTimeMillis = 0.0;
                     // TODO: Consolidate it with ProfileInfoMapper.extractPerShardStats()
                     if (shardResult.getAggregationProfileResults() != null) {
                         for (ProfileResult profileResult : shardResult.getAggregationProfileResults().getProfileResults()) {
@@ -309,10 +314,12 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
                                     // Extract and convert to millis immediately
                                     double collectTimeMillis = breakdown.getOrDefault("collect", 0L) / NANOS_PER_MILLI;
                                     double reduceTimeMillis = breakdown.getOrDefault("reduce", 0L) / NANOS_PER_MILLI;
+                                    double postCollectionTimeMillis = breakdown.getOrDefault("post_collection", 0L) / NANOS_PER_MILLI;
 
                                     // Accumulate times for this shard
                                     currentShardCollectTimeMillis += collectTimeMillis;
                                     currentShardReduceTimeMillis += reduceTimeMillis;
+                                    currentShardPostCollectionTimeMillis += postCollectionTimeMillis;
                                 }
                             }
                         }
@@ -321,6 +328,7 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
                     // Track MAX across shards (user-perceived latency - slowest shard)
                     maxCollectTimeMillis = Math.max(maxCollectTimeMillis, currentShardCollectTimeMillis);
                     maxReduceTimeMillis = Math.max(maxReduceTimeMillis, currentShardReduceTimeMillis);
+                    maxPostCollectionTimeMillis = Math.max(maxPostCollectionTimeMillis, currentShardPostCollectionTimeMillis);
                     maxShardTotalTimeMillis = Math.max(
                         maxShardTotalTimeMillis,
                         currentShardCollectTimeMillis + currentShardReduceTimeMillis
@@ -344,6 +352,11 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
                 // Record reduce phase latency MAX
                 if (queryMetrics.reducePhaseLatencyMax != null && maxReduceTimeMillis > 0) {
                     TSDBMetrics.recordHistogram(queryMetrics.reducePhaseLatencyMax, maxReduceTimeMillis);
+                }
+
+                // Record post collection phase latency MAX
+                if (queryMetrics.postCollectionPhaseLatencyMax != null && maxPostCollectionTimeMillis > 0) {
+                    TSDBMetrics.recordHistogram(queryMetrics.postCollectionPhaseLatencyMax, maxPostCollectionTimeMillis);
                 }
 
                 // Record collect phase CPU time (sum across all shards)

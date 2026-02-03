@@ -75,7 +75,8 @@ public class SizeTieredCompaction implements Compaction {
      *   </li>
      * </ol>
      *
-     * @param indexes list of closed chunk indexes to consider for compaction, typically sorted by time
+     * @param indexes list of closed chunk indexes sorted in ascending order by max timestamp
+     *                (as returned by {@link org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager#getClosedChunkIndexes})
      * @return list of indexes to compact together, or empty list if no suitable group is found
      */
     @Override
@@ -84,6 +85,7 @@ public class SizeTieredCompaction implements Compaction {
             return Collections.emptyList();
         }
 
+        // The list is sorted by max timestamp, so getLast() returns the newest block
         var latestBlockMin = Time.toTimestamp(indexes.getLast().getMinTime(), resolution);
 
         for (int i = 1; i < ranges.length; i++) {
@@ -183,8 +185,8 @@ public class SizeTieredCompaction implements Compaction {
             src.applyLiveSeriesMetaData(liveSeriesMetadata::put);
         }
 
-        // Force merge and commit to delete unused file
-        dest.forceMerge();
+        // Force merge to single segment and commit to delete unused file
+        dest.forceMerge(1);
         dest.commitWithMetadata(liveSeriesMetadata);
         dest.getDirectoryReaderManager().maybeRefreshBlocking();
         dest.deleteUnusedFiles();

@@ -69,6 +69,7 @@ public abstract class TimeSeriesAggregatorTestCase extends AggregatorTestCase {
             "test_index",
             Settings.builder()
                 .put("index.tsdb_engine.enabled", true)
+                .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
                 .put("index.queries.cache.enabled", false)
                 .put("index.requests.cache.enable", false)
                 .build()

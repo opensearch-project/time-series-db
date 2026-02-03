@@ -78,6 +78,7 @@ public abstract class TSDBRecoveryITBase extends TimeSeriesTestFramework {
         HashMap<String, Object> settings = new HashMap<>();
         settings.put("index.tsdb_engine.enabled", true);
         settings.put("index.tsdb_engine.labels.storage_type", "binary");
+        settings.put("index.tsdb_engine.lang.m3.default_step_size", "10s");
         settings.put("index.tsdb_engine.ooo_cutoff", "1d");
         settings.put("index.store.factory", "tsdb_store");
         settings.put("index.refresh_interval", "1s");

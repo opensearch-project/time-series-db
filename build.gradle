@@ -341,6 +341,9 @@ dependencies {
     implementation "${opensearch_group}.plugin:store-subdirectory:${opensearch_version}"
     implementation 'com.google.re2j:re2j:1.7'
 
+    // JOL (Java Object Layout) for memory layout testing
+    testImplementation 'org.openjdk.jol:jol-core:0.17'
+
     // Jackson dependencies for YAML and JSON processing in test framework
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     testImplementation 'com.fasterxml.jackson.core:jackson-annotations:2.20'

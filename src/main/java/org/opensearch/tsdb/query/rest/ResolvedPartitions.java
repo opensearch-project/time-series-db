@@ -7,9 +7,6 @@
  */
 package org.opensearch.tsdb.query.rest;
 
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.tsdb.query.federation.FederationMetadata;
-
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,6 +17,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
+
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.tsdb.query.federation.FederationMetadata;
 
 /**
  * Represents resolved partitions for a federated M3QL query.
@@ -222,7 +222,7 @@ public class ResolvedPartitions implements FederationMetadata {
     /**
      * Gets all unique partition IDs across all partition windows.
      *
-     * @return list of unique partition IDs
+     * @return list of unique partition IDs in "cluster:index" format
      */
     public List<String> getAllPartitionIds() {
         Set<String> partitionIds = new HashSet<>();
@@ -232,6 +232,29 @@ public class ResolvedPartitions implements FederationMetadata {
             }
         }
         return new ArrayList<>(partitionIds);
+    }
+
+    /**
+     * Gets all partition ids for constructing the SearchRequest.
+     *
+     * <p>Normalizes partition IDs for querying:
+     * <ul>
+     *   <li>"cluster:index" - Remote cluster, preserved for CCS</li>
+     *   <li>":index" - Local cluster notation keep as is</li>
+     *   <li>"index" - Local index named "index", preserved</li>
+     * </ul>
+     *
+     * @return list of unique partition ids suitable for SearchRequest
+     */
+    public List<String> getPartitionIds() {
+        Set<String> normalized = new HashSet<>();
+        for (ResolvedPartition partition : partitions) {
+            for (PartitionWindow window : partition.partitionWindows()) {
+                String partitionId = window.partitionId();
+                normalized.add(partitionId);
+            }
+        }
+        return new ArrayList<>(normalized);
     }
 
     /**

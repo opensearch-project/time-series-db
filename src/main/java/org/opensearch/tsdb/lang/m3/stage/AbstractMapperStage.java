@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.lang.m3.stage;
 
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
@@ -70,7 +71,7 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries series : input) {
-            List<Sample> originalSamples = series.getSamples();
+            SampleList originalSamples = series.getSamples();
             List<Sample> mappedSamples = new ArrayList<>(originalSamples.size());
 
             // Apply the mapping function to each sample

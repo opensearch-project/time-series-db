@@ -75,7 +75,7 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
         );
 
         // Verify: Should fill missing values with last non-null value
-        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples());
+        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples().toList());
     }
 
     /**
@@ -114,7 +114,7 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
         );
 
         // Verify: Should fill missing values with last non-null value within interval
-        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples());
+        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples().toList());
     }
 
     /**
@@ -144,7 +144,7 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
             // 1200 missing - can't fill
             new FloatSample(1300L, 40.0)
         );
-        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples());
+        TestUtils.assertSamplesEqual("Filled samples do not match expected", expectedSamples, result.getFirst().getSamples().toList());
     }
 
     /**
@@ -168,8 +168,8 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
 
         // Verify: Should return unchanged data
         assertEquals(1, result.size());
-        List<Sample> outputSamples = result.getFirst().getSamples();
-        TestUtils.assertSamplesEqual("Filled samples do not match expected", inputSeries.getSamples(), outputSamples);
+        List<Sample> outputSamples = result.getFirst().getSamples().toList();
+        TestUtils.assertSamplesEqual("Filled samples do not match expected", inputSeries.getSamples().toList(), outputSamples);
     }
 
     /**
@@ -196,7 +196,7 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
 
         // Verify: Should return empty (can't fill without any reference values)
         assertEquals(1, result.size());
-        List<Sample> outputSamples = result.get(0).getSamples();
+        List<Sample> outputSamples = result.get(0).getSamples().toList();
         assertEquals(0, outputSamples.size());
     }
 

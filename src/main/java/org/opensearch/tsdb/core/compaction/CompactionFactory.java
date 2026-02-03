@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit;
  * This factory determines the appropriate compaction strategy to use for an index
  * based on its configuration. Currently supported strategies include:
  * <ul>
- *   <li> SizeTieredCompaction - Size-tiered compaction with configurable time ranges</li>
+ *   <li>SizeTieredCompaction - Size-tiered compaction with configurable time ranges</li>
+ *   <li>ForceMergeCompaction - In-place force merge optimization for multi-segment indexes</li>
  *   <li>NoopCompaction - Default strategy that performs no compaction</li>
  * </ul>
  */
@@ -32,6 +33,7 @@ public class CompactionFactory {
 
     public enum CompactionType {
         SizeTieredCompaction("SizeTieredCompaction"),
+        ForceMergeCompaction("ForceMergeCompaction"),
         Noop("Noop"),
         Invalid("Invalid");
 
@@ -44,6 +46,7 @@ public class CompactionFactory {
         public static CompactionType from(String compactionType) {
             return switch (compactionType) {
                 case "SizeTieredCompaction" -> CompactionType.SizeTieredCompaction;
+                case "ForceMergeCompaction" -> CompactionType.ForceMergeCompaction;
                 case "Noop" -> CompactionType.Noop;
                 default -> CompactionType.Invalid;
             };
@@ -66,14 +69,16 @@ public class CompactionFactory {
     }
 
     private static Compaction getCompactionFor(IndexSettings indexSettings) {
-        var compactionType = CompactionType.from(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.get(indexSettings.getSettings()));
+        CompactionType compactionType = CompactionType.from(TSDBPlugin.TSDB_ENGINE_COMPACTION_TYPE.get(indexSettings.getSettings()));
+
+        // Read common settings used by multiple compaction types
+        long frequency = TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.get(indexSettings.getSettings()).getMillis();
+        TimeUnit resolution = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(indexSettings.getSettings()));
 
         switch (compactionType) {
             case SizeTieredCompaction:
-                var retentionTime = TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.get(indexSettings.getSettings()).getHours();
-                var frequency = TSDBPlugin.TSDB_ENGINE_COMPACTION_FREQUENCY.get(indexSettings.getSettings()).getMillis();
-                var ttl = retentionTime != -1 ? retentionTime : Long.MAX_VALUE;
-                var resolution = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(indexSettings.getSettings()));
+                long retentionTime = TSDBPlugin.TSDB_ENGINE_RETENTION_TIME.get(indexSettings.getSettings()).getHours();
+                long ttl = retentionTime != -1 ? retentionTime : Long.MAX_VALUE;
 
                 // Cap the max index size as minimum of 1/10 of TTL or 31D(744H).
                 List<Integer> tiers = new ArrayList<>();
@@ -88,6 +93,21 @@ public class CompactionFactory {
                 }
 
                 return new SizeTieredCompaction(tiers.stream().map(Duration::ofHours).toArray(Duration[]::new), frequency, resolution);
+            case ForceMergeCompaction:
+                int minSegmentCount = TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MIN_SEGMENT_COUNT.get(indexSettings.getSettings());
+                int maxSegmentsAfterForceMerge = TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE.get(
+                    indexSettings.getSettings()
+                );
+                long oooCutoffWindow = TSDBPlugin.TSDB_ENGINE_OOO_CUTOFF.get(indexSettings.getSettings()).getMillis();
+                long blockDuration = TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.get(indexSettings.getSettings()).getMillis();
+                return new ForceMergeCompaction(
+                    frequency,
+                    minSegmentCount,
+                    maxSegmentsAfterForceMerge,
+                    oooCutoffWindow,
+                    blockDuration,
+                    resolution
+                );
             case Noop:
                 return new NoopCompaction();
             default:

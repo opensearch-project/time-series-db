@@ -10,6 +10,7 @@ package org.opensearch.tsdb.query.utils;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,7 +30,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
 
         List<Sample> samples2 = Arrays.asList(new FloatSample(1500L, 15.0), new FloatSample(2500L, 25.0), new FloatSample(3500L, 35.0));
 
-        List<Sample> result = merger.merge(samples1, samples2, true);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), true).toList();
 
         assertEquals("Should have 6 samples", 6, result.size());
         assertThat("First sample should be from samples1", result.get(0).getTimestamp(), equalTo(1000L));
@@ -47,7 +48,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
             new FloatSample(2000L, 25.0)  // Duplicate timestamp
         );
 
-        List<Sample> result = merger.merge(samples1, samples2, true);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), true).toList();
 
         assertEquals("Should have 2 samples (duplicates merged)", 2, result.size());
         assertThat("First sample should be from samples2 (newer)", result.get(0).getTimestamp(), equalTo(1000L));
@@ -66,7 +67,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
             new FloatSample(2000L, 25.0)  // Duplicate timestamp
         );
 
-        List<Sample> result = merger.merge(samples1, samples2, true);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), true).toList();
 
         assertEquals("Should have 2 samples (duplicates merged)", 2, result.size());
         assertThat("First sample should be merged", result.get(0).getTimestamp(), equalTo(1000L));
@@ -82,7 +83,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
 
         List<Sample> samples2 = Arrays.asList(new FloatSample(2500L, 25.0), new FloatSample(1500L, 15.0), new FloatSample(3500L, 35.0));
 
-        List<Sample> result = merger.merge(samples1, samples2, false);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), false).toList();
 
         assertEquals("Should have 6 samples", 6, result.size());
         // Verify result is sorted
@@ -99,16 +100,16 @@ public class SampleMergerTests extends OpenSearchTestCase {
         List<Sample> samples = Arrays.asList(new FloatSample(1000L, 10.0));
 
         // Both empty
-        List<Sample> result1 = merger.merge(empty1, empty2, true);
+        List<Sample> result1 = merger.merge(SampleList.fromList(empty1), SampleList.fromList(empty2), true).toList();
         assertTrue("Empty merge should return empty list", result1.isEmpty());
 
         // First empty
-        List<Sample> result2 = merger.merge(empty1, samples, true);
+        List<Sample> result2 = merger.merge(SampleList.fromList(empty1), SampleList.fromList(samples), true).toList();
         assertEquals("Should return second list", samples.size(), result2.size());
         assertThat("Should return second list", result2.get(0).getTimestamp(), equalTo(1000L));
 
         // Second empty
-        List<Sample> result3 = merger.merge(samples, empty2, true);
+        List<Sample> result3 = merger.merge(SampleList.fromList(samples), SampleList.fromList(empty2), true).toList();
         assertEquals("Should return first list", samples.size(), result3.size());
         assertThat("Should return first list", result3.get(0).getTimestamp(), equalTo(1000L));
     }
@@ -120,7 +121,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
         List<Sample> samples1 = Arrays.asList(new FloatSample(1000L, 10.0));
         List<Sample> samples2 = Arrays.asList(new FloatSample(1000L, 20.0));
 
-        List<Sample> result = merger.merge(samples1, samples2, true);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), true).toList();
 
         assertEquals("Should have 1 sample (duplicate merged)", 1, result.size());
         assertThat("Should use ANY_WINS policy", ((FloatSample) result.get(0)).getValue(), equalTo(20.0));
@@ -133,7 +134,7 @@ public class SampleMergerTests extends OpenSearchTestCase {
         List<Sample> samples1 = Arrays.asList(new FloatSample(1000L, 10.0));
         List<Sample> samples2 = Arrays.asList(new FloatSample(1000L, 20.0));
 
-        List<Sample> result = merger.merge(samples1, samples2, true);
+        List<Sample> result = merger.merge(SampleList.fromList(samples1), SampleList.fromList(samples2), true).toList();
 
         assertEquals("Should have 1 sample", 1, result.size());
         // Should sum the values since both are FloatSample

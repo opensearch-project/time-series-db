@@ -53,7 +53,7 @@ public class DerivativeStageTests extends AbstractWireSerializingTestCase<Deriva
             new FloatSample(3000L, -10.0), // 20 - 30
             new FloatSample(4000L, 30.0) // 50 - 20
         );
-        assertSamplesEqual("Basic derivative", expectedSamples, result.get(0).getSamples());
+        assertSamplesEqual("Basic derivative", expectedSamples, result.get(0).getSamples().toList());
     }
 
     public void testProcessWithNaNValues() {

@@ -18,6 +18,7 @@ import org.opensearch.search.aggregations.bucket.InternalSingleBucketAggregation
 import org.opensearch.search.aggregations.pipeline.SiblingPipelineAggregator;
 import org.opensearch.tsdb.query.stage.BinaryPipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStage;
+import org.opensearch.tsdb.query.stage.PipelineStageExecutor;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 import org.opensearch.tsdb.query.utils.AggregationConstants;
@@ -423,11 +424,21 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
                         "Referenced aggregation not found for " + binaryStage.getClass().getSimpleName() + ": " + rightRefName
                     );
                 }
-                resultTimeSeries = binaryStage.process(left, right);
+
+                resultTimeSeries = PipelineStageExecutor.executeBinaryStage(
+                    binaryStage,
+                    left,
+                    right,
+                    true // coordinator-level execution
+                );
             } else {
                 // Must be UnaryPipelineStage - all stages are validated in constructor
                 UnaryPipelineStage unaryStage = (UnaryPipelineStage) stage;
-                resultTimeSeries = unaryStage.process(resultTimeSeries);
+                resultTimeSeries = PipelineStageExecutor.executeUnaryStage(
+                    unaryStage,
+                    resultTimeSeries,
+                    true // coordinator-level execution
+                );
             }
         }
 

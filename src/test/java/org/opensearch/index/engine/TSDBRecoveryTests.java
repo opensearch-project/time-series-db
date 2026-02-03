@@ -108,6 +108,7 @@ public class TSDBRecoveryTests extends OpenSearchIndexLevelReplicationTestCase {
         // Initialize default TSDB settings
         defaultTSDBSettings = Settings.builder()
             .put("index.tsdb_engine.enabled", true)
+            .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
             .put("index.store.factory", "tsdb_store")
             .put(IndexSettings.INDEX_TRANSLOG_READ_FORWARD_SETTING.getKey(), true)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)

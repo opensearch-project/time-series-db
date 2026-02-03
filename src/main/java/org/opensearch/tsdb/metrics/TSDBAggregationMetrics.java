@@ -57,6 +57,15 @@ public class TSDBAggregationMetrics {
     /** Histogram for number of series returned per query */
     public Histogram seriesTotal;
 
+    /** Histogram for circuit breaker bytes tracked per aggregation request */
+    public Histogram circuitBreakerBytes;
+
+    /** Counter for circuit breaker trips (when memory limit exceeded) */
+    public Counter circuitBreakerTrips;
+
+    /** Histogram for pipeline stage execution latency */
+    public Histogram pipelineStageLatency;
+
     /**
      * Initialize aggregation metrics. Called by TSDBMetrics.initialize().
      */
@@ -131,6 +140,21 @@ public class TSDBAggregationMetrics {
             TSDBMetricsConstants.AGGREGATION_SERIES_TOTAL_DESC,
             TSDBMetricsConstants.UNIT_COUNT
         );
+        circuitBreakerBytes = registry.createHistogram(
+            TSDBMetricsConstants.AGGREGATION_CIRCUIT_BREAKER_BYTES,
+            TSDBMetricsConstants.AGGREGATION_CIRCUIT_BREAKER_BYTES_DESC,
+            TSDBMetricsConstants.UNIT_BYTES
+        );
+        circuitBreakerTrips = registry.createCounter(
+            TSDBMetricsConstants.AGGREGATION_CIRCUIT_BREAKER_TRIPS_TOTAL,
+            TSDBMetricsConstants.AGGREGATION_CIRCUIT_BREAKER_TRIPS_TOTAL_DESC,
+            TSDBMetricsConstants.UNIT_COUNT
+        );
+        pipelineStageLatency = registry.createHistogram(
+            TSDBMetricsConstants.AGGREGATION_PIPELINE_STAGE_LATENCY,
+            TSDBMetricsConstants.AGGREGATION_PIPELINE_STAGE_LATENCY_DESC,
+            TSDBMetricsConstants.UNIT_MILLISECONDS
+        );
     }
 
     /**
@@ -151,5 +175,8 @@ public class TSDBAggregationMetrics {
         chunksForDocErrors = null;
         resultsTotal = null;
         seriesTotal = null;
+        circuitBreakerBytes = null;
+        circuitBreakerTrips = null;
+        pipelineStageLatency = null;
     }
 }

@@ -601,6 +601,7 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
             null,
             null,
             null,
+            null,
             null
         );
 
@@ -640,10 +641,12 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
         TSDBMetrics.initialize(mockRegistry);
 
         // Create QueryMetrics with all histograms
+        Histogram mockPostCollectionPhaseLatencyMax = mock(Histogram.class);
         PromMatrixResponseListener.QueryMetrics queryMetrics = new PromMatrixResponseListener.QueryMetrics(
             mockExecutionLatency,
             mockCollectPhaseLatencyMax,
             mockReducePhaseLatencyMax,
+            mockPostCollectionPhaseLatencyMax,
             mockCollectPhaseCpuTime,
             mockReducePhaseCpuTime,
             mockShardLatencyMax
@@ -657,8 +660,10 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
         SearchResponse searchResponse = createSearchResponseWithProfile(
             50_000_000L,  // 50ms collect time for shard 1
             30_000_000L,  // 30ms reduce time for shard 1
+            25_000_000L,  // 25ms post_collection time for shard 1
             40_000_000L,  // 40ms collect time for shard 2
-            20_000_000L   // 20ms reduce time for shard 2
+            20_000_000L,  // 20ms reduce time for shard 2
+            15_000_000L   // 15ms post_collection time for shard 2
         );
 
         // Act - trigger metrics recording via onResponse
@@ -672,6 +677,9 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
 
         // Max reduce phase latency should be 30ms (max of 30ms and 20ms)
         verify(mockReducePhaseLatencyMax, times(1)).record(doubleThat(value -> Math.abs(value - 30.0) < 0.001), any(Tags.class));
+
+        // Max post collection phase latency should be 25ms (max of 25ms and 15ms)
+        verify(mockPostCollectionPhaseLatencyMax, times(1)).record(doubleThat(value -> Math.abs(value - 25.0) < 0.001), any(Tags.class));
 
         // Total collect phase CPU time should be 90ms (50ms + 40ms)
         verify(mockCollectPhaseCpuTime, times(1)).record(doubleThat(value -> Math.abs(value - 90.0) < 0.001), any(Tags.class));
@@ -704,6 +712,7 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
         // Create QueryMetrics with failing histogram
         PromMatrixResponseListener.QueryMetrics queryMetrics = new PromMatrixResponseListener.QueryMetrics(
             mockExecutionLatency,
+            null,
             null,
             null,
             null,
@@ -752,6 +761,7 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
             null,
             mockCollectPhaseLatencyMax,
             mockReducePhaseLatencyMax,
+            null,
             mockCollectPhaseCpuTime,
             mockReducePhaseCpuTime,
             mockShardLatencyMax
@@ -802,24 +812,28 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
     private SearchResponse createSearchResponseWithProfile(
         long shard1CollectNanos,
         long shard1ReduceNanos,
+        long shard1PostCollectionNanos,
         long shard2CollectNanos,
-        long shard2ReduceNanos
+        long shard2ReduceNanos,
+        long shard2PostCollectionNanos
     ) {
         // Create profile results for each shard
         Map<String, Long> breakdown1 = new HashMap<>();
         breakdown1.put("collect", shard1CollectNanos);
         breakdown1.put("reduce", shard1ReduceNanos);
+        breakdown1.put("post_collection", shard1PostCollectionNanos);
 
         Map<String, Long> breakdown2 = new HashMap<>();
         breakdown2.put("collect", shard2CollectNanos);
         breakdown2.put("reduce", shard2ReduceNanos);
+        breakdown2.put("post_collection", shard2PostCollectionNanos);
 
         ProfileResult profileResult1 = new ProfileResult(
             TimeSeriesUnfoldAggregator.class.getSimpleName(),
             "testCase",
             breakdown1,
             Collections.emptyMap(),
-            shard1CollectNanos + shard1ReduceNanos,
+            shard1CollectNanos + shard1ReduceNanos + shard1PostCollectionNanos,
             List.of()
         );
 
@@ -828,7 +842,7 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
             "testCase",
             breakdown2,
             Collections.emptyMap(),
-            shard2CollectNanos + shard2ReduceNanos,
+            shard2CollectNanos + shard2ReduceNanos + shard2PostCollectionNanos,
             List.of()
         );
 

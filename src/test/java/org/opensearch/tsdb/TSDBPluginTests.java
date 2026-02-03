@@ -7,13 +7,21 @@
  */
 package org.opensearch.tsdb;
 
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.store.Directory;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.env.Environment;
 import org.opensearch.env.ShardLock;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.shard.ShardPath;
@@ -22,7 +30,9 @@ import org.opensearch.plugins.IndexStorePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.rest.RestHandler;
 import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.test.DummyShardLock;
+import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
@@ -30,17 +40,13 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
 
-import java.nio.file.Path;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for TSDBPlugin.
@@ -71,7 +77,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<Setting<?>> settings = plugin.getSettings();
 
         assertNotNull("Settings list should not be null", settings);
-        assertThat("Should have 18 settings", settings, hasSize(18));
+        assertThat("Should have 24 settings", settings, hasSize(24));
 
         // Verify TSDB_ENGINE_ENABLED is present
         assertTrue("Should contain TSDB_ENGINE_ENABLED setting", settings.contains(TSDBPlugin.TSDB_ENGINE_ENABLED));
@@ -115,6 +121,23 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         assertTrue(
             "Should contain TSDB_ENGINE_MAX_TRANSLOG_READERS_TO_CLOSE_PERCENTAGE setting",
             settings.contains(TSDBPlugin.TSDB_ENGINE_MAX_TRANSLOG_READERS_TO_CLOSE_PERCENTAGE)
+        );
+        assertTrue("Should contain TSDB_ENGINE_DEFAULT_STEP setting", settings.contains(TSDBPlugin.TSDB_ENGINE_DEFAULT_STEP));
+        assertTrue(
+            "Should contain TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL setting",
+            settings.contains(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL)
+        );
+        assertTrue(
+            "Should contain TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE setting",
+            settings.contains(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE)
+        );
+        assertTrue(
+            "Should contain TSDB_ENGINE_FORCE_MERGE_MIN_SEGMENT_COUNT setting",
+            settings.contains(TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MIN_SEGMENT_COUNT)
+        );
+        assertTrue(
+            "Should contain TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE setting",
+            settings.contains(TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE)
         );
     }
 
@@ -268,13 +291,50 @@ public class TSDBPluginTests extends OpenSearchTestCase {
             plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
         );
 
-        List<RestHandler> restHandlers = plugin.getRestHandlers(
+        // Create plugin and initialize clusterService via createComponents
+        TSDBPlugin testPlugin = new TSDBPlugin();
+
+        // Mock ClusterService with necessary settings including TSDBPlugin settings
+        ClusterService mockClusterService = mock(ClusterService.class);
+
+        // Include both built-in and TSDB plugin cluster settings
+        java.util.Set<Setting<?>> allSettings = new java.util.HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        allSettings.add(TSDBPlugin.TSDB_ENGINE_WILDCARD_QUERY_CACHE_MAX_SIZE);
+        allSettings.add(TSDBPlugin.TSDB_ENGINE_WILDCARD_QUERY_CACHE_EXPIRE_AFTER);
+        allSettings.add(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL);
+        allSettings.add(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE);
+
+        ClusterSettings mockClusterSettings = new ClusterSettings(Settings.EMPTY, allSettings);
+        when(mockClusterService.getClusterSettings()).thenReturn(mockClusterSettings);
+        when(mockClusterService.getSettings()).thenReturn(Settings.EMPTY);
+
+        // Mock Environment with settings
+        Environment mockEnvironment = mock(Environment.class);
+        when(mockEnvironment.settings()).thenReturn(Settings.EMPTY);
+
+        testPlugin.createComponents(
+            null, // Client
+            mockClusterService, // ClusterService - will be stored
+            null, // ThreadPool
+            null, // ResourceWatcherService
+            null, // ScriptService
+            null, // NamedXContentRegistry
+            mockEnvironment, // Environment
+            null, // NodeEnvironment
+            null, // NamedWriteableRegistry
+            mock(IndexNameExpressionResolver.class), // IndexNameExpressionResolver
+            null, // RepositoriesService
+            null, // Tracer
+            null  // MetricsRegistry
+        );
+
+        List<RestHandler> restHandlers = testPlugin.getRestHandlers(
             org.opensearch.common.settings.Settings.EMPTY,
             null, // RestController not needed for this test
             clusterSettings,
             null, // IndexScopedSettings not needed
             null, // SettingsFilter not needed
-            null, // IndexNameExpressionResolver not needed
+            mock(IndexNameExpressionResolver.class), // Needed for RestM3QLAction constructor
             null  // nodesInCluster not needed
         );
 
@@ -428,6 +488,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
     public void testGetEngineFactoryWhenEnabled() {
         Settings settings = Settings.builder()
             .put("index.tsdb_engine.enabled", true)
+            .put("index.tsdb_engine.lang.m3.default_step_size", "10s")
             .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
             .build();
 
@@ -478,5 +539,23 @@ public class TSDBPluginTests extends OpenSearchTestCase {
 
     public void testImplementsIndexStorePlugin() {
         assertThat("Should implement IndexStorePlugin", plugin, instanceOf(IndexStorePlugin.class));
+    }
+
+    // ========== Fetch Sub-Phase Tests ==========
+
+    public void testGetFetchSubPhases() {
+        List<FetchSubPhase> fetchSubPhases = plugin.getFetchSubPhases(null);
+
+        assertNotNull("Fetch sub-phases list should not be null", fetchSubPhases);
+        assertThat("Should have 1 fetch sub-phase", fetchSubPhases, hasSize(1));
+        assertThat("Fetch sub-phase should be LabelsFetchSubPhase", fetchSubPhases.get(0), instanceOf(LabelsFetchSubPhase.class));
+    }
+
+    public void testGetSearchExts() {
+        List<SearchPlugin.SearchExtSpec<?>> searchExts = plugin.getSearchExts();
+
+        assertNotNull("Search exts list should not be null", searchExts);
+        assertThat("Should have 1 search ext", searchExts, hasSize(1));
+        assertThat("Search ext name should be tsdb_labels", searchExts.get(0).getName().getPreferredName(), equalTo("tsdb_labels"));
     }
 }

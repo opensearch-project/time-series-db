@@ -11,6 +11,7 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 
@@ -679,5 +680,90 @@ public class ByteLabelsTests extends OpenSearchTestCase {
 
         List<String> result = labels.findCommonNamesWithSortedList(sortedKeys);
         assertTrue("No matches should return empty list", result.isEmpty());
+    }
+
+    /**
+     * Validate that ESTIMATED_MEMORY_OVERHEAD constant matches actual JVM object layout.
+     * This test uses JOL (Java Object Layout) to calculate the actual memory overhead
+     * and compares it with the hardcoded constant.
+     *
+     * <p>If this test fails, it means:
+     * <ul>
+     *   <li>Fields were added/removed from ByteLabels without updating ESTIMATED_MEMORY_OVERHEAD</li>
+     *   <li>The JVM's object layout has changed (e.g., different JVM vendor/version)</li>
+     * </ul>
+     *
+     * <p><strong>To fix:</strong> Update ByteLabels.ESTIMATED_MEMORY_OVERHEAD to the value shown
+     * in the test failure message.
+     */
+    public void testEstimatedMemoryOverheadIsAccurate() {
+        // Use JOL (Java Object Layout) to get actual memory layout
+        org.openjdk.jol.info.ClassLayout byteLabelsLayout;
+        org.openjdk.jol.info.ClassLayout byteArrayLayout;
+
+        try {
+            // Create an empty ByteLabels instance
+            ByteLabels empty = ByteLabels.fromStrings();
+
+            // Get the layout of the ByteLabels object
+            byteLabelsLayout = org.openjdk.jol.info.ClassLayout.parseInstance(empty);
+
+            // Get the layout of the internal byte array
+            byte[] dataArray = empty.getDataForTesting();
+            byteArrayLayout = org.openjdk.jol.info.ClassLayout.parseInstance(dataArray);
+
+            // Calculate actual overhead:
+            // - ByteLabels object size (includes object header + fields)
+            // - byte[] array header (does NOT include array data)
+            long actualOverhead = byteLabelsLayout.instanceSize() + byteArrayLayout.instanceSize();
+
+            long constantOverhead = ByteLabels.getEstimatedMemoryOverhead();
+
+            // Allow small variance for JVM-specific differences (alignment, compressed oops, etc.)
+            // Typically the difference should be 0, but allow up to 8 bytes for padding variations
+            long allowedDelta = 8;
+            long difference = Math.abs(actualOverhead - constantOverhead);
+
+            if (difference > allowedDelta) {
+                fail(
+                    String.format(
+                        Locale.ROOT,
+                        "ESTIMATED_MEMORY_OVERHEAD constant (%d bytes) does not match actual JVM layout (%d bytes)!\n"
+                            + "\n"
+                            + "ByteLabels object layout:\n%s\n"
+                            + "byte[] array layout:\n%s\n"
+                            + "\n"
+                            + "ACTION REQUIRED: Update ByteLabels.ESTIMATED_MEMORY_OVERHEAD to %d\n"
+                            + "\n"
+                            + "This usually happens when:\n"
+                            + "  1. Fields were added/removed from ByteLabels\n"
+                            + "  2. JVM version or vendor changed\n"
+                            + "  3. JVM flags changed (e.g., -XX:+UseCompressedOops)",
+                        constantOverhead,
+                        actualOverhead,
+                        byteLabelsLayout.toPrintable(),
+                        byteArrayLayout.toPrintable(),
+                        actualOverhead
+                    )
+                );
+            }
+
+            // Test passes - constant is accurate!
+            // Log the breakdown for documentation
+            logger.info(
+                "ByteLabels memory overhead validation passed:\n"
+                    + "  ESTIMATED_MEMORY_OVERHEAD constant: {} bytes\n"
+                    + "  Actual JVM layout: {} bytes\n"
+                    + "  ByteLabels object: {} bytes\n"
+                    + "  byte[] array header: {} bytes",
+                constantOverhead,
+                actualOverhead,
+                byteLabelsLayout.instanceSize(),
+                byteArrayLayout.instanceSize()
+            );
+
+        } catch (Exception e) {
+            fail("Failed to validate memory overhead using JOL: " + e.getMessage());
+        }
     }
 }

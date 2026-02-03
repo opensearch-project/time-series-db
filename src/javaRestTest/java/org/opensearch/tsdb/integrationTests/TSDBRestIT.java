@@ -36,6 +36,7 @@ public class TSDBRestIT extends RestTimeSeriesTestFramework {
         index.refresh_interval: "1s"
         index.tsdb_engine.enabled: true
         index.tsdb_engine.labels.storage_type: sorted_set
+        index.tsdb_engine.lang.m3.default_step_size: "10s"
         index.tsdb_engine.ooo_cutoff: "1d"
         index.queries.cache.enabled: false
         index.requests.cache.enable: false

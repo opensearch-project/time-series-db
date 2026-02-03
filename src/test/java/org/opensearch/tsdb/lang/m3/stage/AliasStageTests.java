@@ -44,7 +44,7 @@ public class AliasStageTests extends AbstractWireSerializingTestCase<AliasStage>
 
         assertEquals(1, result.size());
         assertEquals("new_series_name", result.getFirst().getAlias());
-        assertEquals(samples, result.getFirst().getSamples());
+        assertEquals(samples, result.getFirst().getSamples().toList());
         assertEquals(labels, result.getFirst().getLabels());
     }
 
@@ -64,7 +64,7 @@ public class AliasStageTests extends AbstractWireSerializingTestCase<AliasStage>
 
         assertEquals(1, result.size());
         assertEquals("server_web01_job_nginx", result.getFirst().getAlias());
-        assertEquals(samples, result.getFirst().getSamples());
+        assertEquals(samples, result.getFirst().getSamples().toList());
         assertEquals(labels, result.getFirst().getLabels());
     }
 
@@ -254,8 +254,8 @@ public class AliasStageTests extends AbstractWireSerializingTestCase<AliasStage>
         // Verify original data is preserved
         assertEquals(labels1, result.get(0).getLabels());
         assertEquals(labels2, result.get(1).getLabels());
-        assertEquals(samples1, result.get(0).getSamples());
-        assertEquals(samples2, result.get(1).getSamples());
+        assertEquals(samples1, result.get(0).getSamples().toList());
+        assertEquals(samples2, result.get(1).getSamples().toList());
     }
 
     /**
@@ -281,7 +281,7 @@ public class AliasStageTests extends AbstractWireSerializingTestCase<AliasStage>
 
         // Check original data is preserved
         assertEquals(originalTs.getLabels(), resultTs.getLabels());
-        assertEquals(originalTs.getSamples(), resultTs.getSamples());
+        assertEquals(originalTs.getSamples().toList(), resultTs.getSamples().toList());
         assertEquals(originalTs.getMinTimestamp(), resultTs.getMinTimestamp());
         assertEquals(originalTs.getMaxTimestamp(), resultTs.getMaxTimestamp());
         assertEquals(originalTs.getStep(), resultTs.getStep());

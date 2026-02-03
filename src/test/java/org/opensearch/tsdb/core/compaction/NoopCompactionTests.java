@@ -41,6 +41,6 @@ public class NoopCompactionTests extends OpenSearchTestCase {
         Mockito.verify(sourceIndex1, Mockito.times(0)).copyTo(Mockito.any());
         Mockito.verify(sourceIndex2, Mockito.times(0)).copyTo(Mockito.any());
         Mockito.verify(sourceIndex3, Mockito.times(0)).copyTo(Mockito.any());
-        Mockito.verify(dest, Mockito.times(0)).forceMerge();
+        Mockito.verify(dest, Mockito.times(0)).forceMerge(Mockito.anyInt());
     }
 }

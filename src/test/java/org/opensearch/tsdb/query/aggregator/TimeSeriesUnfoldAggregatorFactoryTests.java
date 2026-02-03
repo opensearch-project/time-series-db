@@ -104,6 +104,40 @@ public class TimeSeriesUnfoldAggregatorFactoryTests extends OpenSearchTestCase {
     }
 
     /**
+     * Tests that factory properly initializes circuit breaker warning threshold with null QueryShardContext.
+     * This verifies the null-safe initialization logic that uses default value when context is not available.
+     */
+    public void testCircuitBreakerWarnThresholdWithNullContext() {
+        // Arrange - Create factory with null QueryShardContext (typical in tests)
+        List<UnaryPipelineStage> stages = List.of(new ScaleStage(1.0));
+
+        // Act - Should not throw NPE
+        TimeSeriesUnfoldAggregatorFactory factory = createFactory("null_context", stages, 1000L, 2000L, 100L);
+
+        // Assert - Factory created successfully without NPE
+        assertNotNull("Factory should be created successfully with null context", factory);
+    }
+
+    /**
+     * Tests that factory can be created with all edge case parameters.
+     */
+    public void testFactoryWithEdgeCaseParameters() {
+        // Arrange - Null stages, large timestamps, zero step
+        // Act
+        TimeSeriesUnfoldAggregatorFactory factory = createFactory(
+            "edge_case",
+            null,  // Null stages
+            Long.MIN_VALUE,  // Min timestamp
+            Long.MAX_VALUE,  // Max timestamp
+            0L  // Zero step
+        );
+
+        // Assert
+        assertNotNull("Factory should handle all edge cases", factory);
+        assertTrue("Should support CSS with null stages", factory.supportsConcurrentSegmentSearch());
+    }
+
+    /**
      * Helper method to create TimeSeriesUnfoldAggregatorFactory with minimal parameters.
      * Uses null for complex OpenSearch infrastructure components that aren't needed for basic tests.
      */

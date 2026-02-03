@@ -27,6 +27,7 @@ curl -X PUT -H 'Content-Type: application/json' http://localhost:9200/my-index -
   "settings": {
     "index.tsdb_engine.enabled":true,
     "index.tsdb_engine.labels.storage_type": "binary",
+    "index.tsdb_engine.lang.m3.default_step_size": "10s",
     "index.number_of_shards": 1,
     "index.number_of_replicas": 1,
     "index.store.factory": "tsdb_store",
@@ -67,8 +68,20 @@ curl -X PUT -H 'Content-Type: application/json' http://localhost:9200/_cluster/s
     "logger.org.opensearch.tsdb.query.rest": "DEBUG"
   }
 }'
-
 ```
+
+Configure remote index settings cache (for cross-cluster search)
+```bash
+# Cache TTL - Default: 2h, Minimum: 1h, Dynamic setting
+# Cache Size - 1000
+curl -X PUT -H 'Content-Type: application/json' http://localhost:9200/_cluster/settings --data '{
+  "persistent": {
+    "tsdb_engine.remote_index_settings.cache.ttl": "2h",
+    "tsdb_engine.remote_index_settings.cache.max_size": 1000
+  }
+}'
+```
+
 
 ## Index some metrics
 ### bulk request using flat-json format
@@ -188,6 +201,40 @@ curl -X POST -H 'Content-Type: application/json' 'http://localhost:9200/my-index
     }
   }
 }' | jq
+```
+
+### Fetch labels via _search API
+Use the `ext` section with `tsdb_labels` to fetch decoded labels from DocValues:
+```bash
+curl -X GET "localhost:9200/my-index/_search?pretty" -H 'Content-Type: application/json' -d '{
+  "ext": { "tsdb_labels": {} },
+  "query": { "term": { "labels": "method:POST" } },
+  "size": 10,
+  "_source": false
+}'
+```
+Response:
+```json
+{
+  "hits": {
+    "hits": [
+      {
+        "_index": "my-index",
+        "_score": 1.0,
+        "fields": {
+          "tsdb_labels": [
+            {
+              "__name__": "http_requests_total",
+              "handler": "/api/items",
+              "method": "POST",
+              "status": "200"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 ## Aggregations

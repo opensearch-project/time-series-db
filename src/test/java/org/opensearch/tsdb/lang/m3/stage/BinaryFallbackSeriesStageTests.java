@@ -48,7 +48,7 @@ public class BinaryFallbackSeriesStageTests extends AbstractWireSerializingTestC
 
         assertEquals(1, result.size());
         assertEquals("left", result.get(0).getLabels().get("name"));
-        assertSamplesEqual("Left series samples should match", leftSamples, result.get(0).getSamples());
+        assertSamplesEqual("Left series samples should match", leftSamples, result.get(0).getSamples().toList());
     }
 
     /**
@@ -66,7 +66,7 @@ public class BinaryFallbackSeriesStageTests extends AbstractWireSerializingTestC
 
         assertEquals(1, result.size());
         assertEquals("fallback", result.get(0).getLabels().get("name"));
-        assertSamplesEqual("Right series samples should match", rightSamples, result.get(0).getSamples());
+        assertSamplesEqual("Right series samples should match", rightSamples, result.get(0).getSamples().toList());
     }
 
     /**

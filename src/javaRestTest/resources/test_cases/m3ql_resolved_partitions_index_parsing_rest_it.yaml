@@ -1,0 +1,242 @@
+# TSDB REST Integration Test - M3QL Resolved Partitions Index Parsing
+# Tests that M3QL queries correctly parse index names from resolved_partitions with various formats
+
+test_setup:
+  name: "M3QL Resolved Partitions Index Name Parsing Tests"
+  description: "Validates that M3QL correctly parses index names from partition IDs in local and standalone formats"
+
+  index_configs:
+    # Index with 10s step size for local format testing (matches ingestion)
+    - name: "local_format_index"
+      shards: 1
+      replicas: 0
+
+    # Index with 10s step size for standalone format testing (matches ingestion)
+    - name: "standalone_format_index"
+      shards: 1
+      replicas: 0
+
+    # 40d retention index with 60s step size for large aggregation testing
+    - name: "40d"
+      shards: 1
+      replicas: 0
+      settings:
+        index.refresh_interval: "1s"
+        index.tsdb_engine.enabled: true
+        index.tsdb_engine.labels.storage_type: binary
+        index.tsdb_engine.lang.m3.default_step_size: "60s"
+        index.tsdb_engine.ooo_cutoff: "1d"
+        index.queries.cache.enabled: false
+        index.requests.cache.enable: false
+        index.translog.durability: async
+        index.translog.sync_interval: "1s"
+
+test_case:
+  name: "Index Name Parsing from Resolved Partitions Test"
+
+  # Input data: Simple counter metrics in different indices
+  input_data_list:
+    # Data in local format index (10s step size)
+    - index_name: "local_format_index"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "10s"
+      regular_metrics:
+        - labels: "__name__:local_metric,type:counter,service:local"
+          values: [200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320]
+
+    # Data in standalone format index (10s step size)
+    - index_name: "standalone_format_index"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "10s"
+      regular_metrics:
+        - labels: "__name__:standalone_metric,type:counter,service:standalone"
+          values: [300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420]
+
+    # Data in 40d retention index (60s step size matching ingestion)
+    - index_name: "40d"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "60s"  # Data ingested every 60s to match index setting
+      regular_metrics:
+        - labels: "__name__:large_step_metric,type:counter,service:large"
+          values: [400, 460, 520]  # 3 points at 0s, 60s, 120s
+
+  # M3QL queries - test index name parsing from different partition ID formats
+  queries:
+    # Test 1: Local format partition ID ":local_format_index"
+    # Should parse index name as "local_format_index" and use its 10s step size
+    # Data at 10s intervals, index setting 10s, perfect alignment
+    - name: "fetch with local format partition ID"
+      type: "m3ql"
+      query: "fetch __name__:local_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"  # 60s for shorter output
+        step: "10s"  # For validation - matches index setting
+        send_step_param: false  # Let it use index setting
+      resolved_partitions:
+        - fetch: "__name__:local_metric"
+          windows:
+            - partition: ":local_format_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:local"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "local_metric", type: "counter", service: "local"}
+            values: [200, 210, 220, 230, 240, 250]
+
+    # Test 2: Standalone format partition ID "standalone_format_index" (no colon)
+    # Should treat entire string as index name and use its 10s step size
+    # Test with 25s step override to validate consolidation
+    - name: "fetch with standalone format partition ID and 25s step override"
+      type: "m3ql"
+      query: "fetch __name__:standalone_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "25s"  # Override with 25s for consolidation testing
+      resolved_partitions:
+        - fetch: "__name__:standalone_metric"
+          windows:
+            - partition: "standalone_format_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:02:00Z"
+              partition_keys: "service:standalone"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "standalone_metric", type: "counter", service: "standalone"}
+            values: [320, 340, 370, 390, 410]
+
+    # Test 3: Mixed partition ID formats in same query
+    # Multiple partition windows with different formats (local and standalone)
+    # Using explicit 10s step parameter (matches all index settings)
+    - name: "fetch with mixed partition ID formats"
+      type: "m3ql"
+      query: "fetch __name__:local_metric | fetch __name__:standalone_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "10s"  # Explicit step matches index settings
+      resolved_partitions:
+        - fetch: "__name__:local_metric"
+          windows:
+            - partition: ":local_format_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:local"
+        - fetch: "__name__:standalone_metric"
+          windows:
+            - partition: "standalone_format_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:standalone"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "local_metric", type: "counter", service: "local"}
+            values: [200, 210, 220, 230, 240, 250]
+          - metric: {__name__: "standalone_metric", type: "counter", service: "standalone"}
+            values: [300, 310, 320, 330, 340, 350]
+
+    # Test 4: Verify that resolved_partitions takes precedence over partitions URL parameter
+    # Even if partitions param specifies different index, resolved_partitions should be used
+    - name: "fetch with resolved partitions overriding URL partitions param"
+      type: "m3ql"
+      indices: "wrong_index_should_be_ignored"  # This should be overridden
+      query: "fetch __name__:local_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "10s"  # For validation
+        send_step_param: false
+      resolved_partitions:
+        - fetch: "__name__:local_metric"
+          windows:
+            - partition: ":local_format_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:local"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "local_metric", type: "counter", service: "local"}
+            values: [200, 210, 220, 230, 240, 250]
+
+    # Test 5: Large step size (60s) from 40d retention index settings
+    # Tests that 1-minute step size correctly reads from index settings
+    # Data ingested at 60s intervals: 0s=400, 60s=460, 120s=520
+    # With 60s step from index setting: timestamps are 0s, 60s (120s excluded as endpoint)
+    # Perfect alignment - data points match query timestamps
+    - name: "fetch with 60s step from 40d index"
+      type: "m3ql"
+      query: "fetch __name__:large_step_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
+        step: "60s"  # For validation - matches index setting
+        send_step_param: false  # Let it use index setting
+      resolved_partitions:
+        - fetch: "__name__:large_step_metric"
+          windows:
+            - partition: "40d"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:02:00Z"
+              partition_keys: "service:large"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "large_step_metric", type: "counter", service: "large"}
+            values: [400, 460]  # 2 points at 0s, 60s - perfect alignment
+
+    # Test 6: Query for non-existing partition - should return 404 error
+    # Tests error handling when partition index doesn't exist
+    - name: "fetch with non-existing partition returns error"
+      type: "m3ql"
+      query: "fetch __name__:nonexistent_metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "10s"
+        send_step_param: false
+      resolved_partitions:
+        - fetch: "__name__:nonexistent_metric"
+          windows:
+            - partition: "nonexistent_index"
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:nonexistent"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=404, error={\"error\":{\"root_cause\":[{\"type\":\"index_not_found_exception\",\"reason\":\"no such index [nonexistent_index]\",\"index\":\"nonexistent_index\",\"resource.id\":\"nonexistent_index\",\"resource.type\":\"index_or_alias\",\"index_uuid\":\"_na_\"}],\"type\":\"index_not_found_exception\",\"reason\":\"no such index [nonexistent_index]\",\"index\":\"nonexistent_index\",\"resource.id\":\"nonexistent_index\",\"resource.type\":\"index_or_alias\",\"index_uuid\":\"_na_\"},\"status\":404}"
+
+    # Test 7: Query existing index but for non-existing metric - should return empty result
+    # Tests graceful handling when index exists but metric doesn't
+    - name: "fetch existing partition but non-existing metric returns empty result"
+      type: "m3ql"
+      query: "fetch __name__:this_metric_does_not_exist"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "10s"
+        send_step_param: false
+      resolved_partitions:
+        - fetch: "__name__:this_metric_does_not_exist"
+          windows:
+            - partition: "local_format_index"  # Index exists
+              start: "2025-01-01T00:00:00Z"
+              end: "2025-01-01T00:01:00Z"
+              partition_keys: "service:ghost"
+      expected:
+        status: "success"
+        data: []  # Empty result - metric not found in existing index

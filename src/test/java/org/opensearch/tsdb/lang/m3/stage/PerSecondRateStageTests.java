@@ -75,7 +75,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<TimeSeries> result = stage.process(List.of(series));
 
         assertEquals(1, result.size());
-        assertSamplesEqual("Regular increasing series", expected, result.get(0).getSamples());
+        assertSamplesEqual("Regular increasing series", expected, result.get(0).getSamples().toList());
     }
 
     /**
@@ -107,7 +107,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<TimeSeries> result = stage.process(List.of(series));
 
         assertEquals(1, result.size());
-        assertSamplesEqual("Exponentially increasing series", expected, result.get(0).getSamples());
+        assertSamplesEqual("Exponentially increasing series", expected, result.get(0).getSamples().toList());
     }
 
     /**
@@ -143,7 +143,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<TimeSeries> result = stage.process(List.of(series));
 
         assertEquals(1, result.size());
-        assertSamplesEqual("Regular increasing series with reset", expected, result.get(0).getSamples());
+        assertSamplesEqual("Regular increasing series with reset", expected, result.get(0).getSamples().toList());
     }
 
     /**
@@ -180,7 +180,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<TimeSeries> result = stage.process(List.of(series));
 
         assertEquals(1, result.size());
-        assertSamplesEqual("Regular increasing series with 20s interval", expected, result.get(0).getSamples());
+        assertSamplesEqual("Regular increasing series with 20s interval", expected, result.get(0).getSamples().toList());
     }
 
     /**
@@ -192,7 +192,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<Sample> input = new ArrayList<>();
         input.add(new FloatSample(0, 0f));
         input.add(new FloatSample(10000, 10f));
-        input.add(null);  // Missing at timestamp 20000
+        input.add(new FloatSample(20000, Double.NaN));  // Missing at timestamp 20000
         input.add(new FloatSample(30000, 20f));
         input.add(new FloatSample(40000, 30f));
 
@@ -207,7 +207,7 @@ public class PerSecondRateStageTests extends AbstractWireSerializingTestCase<Per
         List<TimeSeries> result = stage.process(List.of(series));
 
         assertEquals(1, result.size());
-        assertSamplesEqual("Mixed series with missing values", expected, result.get(0).getSamples());
+        assertSamplesEqual("Mixed series with missing values", expected, result.get(0).getSamples().toList());
     }
 
     public void testConstructorInvalidInterval() {

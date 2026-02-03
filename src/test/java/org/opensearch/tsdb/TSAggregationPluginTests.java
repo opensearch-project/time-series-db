@@ -95,7 +95,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertSamplesEqual(
                 "Scaled samples should match expected values",
                 expectedSamples,
-                series.getSamples(),
+                series.getSamples().toList(),
                 SAMPLE_COMPARISON_DELTA
             );
         });
@@ -138,7 +138,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertSamplesEqual(
                 "Summed samples should match expected values (NaN should be skipped)",
                 expectedSamples,
-                aggregatedSeries.getSamples(),
+                aggregatedSeries.getSamples().toList(),
                 SAMPLE_COMPARISON_DELTA
             );
         });
@@ -179,7 +179,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertSamplesEqual(
                 "Scaled then summed samples should match expected values",
                 expectedSamples,
-                series.getSamples(),
+                series.getSamples().toList(),
                 SAMPLE_COMPARISON_DELTA
             );
         });
@@ -279,7 +279,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertFalse("Time series list should not be empty", timeSeries.isEmpty());
 
             TimeSeries series = timeSeries.get(0);
-            List<Sample> samples = series.getSamples();
+            List<Sample> samples = series.getSamples().toList();
 
             // After deduplication with [1100, 1300) range (inclusive start, exclusive end):
             // - 1000 is filtered out (before minTimestamp)
@@ -409,7 +409,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertEquals("Should have exactly 1 merged time series", 1, seriesList.size());
 
             TimeSeries series = seriesList.get(0);
-            List<Sample> samples = series.getSamples();
+            List<Sample> samples = series.getSamples().toList();
 
             // Verify all 4 samples are present and merged correctly
             List<Sample> expectedSamples = List.of(
@@ -663,7 +663,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
 
             // Verify the scaling actually happened by checking some sample values
             if (!scaledSeries.getSamples().isEmpty()) {
-                double firstScaledValue = scaledSeries.getSamples().get(0).getValue();
+                double firstScaledValue = scaledSeries.getSamples().getValue(0);
                 // Should be approximately 10.0 * 2.0 = 20.0 (depending on stage implementation)
                 assertTrue("First scaled value should be positive", firstScaledValue > 0);
             }
@@ -705,7 +705,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             TimeSeries server1Memory = server1Series.get(0);
             assertFalse("Server1 Memory should have samples", server1Memory.getSamples().isEmpty());
 
-            List<Sample> server1Samples = server1Memory.getSamples();
+            List<Sample> server1Samples = server1Memory.getSamples().toList();
 
             // Verify transformation: 2048 MB * 1024 = 2097152 KB
             List<Sample> expectedServer1Samples = List.of(
@@ -727,7 +727,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
 
             TimeSeries server2Memory = server2Series.get(0);
 
-            List<Sample> server2Samples = server2Memory.getSamples();
+            List<Sample> server2Samples = server2Memory.getSamples().toList();
 
             // Verify transformation: 1024 MB * 1024 = 1048576 KB
             List<Sample> expectedServer2Samples = List.of(
@@ -826,7 +826,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
 
             // Verify the nested unfold processed data correctly (scaled by 2.0)
             TimeSeries nestedSeries = unfoldNested.getTimeSeries().get(0);
-            List<Sample> nestedSamples = nestedSeries.getSamples();
+            List<Sample> nestedSamples = nestedSeries.getSamples().toList();
             List<Sample> expectedNestedSamples = List.of(
                 new FloatSample(1000L, 20.0f),
                 new FloatSample(2000L, 40.0f),
@@ -847,7 +847,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             // Verify the coordinator processed the nested unfold data correctly
             // Unfold scaled by 2.0, then coordinator scaled by 0.5: 10*2*0.5=10, 20*2*0.5=20, 30*2*0.5=30
             TimeSeries coordinatorSeries = coordinatorResult.getTimeSeries().get(0);
-            List<Sample> coordinatorSamples = coordinatorSeries.getSamples();
+            List<Sample> coordinatorSamples = coordinatorSeries.getSamples().toList();
             List<Sample> expectedCoordinatorSamples = List.of(
                 new FloatSample(1000L, 10.0f),
                 new FloatSample(2000L, 20.0f),
@@ -1531,7 +1531,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             // t=2000: [100,200,300,400] -> fractionalRank=0.0*4=0.0, ceil=0, <=1 -> 100
             // t=3000: [15,25,35] -> fractionalRank=0.0*3=0.0, ceil=0, <=1 -> 15
             List<Sample> expectedP0 = List.of(new FloatSample(1000L, 10.0f), new FloatSample(2000L, 100.0f), new FloatSample(3000L, 15.0f));
-            assertSamplesEqual("0th percentile (minimum)", expectedP0, p0Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("0th percentile (minimum)", expectedP0, p0Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 30th percentile
             // t=1000: [10,20,30,40,50] -> fractionalRank=0.3*5=1.5, ceil=2, index=1 -> 20
@@ -1542,7 +1542,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 200.0f),
                 new FloatSample(3000L, 15.0f)
             );
-            assertSamplesEqual("30th percentile", expectedP30, p30Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("30th percentile", expectedP30, p30Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 50th percentile (median)
             // t=1000: [10,20,30,40,50] -> fractionalRank=0.5*5=2.5, ceil=3, index=2 -> 30
@@ -1553,7 +1553,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 200.0f),
                 new FloatSample(3000L, 25.0f)
             );
-            assertSamplesEqual("50th percentile (median)", expectedP50, p50Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("50th percentile (median)", expectedP50, p50Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 90th percentile
             // t=1000: [10,20,30,40,50] -> fractionalRank=0.9*5=4.5, ceil=5, index=4 -> 50
@@ -1564,7 +1564,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 400.0f),
                 new FloatSample(3000L, 35.0f)
             );
-            assertSamplesEqual("90th percentile", expectedP90, p90Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("90th percentile", expectedP90, p90Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 95th percentile
             // t=1000: [10,20,30,40,50] -> fractionalRank=0.95*5=4.75, ceil=5, index=4 -> 50
@@ -1575,7 +1575,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 400.0f),
                 new FloatSample(3000L, 35.0f)
             );
-            assertSamplesEqual("95th percentile", expectedP95, p95Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("95th percentile", expectedP95, p95Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 99th percentile
             // t=1000: [10,20,30,40,50] -> fractionalRank=0.99*5=4.95, ceil=5, index=4 -> 50
@@ -1586,7 +1586,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 400.0f),
                 new FloatSample(3000L, 35.0f)
             );
-            assertSamplesEqual("99th percentile", expectedP99, p99Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("99th percentile", expectedP99, p99Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
 
             // Verify 100th percentile (maximum)
             // t=1000: [10,20,30,40,50] -> fractionalRank=1.0*5=5.0, ceil=5, index=4 -> 50
@@ -1597,7 +1597,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
                 new FloatSample(2000L, 400.0f),
                 new FloatSample(3000L, 35.0f)
             );
-            assertSamplesEqual("100th percentile (maximum)", expectedP100, p100Series.getSamples(), SAMPLE_COMPARISON_DELTA);
+            assertSamplesEqual("100th percentile (maximum)", expectedP100, p100Series.getSamples().toList(), SAMPLE_COMPARISON_DELTA);
         });
     }
 
@@ -1635,7 +1635,7 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertEquals("Should have exactly 1 time series", 1, timeSeries.size());
 
             TimeSeries series = timeSeries.getFirst();
-            List<Sample> samples = series.getSamples();
+            List<Sample> samples = series.getSamples().toList();
 
             // Verify samples are scaled by 2.0
             List<Sample> expectedSamples = List.of(

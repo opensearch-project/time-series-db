@@ -53,7 +53,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new FloatSample(2000L, 16.6), // (20+40+15+6+2)/5 = 83/5 = 16.6
                 new FloatSample(3000L, 25.4)  // (30+60+25+9+3)/5 = 127/5 = 25.4
             ),
-            averaged.getSamples()
+            averaged.getSamples().toList()
         );
     }
 
@@ -74,7 +74,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new FloatSample(2000L, 30.0), // (20 + 40) / 2 = 60 / 2 = 30.0
                 new FloatSample(3000L, 45.0)  // (30 + 60) / 2 = 90 / 2 = 45.0
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3) - single series materialized to FloatSample
@@ -83,7 +83,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         assertEquals(3, service1Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4) - single series materialized to FloatSample
@@ -92,7 +92,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         assertEquals(3, service2Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -114,7 +114,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         // Values should be averaged across aggregations (materialized to FloatSample during final reduce)
         assertEquals(
             List.of(new FloatSample(1000L, 7.8), new FloatSample(2000L, 16.6), new FloatSample(3000L, 25.4)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -136,7 +136,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         // Values should remain as SumCountSample during intermediate reduce (no materialization)
         assertEquals(
             List.of(new SumCountSample(1000L, 39.0, 5), new SumCountSample(2000L, 83.0, 5), new SumCountSample(3000L, 127.0, 5)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -174,7 +174,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new FloatSample(2000L, 40.0),  // 40 / 1 (NaN skipped, not counted)
                 new FloatSample(3000L, 30.0)   // 30 / 1 (NaN skipped, not counted)
             ),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -225,7 +225,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new FloatSample(20000L, 20.0),  // 20s: only ts1, avg = 20.0/1 = 20.0
                 new FloatSample(30000L, 40.0)   // 30s: only ts2, avg = 40.0/1 = 40.0
             ),
-            averaged.getSamples()
+            averaged.getSamples().toList()
         );
     }
 
@@ -250,7 +250,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new FloatSample(20000L, 15.0),  // 20s: only ts1, avg = 15.0/1 = 15.0
                 new FloatSample(30000L, 35.0)   // 30s: only ts2, avg = 35.0/1 = 35.0
             ),
-            averaged.getSamples()
+            averaged.getSamples().toList()
         );
     }
 
@@ -287,7 +287,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
                 new SumCountSample(2000L, 83.0, 5), // (20+40+15+6+2) = 83, count = 5
                 new SumCountSample(3000L, 127.0, 5) // (30+60+25+9+3) = 127, count = 5
             ),
-            averaged.getSamples()
+            averaged.getSamples().toList()
         );
     }
 

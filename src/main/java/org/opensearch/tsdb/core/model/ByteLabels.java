@@ -50,6 +50,23 @@ public class ByteLabels implements Labels {
 
     private long hash = Long.MIN_VALUE;
 
+    /**
+     * Base memory overhead for a ByteLabels instance in bytes.
+     * <p>
+     * <strong>IMPORTANT:</strong> Update this constant whenever fields are added or removed from ByteLabels.
+     * </p>
+     * <p>Memory breakdown:
+     * <ul>
+     *   <li>Object header: 16 bytes (mark word + class pointer)</li>
+     *   <li>Field: byte[] data reference: 8 bytes</li>
+     *   <li>Field: long hash: 8 bytes</li>
+     *   <li>byte[] array object header: 16 bytes (array metadata + length)</li>
+     * </ul>
+     * Total: 48 bytes + data.length
+     * </p>
+     */
+    private static final long ESTIMATED_MEMORY_OVERHEAD = 48;
+
     private static final ByteLabels EMPTY = new ByteLabels(new byte[0]);
 
     /** ThreadLocal cache for TreeMap instances to reduce object allocation during label creation. */
@@ -799,6 +816,38 @@ public class ByteLabels implements Labels {
         }
 
         return commonNames;
+    }
+
+    /**
+     * Estimate the memory footprint of this ByteLabels instance in bytes.
+     * Uses the {@link #ESTIMATED_MEMORY_OVERHEAD} constant which should be updated
+     * whenever fields are added or removed from this class.
+     *
+     * @return estimated size in bytes (ESTIMATED_MEMORY_OVERHEAD + data.length)
+     */
+    @Override
+    public long estimateBytes() {
+        return ESTIMATED_MEMORY_OVERHEAD + data.length;
+    }
+
+    /**
+     * Get the estimated memory overhead constant for testing.
+     * Package-private for test validation.
+     *
+     * @return the ESTIMATED_MEMORY_OVERHEAD constant
+     */
+    static long getEstimatedMemoryOverhead() {
+        return ESTIMATED_MEMORY_OVERHEAD;
+    }
+
+    /**
+     * Get the internal data array for testing.
+     * Package-private for test validation.
+     *
+     * @return the internal data byte array
+     */
+    byte[] getDataForTesting() {
+        return data;
     }
 
 }

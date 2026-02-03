@@ -114,10 +114,13 @@ public class ClosedChunkIndexManager implements Closeable {
     /**
      * Constructor for ClosedChunkIndexManager
      *
-     * @param dir           to store blocks under
-     * @param metadataStore to store index metadata
-     * @param threadPool    to run async management tasks e.g. retention, compaction
-     * @param shardId       ShardId for logging context
+     * @param dir              to store blocks under
+     * @param metadataStore    to store index metadata
+     * @param retention        retention policy for removing old indexes
+     * @param compaction       compaction policy for merging indexes
+     * @param threadPool       to run async management tasks e.g. retention, compaction
+     * @param shardId          ShardId for logging context
+     * @param settings         index settings
      */
     public ClosedChunkIndexManager(
         Path dir,
@@ -217,16 +220,25 @@ public class ClosedChunkIndexManager implements Closeable {
                         try {
                             long compactionStart = System.nanoTime();
                             var compactedIndex = compactIndexes(plan);
-                            pendingClosureIndexes.addAll(plan);
-                            swapIndexes(plan, compactedIndex);
-                            var removed = closeIndexes(new HashSet<>(plan));
-                            pendingClosureIndexes.removeAll(removed);
+
+                            // If compactedIndex is null, it means in-place optimization (e.g., ForceMergeCompaction)
+                            // No need to swap or delete source indexes
+                            if (compactedIndex != null) {
+                                pendingClosureIndexes.addAll(plan);
+                                swapIndexes(plan, compactedIndex);
+                                var removed = closeIndexes(new HashSet<>(plan));
+                                pendingClosureIndexes.removeAll(removed);
+                                if (!removed.isEmpty()) {
+                                    TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionDeletedTotal, removed.size());
+                                }
+                            }
+
                             long compactionDurationMs = (System.nanoTime() - compactionStart) / 1_000_000L;
                             TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionSuccessTotal, 1);
                             TSDBMetrics.recordHistogram(TSDBMetrics.INDEX.compactionLatency, compactionDurationMs);
-                            if (!removed.isEmpty()) {
-                                TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionDeletedTotal, removed.size());
-                            }
+                        } catch (Exception e) {
+                            log.error("Failed to complete compaction", e);
+                            TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.compactionFailureTotal, 1);
                         } finally {
                             indexesUndergoingCompaction.clear();
                         }
@@ -312,6 +324,21 @@ public class ClosedChunkIndexManager implements Closeable {
 
     private ClosedChunkIndex compactIndexes(List<ClosedChunkIndex> plan) throws IOException {
         var start = Instant.now();
+
+        // Check if this is in-place optimization using the explicit flag
+        if (compaction.isInPlaceCompaction()) {
+            // In-place optimization - no new index created
+            compaction.compact(plan, null);
+            log.info(
+                "In-place optimization took: {} s, {} index(es): {}",
+                Duration.between(start, Instant.now()).toSeconds(),
+                plan.size(),
+                plan.stream().map(i -> i.getMetadata().directoryName()).collect(Collectors.joining(", "))
+            );
+            return null; // Signal that no new index was created
+        }
+
+        // Traditional compaction - multiple sources merged into new destination
         var minTime = Time.toTimestamp(plan.getFirst().getMinTime(), resolution);
         var maxTime = Time.toTimestamp(plan.getLast().getMaxTime(), resolution);
         var dirName = String.join("_", BLOCK_PREFIX, Long.toString(minTime), Long.toString(maxTime), UUIDs.base64UUID());

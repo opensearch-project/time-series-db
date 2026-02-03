@@ -235,6 +235,7 @@ public class RestPromQLAction extends BaseTSDBAction {
                             METRICS.executionLatency,
                             METRICS.collectPhaseLatencyMax,
                             METRICS.reducePhaseLatencyMax,
+                            METRICS.postCollectionPhaseLatencyMax,
                             METRICS.collectPhaseCpuTimeMs,
                             METRICS.reducePhaseCpuTimeMs,
                             METRICS.shardLatencyMax
@@ -461,6 +462,7 @@ public class RestPromQLAction extends BaseTSDBAction {
         Histogram executionLatency;
         Histogram collectPhaseLatencyMax;
         Histogram reducePhaseLatencyMax;
+        Histogram postCollectionPhaseLatencyMax;
         Histogram collectPhaseCpuTimeMs;
         Histogram reducePhaseCpuTimeMs;
         Histogram shardLatencyMax;
@@ -487,6 +489,11 @@ public class RestPromQLAction extends BaseTSDBAction {
                 TSDBMetricsConstants.ACTION_REST_QUERIES_REDUCE_PHASE_LATENCY_MAX_DESC,
                 TSDBMetricsConstants.UNIT_MILLISECONDS
             );
+            postCollectionPhaseLatencyMax = registry.createHistogram(
+                TSDBMetricsConstants.ACTION_REST_QUERIES_POST_COLLECTION_PHASE_LATENCY_MAX,
+                TSDBMetricsConstants.ACTION_REST_QUERIES_POST_COLLECTION_PHASE_LATENCY_MAX_DESC,
+                TSDBMetricsConstants.UNIT_MILLISECONDS
+            );
             collectPhaseCpuTimeMs = registry.createHistogram(
                 TSDBMetricsConstants.ACTION_REST_QUERIES_COLLECT_PHASE_CPU_TIME_MS,
                 TSDBMetricsConstants.ACTION_REST_QUERIES_COLLECT_PHASE_CPU_TIME_MS_DESC,
@@ -510,6 +517,7 @@ public class RestPromQLAction extends BaseTSDBAction {
             executionLatency = null;
             collectPhaseLatencyMax = null;
             reducePhaseLatencyMax = null;
+            postCollectionPhaseLatencyMax = null;
             collectPhaseCpuTimeMs = null;
             reducePhaseCpuTimeMs = null;
             shardLatencyMax = null;

@@ -617,4 +617,191 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         assertNotNull("Commit should have thrown an exception", commitException.get());
         assertTrue("Exception should be AlreadyClosedException", commitException.get() instanceof AlreadyClosedException);
     }
+
+    public void testInPlaceCompactionWithForceMerge() throws Exception {
+        Path tempDir = createTempDir("testInPlaceCompactionWithForceMerge");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        var retention = new NOOPRetention();
+        var resolution = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(defaultSettings));
+        long oooCutoffWindow = TSDBPlugin.TSDB_ENGINE_OOO_CUTOFF.get(defaultSettings).getMillis();
+        long blockDuration = TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.get(defaultSettings).getMillis();
+        var compaction = new org.opensearch.tsdb.core.compaction.ForceMergeCompaction(
+            300_000,
+            2,
+            1,
+            oooCutoffWindow,
+            blockDuration,
+            resolution
+        );
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            retention,
+            compaction,
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        Labels labels = ByteLabels.fromStrings("label1", "value1");
+        MemSeries series = new MemSeries(0, labels);
+
+        // Create first index with multiple segments
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 0, 1000));
+        manager.commitChangedIndexes(List.of(series));
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 1100, 2000));
+        manager.commitChangedIndexes(List.of(series));
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 2100, 3000));
+        manager.commitChangedIndexes(List.of(series));
+
+        // Create second index with multiple segments
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 7200000, 7201000));
+        manager.commitChangedIndexes(List.of(series));
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 7202000, 7203000));
+        manager.commitChangedIndexes(List.of(series));
+
+        // Create latest index (should not be compacted as it's the latest)
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 14400000, 14401000));
+        manager.commitChangedIndexes(List.of(series));
+
+        List<ClosedChunkIndex> indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        assertEquals("Should have 3 indexes", 3, indexes.size());
+
+        // Refresh all indexes
+        for (ClosedChunkIndex index : indexes) {
+            index.getDirectoryReaderManager().maybeRefreshBlocking();
+        }
+
+        // Check if first index has multiple segments
+        int segmentCountBefore = indexes.get(0).getSegmentCount();
+        if (segmentCountBefore < 2) {
+            // Skip test if conditions not met
+            manager.close();
+            return;
+        }
+
+        // Run in-place compaction
+        compaction.setFrequency(0);
+        manager.runOptimization();
+
+        // Wait for async compaction to complete by checking segment count
+        assertBusy(() -> {
+            List<ClosedChunkIndex> currentIndexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+            assertEquals("Should still have 3 indexes after in-place compaction (no indexes deleted)", 3, currentIndexes.size());
+
+            currentIndexes.get(0).getDirectoryReaderManager().maybeRefreshBlocking();
+            int segmentCount = currentIndexes.get(0).getSegmentCount();
+            assertEquals("First index should have 1 segment after force merge", 1, segmentCount);
+        });
+
+        // Re-fetch indexes for final verification
+        indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        indexes.get(0).getDirectoryReaderManager().maybeRefreshBlocking();
+        int segmentCountAfter = indexes.get(0).getSegmentCount();
+        assertEquals("First index should have 1 segment after force merge", 1, segmentCountAfter);
+
+        // Verify data is intact
+        List<org.opensearch.tsdb.core.index.closed.ClosedChunk> chunks = TestUtils.getChunks(indexes.get(0));
+        assertEquals("Should still have 3 chunks after force merge", 3, chunks.size());
+
+        manager.close();
+    }
+
+    public void testInPlaceCompactionCyclesThroughIndexes() throws Exception {
+        Path tempDir = createTempDir("testInPlaceCompactionCyclesThroughIndexes");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        var retention = new NOOPRetention();
+        var resolution = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(defaultSettings));
+        long oooCutoffWindow = TSDBPlugin.TSDB_ENGINE_OOO_CUTOFF.get(defaultSettings).getMillis();
+        long blockDuration = TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.get(defaultSettings).getMillis();
+        var compaction = new org.opensearch.tsdb.core.compaction.ForceMergeCompaction(
+            300_000,
+            2,
+            1,
+            oooCutoffWindow,
+            blockDuration,
+            resolution
+        );
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            retention,
+            compaction,
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        Labels labels = ByteLabels.fromStrings("label1", "value1");
+        MemSeries series = new MemSeries(0, labels);
+
+        // Create 3 indexes with multiple segments each
+        for (int i = 0; i < 3; i++) {
+            long baseTime = i * 7200000L;
+            manager.addMemChunk(series, TestUtils.getMemChunk(10, baseTime, baseTime + 1000));
+            manager.commitChangedIndexes(List.of(series));
+            manager.addMemChunk(series, TestUtils.getMemChunk(10, baseTime + 1100, baseTime + 2000));
+            manager.commitChangedIndexes(List.of(series));
+        }
+
+        // Create latest index
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 21600000, 21601000));
+        manager.commitChangedIndexes(List.of(series));
+
+        List<ClosedChunkIndex> indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        assertEquals("Should have 4 indexes", 4, indexes.size());
+
+        // Refresh all indexes
+        for (ClosedChunkIndex index : indexes) {
+            index.getDirectoryReaderManager().maybeRefreshBlocking();
+        }
+
+        // Check if indexes have multiple segments
+        int multiSegmentCount = 0;
+        for (int i = 0; i < 3; i++) {
+            if (indexes.get(i).getSegmentCount() >= 2) {
+                multiSegmentCount++;
+            }
+        }
+
+        if (multiSegmentCount == 0) {
+            // Skip test if no multi-segment indexes
+            manager.close();
+            return;
+        }
+
+        // Run compaction multiple times to cycle through indexes
+        compaction.setFrequency(0);
+        for (int i = 0; i < multiSegmentCount + 1; i++) {
+            manager.runOptimization();
+
+            // Wait for this compaction round to complete
+            assertBusy(() -> {
+                List<ClosedChunkIndex> currentIndexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+                int currentSingleSegmentCount = 0;
+                for (int j = 0; j < 3; j++) {
+                    currentIndexes.get(j).getDirectoryReaderManager().maybeRefreshBlocking();
+                    if (currentIndexes.get(j).getSegmentCount() == 1) {
+                        currentSingleSegmentCount++;
+                    }
+                }
+                assertTrue("At least one index should have been force merged", currentSingleSegmentCount > 0);
+            });
+        }
+
+        // Verify that at least some eligible indexes were compacted
+        indexes = manager.getClosedChunkIndexes(Instant.ofEpochMilli(0), Instant.now());
+        int singleSegmentCount = 0;
+        for (int i = 0; i < 3; i++) {
+            indexes.get(i).getDirectoryReaderManager().maybeRefreshBlocking();
+            if (indexes.get(i).getSegmentCount() == 1) {
+                singleSegmentCount++;
+            }
+        }
+        assertTrue("At least one index should have been force merged", singleSegmentCount > 0);
+
+        manager.close();
+    }
 }

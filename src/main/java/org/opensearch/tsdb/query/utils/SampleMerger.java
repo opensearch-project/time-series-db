@@ -9,6 +9,8 @@ package org.opensearch.tsdb.query.utils;
 
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
+import org.opensearch.tsdb.core.model.SampleType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -107,14 +109,15 @@ public class SampleMerger {
      * @param samples2 Second list of samples
      * @param assumeSorted If true, assumes both input lists are sorted by timestamp.
      *                     <strong>Must match the actual sort order of inputs.</strong>
-     * @return Merged and sorted list of samples
+     * @return Merged and sorted list of samples, this method may return one of the input if another is empty,
+     *         without doing any copy
      */
-    public List<Sample> merge(List<Sample> samples1, List<Sample> samples2, boolean assumeSorted) {
+    public SampleList merge(SampleList samples1, SampleList samples2, boolean assumeSorted) {
         if (samples1.isEmpty()) {
-            return new ArrayList<>(samples2);
+            return samples2;
         }
         if (samples2.isEmpty()) {
-            return new ArrayList<>(samples1);
+            return samples1;
         }
 
         if (assumeSorted) {
@@ -135,14 +138,14 @@ public class SampleMerger {
      * @param samples2 Second sorted list of samples
      * @return Merged and sorted list of samples
      */
-    private List<Sample> mergeSorted(List<Sample> samples1, List<Sample> samples2) {
+    private SampleList mergeSorted(SampleList samples1, SampleList samples2) {
         List<Sample> result = new ArrayList<>(samples1.size() + samples2.size());
 
         int i = 0, j = 0;
 
         while (i < samples1.size() && j < samples2.size()) {
-            Sample s1 = samples1.get(i);
-            Sample s2 = samples2.get(j);
+            Sample s1 = samples1.getSample(i);
+            Sample s2 = samples2.getSample(j);
 
             if (s1.getTimestamp() < s2.getTimestamp()) {
                 result.add(s1);
@@ -161,15 +164,15 @@ public class SampleMerger {
 
         // Add remaining samples
         while (i < samples1.size()) {
-            result.add(samples1.get(i));
+            result.add(samples1.getSample(i));
             i++;
         }
         while (j < samples2.size()) {
-            result.add(samples2.get(j));
+            result.add(samples2.getSample(j));
             j++;
         }
 
-        return result;
+        return SampleList.fromList(result);
     }
 
     /**
@@ -183,7 +186,7 @@ public class SampleMerger {
      * @param samples2 Second list of samples
      * @return Merged and sorted list of samples
      */
-    private List<Sample> mergeUnsorted(List<Sample> samples1, List<Sample> samples2) {
+    private SampleList mergeUnsorted(SampleList samples1, SampleList samples2) {
         Map<Long, Sample> timestampToSample = new HashMap<>(Math.max(samples1.size(), samples2.size()));
 
         // Add samples from first list
@@ -198,7 +201,7 @@ public class SampleMerger {
 
         List<Sample> result = new ArrayList<>(timestampToSample.values());
         result.sort(Comparator.comparingLong(Sample::getTimestamp));
-        return result;
+        return SampleList.fromList(result);
     }
 
     /**
@@ -211,8 +214,8 @@ public class SampleMerger {
     private Sample mergeDuplicateSamples(Sample existing, Sample newSample) {
         switch (deduplicatePolicy) {
             case SUM_VALUES:
-                if (existing instanceof FloatSample existingFloat && newSample instanceof FloatSample newFloat) {
-                    double sum = existingFloat.getValue() + newFloat.getValue();
+                if (existing.getSampleType() == SampleType.FLOAT_SAMPLE && newSample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+                    double sum = existing.getValue() + newSample.getValue();
                     return new FloatSample(existing.getTimestamp(), sum);
                 } else {
                     // Fallback to ANY_WINS for non-float samples
