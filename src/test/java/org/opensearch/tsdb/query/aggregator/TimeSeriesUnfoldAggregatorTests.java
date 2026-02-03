@@ -45,6 +45,7 @@ import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -53,7 +54,10 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -327,6 +331,43 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
             aggregator.setOutputSeriesCountForTesting(42);
             aggregator.recordMetrics();
+            aggregator.close();
+
+        } finally {
+            TSDBMetrics.cleanup();
+        }
+    }
+
+    /**
+     * Tests that recordMetrics correctly records circuit breaker MB histogram when circuitBreakerBytes > 0.
+     */
+    public void testRecordMetricsWithCircuitBreakerBytes() throws IOException {
+        // Initialize TSDBMetrics with mock registry
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mock(Counter.class));
+
+        // Default histogram for other metrics (must be defined first)
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
+        // Create a specific mock for the circuit breaker MB histogram (defined last to take precedence)
+        Histogram circuitBreakerMBHistogram = mock(Histogram.class);
+        when(mockRegistry.createHistogram(contains("circuit_breaker.mb"), anyString(), anyString())).thenReturn(circuitBreakerMBHistogram);
+
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Set circuit breaker bytes > 0 to trigger the histogram recording path
+            aggregator.circuitBreakerBytes = 10 * 1024 * 1024; // 10 MB
+            aggregator.recordMetrics();
+
+            // Verify the histogram was called with the correct value (10 MB)
+            verify(circuitBreakerMBHistogram).record(eq(10.0), eq(Tags.EMPTY));
+
             aggregator.close();
 
         } finally {
