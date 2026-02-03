@@ -145,6 +145,47 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
     }
 
     /**
+     * Test TimeSeriesUnfoldAggregator with avg aggregation stage
+     */
+    public void testTimeSeriesUnfoldWithAvgStage() throws Exception {
+        TimeSeriesUnfoldAggregationBuilder unfoldAgg = new TimeSeriesUnfoldAggregationBuilder(
+            "unfold_avg",
+            List.of(new AvgStage(List.of("instance"))),
+            1000L,
+            1400L,
+            100L
+        );
+
+        testCaseWithClosedChunkIndex(unfoldAgg, new MatchAllDocsQuery(), index -> {
+            // Create multiple time series with same instance (should be summed)
+            // metric_1 includes a NaN value at 1300L to test NaN skipping
+            createTimeSeriesDocument(index, "metric_1", "instance", "A", 1000L, 10.0, 1100L, 20.0, 1200L, 30.0, 1300L, 25.0);
+            createTimeSeriesDocument(index, "metric_2", "instance", "A", 1000L, 5.0, 1100L, 10.0, 1200L, 10.0, 1300L, 25.0);
+        }, (InternalTimeSeries result) -> {
+            assertNotNull("Unfold aggregation result should not be null", result);
+            List<TimeSeries> timeSeries = result.getTimeSeries();
+
+            // With sum stage grouping by instance, we should have one series
+            assertEquals("Should have one aggregated series", 1, timeSeries.size());
+
+            TimeSeries aggregatedSeries = timeSeries.get(0);
+
+            List<Sample> expectedSamples = List.of(
+                new FloatSample(1000L, 7.5d),
+                new FloatSample(1100L, 15d),
+                new FloatSample(1200L, 20d),
+                new FloatSample(1300L, 25.0d)
+            );
+            assertSamplesEqual(
+                "Summed samples should match expected values (NaN should be skipped)",
+                expectedSamples,
+                aggregatedSeries.getSamples().toList(),
+                SAMPLE_COMPARISON_DELTA
+            );
+        });
+    }
+
+    /**
      * Test TimeSeriesUnfoldAggregator with multiple pipeline stages
      */
     public void testTimeSeriesUnfoldMultipleStages() throws Exception {
