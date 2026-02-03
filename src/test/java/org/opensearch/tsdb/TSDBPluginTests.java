@@ -523,6 +523,31 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         assertFalse("Engine factory should not be present by default", engineFactory.isPresent());
     }
 
+    public void testGetEngineFactoryFailsWhenStepSizeIsMissing() {
+        // Create settings with TSDB engine enabled but without the step size setting
+        Settings settings = Settings.builder()
+            .put("index.tsdb_engine.enabled", true)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+            .build();
+
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test-index", settings);
+
+        // Attempting to get engine factory should throw IllegalArgumentException
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> plugin.getEngineFactory(indexSettings));
+
+        // Verify the exception message mentions the required step size setting
+        assertThat(
+            "Exception message should mention the required step size setting",
+            exception.getMessage(),
+            containsString("index.tsdb_engine.lang.m3.default_step_size")
+        );
+        assertThat(
+            "Exception message should indicate the setting is required",
+            exception.getMessage(),
+            containsString("is required for TSDB indexes but not configured")
+        );
+    }
+
     // ========== Plugin Interfaces Tests ==========
 
     public void testImplementsSearchPlugin() {
