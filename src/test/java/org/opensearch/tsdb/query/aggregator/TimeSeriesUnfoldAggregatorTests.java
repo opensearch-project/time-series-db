@@ -233,14 +233,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
      * Creates a TimeSeriesUnfoldAggregator for testing.
      */
     private TimeSeriesUnfoldAggregator createAggregator(long minTimestamp, long maxTimestamp, long step) throws IOException {
-        return createAggregator(minTimestamp, maxTimestamp, step, 100 * 1024 * 1024); // Default 100 MB
-    }
-
-    /**
-     * Creates a TimeSeriesUnfoldAggregator for testing with custom circuit breaker threshold.
-     */
-    private TimeSeriesUnfoldAggregator createAggregator(long minTimestamp, long maxTimestamp, long step, long circuitBreakerWarnThreshold)
-        throws IOException {
         SearchContext mockSearchContext = mock(SearchContext.class);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
 
@@ -260,7 +252,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             minTimestamp,
             maxTimestamp,
             step,
-            circuitBreakerWarnThreshold,
             Map.of()
         );
     }
@@ -572,24 +563,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests that the circuit breaker warning threshold is correctly applied.
-     * When allocation exceeds the threshold, a warning should be logged.
-     */
-    public void testCircuitBreakerWarnThreshold() throws IOException {
-        long minTimestamp = 1000L;
-        long maxTimestamp = 5000L;
-        long step = 100L;
-        long warnThreshold = 50 * 1024; // 50 KB
-
-        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step, warnThreshold);
-
-        // Verify threshold is set correctly
-        assertEquals("Warning threshold should match constructor parameter", warnThreshold, aggregator.getCircuitBreakerWarnThreshold());
-
-        aggregator.close();
-    }
-
-    /**
      * Tests that buildAggregation returns profile debug info when profile is enabled.
      */
     public void testBuildAggregationDebugInfo() throws IOException {
@@ -617,7 +590,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             minTimestamp,
             maxTimestamp,
             step,
-            100 * 1024 * 1024,
             Map.of()
         );
 
@@ -695,24 +667,23 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests the warning threshold logging path.
+     * Tests that circuit breaker bytes accumulate correctly.
+     * Note: Warning threshold is now dynamic and read from cluster settings.
      */
-    public void testAddCircuitBreakerBytesWarnThresholdExceeded() throws IOException {
+    public void testAddCircuitBreakerBytesAccumulation() throws IOException {
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
         long step = 100L;
-        long warnThreshold = 1000; // Set a low threshold for testing
 
-        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step, warnThreshold);
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
-        // Add bytes below threshold - no warning
+        // Add bytes
         aggregator.addCircuitBreakerBytesForTesting(500);
         assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.circuitBreakerBytes);
 
-        // Add more bytes to exceed threshold - should trigger warning log
+        // Add more bytes - should accumulate
         aggregator.addCircuitBreakerBytesForTesting(600);
         assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.circuitBreakerBytes);
-        assertTrue("Total should exceed threshold", aggregator.circuitBreakerBytes > warnThreshold);
 
         aggregator.close();
     }
@@ -768,7 +739,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             1000L,
             5000L,
             100L,
-            100 * 1024 * 1024,
             Map.of()
         );
     }
@@ -939,7 +909,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             when(mockSearchContext.request()).thenReturn(null);
             when(mockSearchContext.query()).thenReturn(null);
 
-            TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, List.of());
+            TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, null);
 
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,

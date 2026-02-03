@@ -512,28 +512,6 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     );
 
     /**
-     * Setting for the circuit breaker warning threshold in aggregations.
-     * When an aggregation's circuit breaker allocation exceeds this threshold, a WARN log is emitted
-     * to help detect high cardinality queries or potential memory leaks early.
-     *
-     * <p>Default is 100 MB which is appropriate for most TSDB workloads:
-     * - Typical queries use &lt; 10 MB
-     * - High cardinality queries may use 10-50 MB
-     * - &gt; 100 MB indicates potential issues (excessive cardinality, memory leak, etc.)
-     *
-     * <p>This can be adjusted based on deployment size and use cases. For example:
-     * - Small deployments: 50 MB
-     * - Large deployments with high cardinality: 200 MB or higher
-     */
-    public static final Setting<Long> TSDB_ENGINE_AGGREGATION_CIRCUIT_BREAKER_WARN_THRESHOLD = Setting.longSetting(
-        "tsdb_engine.aggregation.circuit_breaker.warn_threshold",
-        100 * 1024 * 1024,  // default: 100 MB
-        1024 * 1024,        // minimum: 1 MB
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-
-    /**
      * Setting for the default step size (query resolution) for M3QL queries.
      * This defines the default time interval between data points in query results.
      * Can be overridden by the 'step' parameter in individual M3QL queries.
@@ -661,7 +639,6 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             TSDB_ENGINE_WILDCARD_QUERY_CACHE_EXPIRE_AFTER,
             TSDB_ENGINE_FORCE_NO_PUSHDOWN,
             TSDB_ENGINE_ENABLE_INTERNAL_AGG_CHUNK_COMPRESSION,
-            TSDB_ENGINE_AGGREGATION_CIRCUIT_BREAKER_WARN_THRESHOLD,
             TSDB_ENGINE_DEFAULT_STEP,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE
