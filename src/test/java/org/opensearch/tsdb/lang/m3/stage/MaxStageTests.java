@@ -48,7 +48,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
                 new FloatSample(2000L, 40.0), // max(20, 40, 15, 6, 2) = 40
                 new FloatSample(3000L, 60.0)  // max(30, 60, 25, 9, 3) = 60
             ),
-            maxed.getSamples()
+            maxed.getSamples().toList()
         );
     }
 
@@ -69,7 +69,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
                 new FloatSample(2000L, 40.0), // max(20, 40) = 40
                 new FloatSample(3000L, 60.0)  // max(30, 60) = 60
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3) - unchanged since single series
@@ -78,7 +78,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         assertEquals(3, service1Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4) - unchanged since single series
@@ -87,7 +87,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         assertEquals(3, service2Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -109,7 +109,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         // Values should be maximum across aggregations
         assertEquals(
             List.of(new FloatSample(1000L, 20.0), new FloatSample(2000L, 40.0), new FloatSample(3000L, 60.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -131,7 +131,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         // Values should be maximum across aggregations
         assertEquals(
             List.of(new FloatSample(1000L, 20.0), new FloatSample(2000L, 40.0), new FloatSample(3000L, 60.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -182,7 +182,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
                 new FloatSample(20000L, 20.0),  // 20s: only ts1
                 new FloatSample(30000L, 40.0)   // 30s: only ts2
             ),
-            maxed.getSamples()
+            maxed.getSamples().toList()
         );
     }
 
@@ -207,7 +207,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
                 new FloatSample(20000L, 15.0),  // 20s: only ts1
                 new FloatSample(30000L, 35.0)   // 30s: only ts2
             ),
-            maxed.getSamples()
+            maxed.getSamples().toList()
         );
     }
 
@@ -237,7 +237,10 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         TimeSeries maxed = result.get(0);
         assertEquals("service1", maxed.getLabels().get("service"));
         assertEquals(3, maxed.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), maxed.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            maxed.getSamples().toList()
+        );
     }
 
     public void testProcessGroupWithMultipleTimeSeries() {
@@ -249,7 +252,10 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         TimeSeries maxed = result.get(0);
         assertEquals("service1", maxed.getLabels().get("service"));
         assertEquals(3, maxed.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), maxed.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            maxed.getSamples().toList()
+        );
     }
 
     // Comprehensive test data - all tests use this same dataset

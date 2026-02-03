@@ -24,8 +24,6 @@ import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeries;
 import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeriesWithGaps;
 
 import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createMockAggregations;
-import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeries;
-import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeriesWithGaps;
 
 public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
 
@@ -51,7 +49,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         // Check that values are summed correctly
         assertEquals(
             List.of(new FloatSample(1000L, 39.0), new FloatSample(2000L, 83.0), new FloatSample(3000L, 127.0)),
-            summed.getSamples()
+            summed.getSamples().toList()
         );
     }
 
@@ -72,7 +70,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
                 new FloatSample(2000L, 60.0), // 20 + 40
                 new FloatSample(3000L, 90.0)  // 30 + 60
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3)
@@ -81,7 +79,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         assertEquals(3, service1Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4)
@@ -90,7 +88,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         assertEquals(3, service2Group.getSamples().size());
         assertEquals(
             List.of(new FloatSample(1000L, 3.0), new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -112,7 +110,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         // Values should be summed across aggregations
         assertEquals(
             List.of(new FloatSample(1000L, 39.0), new FloatSample(2000L, 83.0), new FloatSample(3000L, 127.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -134,7 +132,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         // Values should be summed across aggregations
         assertEquals(
             List.of(new FloatSample(1000L, 39.0), new FloatSample(2000L, 83.0), new FloatSample(3000L, 127.0)),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -168,7 +166,10 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         assertEquals(3, reduced.getSamples().size());
 
         // Values should be summed across aggregations
-        assertEquals(List.of(new FloatSample(1000L, 4.0), new FloatSample(2000L, 8.0), new FloatSample(3000L, 12.0)), reduced.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 4.0), new FloatSample(2000L, 8.0), new FloatSample(3000L, 12.0)),
+            reduced.getSamples().toList()
+        );
     }
 
     public void testConstructorWithNullGroupByLabels() {
@@ -226,7 +227,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
                 new FloatSample(20000L, 20.0),  // 20s: only ts1
                 new FloatSample(30000L, 40.0)   // 30s: only ts2
             ),
-            summed.getSamples()
+            summed.getSamples().toList()
         );
     }
 
@@ -251,7 +252,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
                 new FloatSample(20000L, 15.0),  // 20s: only ts1
                 new FloatSample(30000L, 35.0)   // 30s: only ts2
             ),
-            summed.getSamples()
+            summed.getSamples().toList()
         );
     }
 
@@ -278,7 +279,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
                 new FloatSample(2000L, 40.0),  // NaN + 40 = 40
                 new FloatSample(3000L, 30.0)   // 30 + NaN = 30
             ),
-            summed.getSamples()
+            summed.getSamples().toList()
         );
     }
 
@@ -300,7 +301,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
                 new FloatSample(1000L, 30.0),  // 10 + 20
                 new FloatSample(3000L, 90.0)   // 30 + 60
             ),
-            summed.getSamples()
+            summed.getSamples().toList()
         );
     }
 
@@ -318,13 +319,13 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         TimeSeries service1 = result.stream().filter(ts -> "service1".equals(ts.getLabels().get("service"))).findFirst().orElse(null);
         assertNotNull(service1);
         assertEquals(2, service1.getSamples().size()); // timestamps 1000 and 3000 only
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(3000L, 25.0)), service1.getSamples());
+        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(3000L, 25.0)), service1.getSamples().toList());
 
         // Find service2 group
         TimeSeries service2 = result.stream().filter(ts -> "service2".equals(ts.getLabels().get("service"))).findFirst().orElse(null);
         assertNotNull(service2);
         assertEquals(2, service2.getSamples().size()); // timestamps 2000 and 3000 only
-        assertEquals(List.of(new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)), service2.getSamples());
+        assertEquals(List.of(new FloatSample(2000L, 6.0), new FloatSample(3000L, 9.0)), service2.getSamples().toList());
     }
 
     public void testProcessEmptyInput() {
@@ -349,7 +350,10 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         TimeSeries summed = result.get(0);
         assertEquals("service1", summed.getLabels().get("service"));
         assertEquals(3, summed.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), summed.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            summed.getSamples().toList()
+        );
     }
 
     public void testProcessGroupWithMultipleTimeSeries() {
@@ -361,7 +365,10 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         TimeSeries summed = result.get(0);
         assertEquals("service1", summed.getLabels().get("service"));
         assertEquals(3, summed.getSamples().size());
-        assertEquals(List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)), summed.getSamples());
+        assertEquals(
+            List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
+            summed.getSamples().toList()
+        );
     }
 
     // Comprehensive test data - all tests use this same dataset

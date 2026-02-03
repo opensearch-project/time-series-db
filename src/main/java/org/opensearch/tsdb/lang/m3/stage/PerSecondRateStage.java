@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -145,16 +146,15 @@ public class PerSecondRateStage implements UnaryPipelineStage {
         Double prev = null;
         int lastValidStep = -1;
         int sampleIdx = 0; // Pointer to current position in sparse samples list
-        List<Sample> samples = series.getSamples();
+        SampleList samples = series.getSamples();
 
         int step = 0;
         for (long timestamp = minTimestamp; timestamp <= maxTimestamp; timestamp += stepSize, step++) {
             // Check if we have a sample at this timestamp
             Double cur = null;
             if (sampleIdx < samples.size()) {
-                Sample sample = samples.get(sampleIdx);
-                if (sample != null && sample.getTimestamp() == timestamp) {
-                    cur = sample.getValue();
+                if (samples.getTimestamp(sampleIdx) == timestamp) {
+                    cur = samples.getValue(sampleIdx);
                     sampleIdx++; // Move to next sample
                 }
             }
@@ -169,7 +169,7 @@ public class PerSecondRateStage implements UnaryPipelineStage {
             }
 
             // Skip if current value is null
-            if (cur == null) {
+            if (cur == null || Double.isNaN(cur)) {
                 continue;
             }
 

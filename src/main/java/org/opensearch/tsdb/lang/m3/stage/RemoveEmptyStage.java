@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -44,13 +45,18 @@ public class RemoveEmptyStage implements UnaryPipelineStage {
             throw new NullPointerException(getName() + " stage received null input");
         }
         return input.stream().filter(series -> {
-            List<Sample> samples = series.getSamples();
+            SampleList samples = series.getSamples();
             // Remove if empty or if all values are NaN
             if (samples.isEmpty()) {
                 return false;
             }
             // Check if all values are NaN
-            return samples.stream().anyMatch(sample -> !Double.isNaN(sample.getValue()));
+            for (Sample sample : samples) {
+                if (!Double.isNaN(sample.getValue())) {
+                    return true;
+                }
+            }
+            return false;
         }).collect(Collectors.toList());
     }
 

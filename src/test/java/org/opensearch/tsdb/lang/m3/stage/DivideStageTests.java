@@ -60,7 +60,7 @@ public class DivideStageTests extends AbstractWireSerializingTestCase<DivideStag
         // Left series has NaN at 3000L, so that timestamp is skipped after normalization
         assertEquals(2, resultSeries.getSamples().size());
 
-        List<Sample> samples = resultSeries.getSamples();
+        List<Sample> samples = resultSeries.getSamples().toList();
 
         // 1000L: 100.0/10.0 = 10.0
         assertEquals(1000L, samples.get(0).getTimestamp());
@@ -113,7 +113,7 @@ public class DivideStageTests extends AbstractWireSerializingTestCase<DivideStag
         assertEquals("api", resultSeries.getLabels().get("service"));
         assertEquals("server1", resultSeries.getLabels().get("instance"));
 
-        List<Sample> samples = resultSeries.getSamples();
+        List<Sample> samples = resultSeries.getSamples().toList();
 
         // 1000L: 500.0/100.0 = 5.0
         assertEquals(1000L, samples.get(0).getTimestamp());
@@ -148,7 +148,7 @@ public class DivideStageTests extends AbstractWireSerializingTestCase<DivideStag
 
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testSingleRightSeriesWithLabelMatching() {
@@ -171,8 +171,8 @@ public class DivideStageTests extends AbstractWireSerializingTestCase<DivideStag
         List<TimeSeries> result = stage.process(Arrays.asList(leftSeries1, leftSeries2), Arrays.asList(rightSeries));
 
         assertEquals(2, result.size());
-        assertEquals(5.0, result.get(0).getSamples().get(0).getValue(), 0.001);
-        assertEquals(10.0, result.get(1).getSamples().get(0).getValue(), 0.001);
+        assertEquals(5.0, result.get(0).getSamples().getValue(0), 0.001);
+        assertEquals(10.0, result.get(1).getSamples().getValue(0), 0.001);
     }
 
     public void testSelectiveLabelMatchingWithMultipleKeysException() {

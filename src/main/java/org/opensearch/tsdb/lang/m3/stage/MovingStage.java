@@ -14,6 +14,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.lang.m3.common.WindowAggregationType;
 import org.opensearch.tsdb.lang.m3.stage.moving.AvgCircularBuffer;
 import org.opensearch.tsdb.lang.m3.stage.moving.MaxCircularBuffer;
@@ -68,7 +69,7 @@ public class MovingStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries ts : input) {
-            List<Sample> samples = ts.getSamples();
+            SampleList samples = ts.getSamples();
             if (samples.isEmpty()) {
                 result.add(ts);
                 continue;
@@ -107,9 +108,9 @@ public class MovingStage implements UnaryPipelineStage {
 
                 // Step 2: Update the window with the current data point
                 // Check if current timestamp matches the next sample in the input series
-                if (sampleIndex < samples.size() && samples.get(sampleIndex).getTimestamp() == timestamp) {
+                if (sampleIndex < samples.size() && samples.getTimestamp(sampleIndex) == timestamp) {
                     // Add actual value to window
-                    windowTransformer.add(samples.get(sampleIndex).getValue());
+                    windowTransformer.add(samples.getValue(sampleIndex));
                     sampleIndex++;
                 } else {
                     // Add null placeholder to window for missing data point

@@ -13,6 +13,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -67,19 +68,19 @@ public class TransformNullStage implements UnaryPipelineStage {
             List<Sample> denseSamples = new ArrayList<>(arraySize);
 
             // Build dense samples in one pass using a pointer into existing samples
-            List<Sample> existingSamples = series.getSamples();
+            SampleList existingSamples = series.getSamples();
             int sampleIndex = 0;
             long timestamp = seriesMinTimestamp;
 
             for (int i = 0; i < arraySize; i++) {
                 // Check if current existing sample matches this timestamp
-                if (sampleIndex < existingSamples.size() && existingSamples.get(sampleIndex).getTimestamp() == timestamp) {
-                    double value = existingSamples.get(sampleIndex).getValue();
+                if (sampleIndex < existingSamples.size() && existingSamples.getTimestamp(sampleIndex) == timestamp) {
+                    double value = existingSamples.getValue(sampleIndex);
                     // Treat NaN as null/missing
                     if (Double.isNaN(value)) {
                         denseSamples.add(new FloatSample(timestamp, fillValue));
                     } else {
-                        denseSamples.add(existingSamples.get(sampleIndex));
+                        denseSamples.add(new FloatSample(existingSamples.getTimestamp(sampleIndex), existingSamples.getValue(sampleIndex)));
                     }
                     sampleIndex++;
                 } else {

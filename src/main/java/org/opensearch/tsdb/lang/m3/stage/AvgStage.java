@@ -15,6 +15,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -105,16 +106,22 @@ public class AvgStage extends AbstractGroupingSampleStage {
 
     @Override
     protected TimeSeries materializeSamples(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
-        for (int i = 0; i < samples.size(); i++) {
-            Sample sample = samples.get(i);
+        List<Sample> newSamples = new ArrayList<>(timeSeries.getSamples().size());
+        for (Sample sample : timeSeries.getSamples()) {
             // AvgStage always works with SumCountSample, so this should always be true
             SumCountSample sumCountSample = (SumCountSample) sample;
             // Convert SumCountSample to FloatSample by calculating the average
             double average = sumCountSample.count() > 0 ? sumCountSample.sum() / sumCountSample.count() : 0.0;
-            samples.set(i, new FloatSample(sample.getTimestamp(), average));
+            newSamples.add(new FloatSample(sample.getTimestamp(), average));
         }
-        return timeSeries;
+        return new TimeSeries(
+            newSamples,
+            timeSeries.getLabels(),
+            timeSeries.getMinTimestamp(),
+            timeSeries.getMaxTimestamp(),
+            timeSeries.getStep(),
+            timeSeries.getAlias()
+        );
     }
 
     @Override

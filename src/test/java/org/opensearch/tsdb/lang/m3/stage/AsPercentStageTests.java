@@ -65,7 +65,7 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         // Should only include matching timestamps: 1000L, 2000L
         assertEquals(2, resultSeries.getSamples().size());
 
-        List<Sample> samples = resultSeries.getSamples();
+        List<Sample> samples = resultSeries.getSamples().toList();
 
         // 1000L: 10.0/100.0 * 100 = 10.0%
         assertEquals(1000L, samples.get(0).getTimestamp());
@@ -127,7 +127,7 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
             new FloatSample(2500L, 30.0),
             new FloatSample(4500L, 22.22)
         );
-        assertSamplesEqual("Multiple right series with normalization", expectedSamples, resultSeries.getSamples(), 0.01);
+        assertSamplesEqual("Multiple right series with normalization", expectedSamples, resultSeries.getSamples().toList(), 0.01);
 
         // Verify that result has the original labels plus the type:ratios label
         assertEquals("ratios", resultSeries.getLabels().get("type"));
@@ -180,7 +180,7 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
             new FloatSample(20000L, 17.5f),
             new FloatSample(40000L, 16.67f)
         );
-        assertSamplesEqual("Misaligned step sizes and start times", expectedSamples, resultSeries.getSamples(), 0.01);
+        assertSamplesEqual("Misaligned step sizes and start times", expectedSamples, resultSeries.getSamples().toList(), 0.01);
 
         // Verify the normalized step size is LCM(10000, 20000) = 20000
         assertEquals(20000L, resultSeries.getStep());
@@ -226,8 +226,8 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         List<TimeSeries> result = stage.process(Arrays.asList(leftSeries), Arrays.asList(rightSeries));
         assertEquals("Zero right values should return series with NaN", 1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertTrue("Should be NaN when right value is zero", Double.isNaN(result.get(0).getSamples().get(0).getValue()));
-        assertEquals(1000L, result.get(0).getSamples().get(0).getTimestamp());
+        assertTrue("Should be NaN when right value is zero", Double.isNaN(result.get(0).getSamples().getValue(0)));
+        assertEquals(1000L, result.get(0).getSamples().getTimestamp(0));
 
         // Test with empty inputs
         result = stage.process(new ArrayList<>(), Arrays.asList(rightSeries));
@@ -265,8 +265,8 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         assertEquals(1, result.size());
         TimeSeries resultSeries = result.get(0);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(25.0, resultSeries.getSamples().get(0).getValue(), 0.001); // 25.0/100.0 * 100 = 25.0%
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(25.0, resultSeries.getSamples().getValue(0), 0.001); // 25.0/100.0 * 100 = 25.0%
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
     }
 
     public void testSelectiveLabelMatchingWithMultipleKeys() {
@@ -297,8 +297,8 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         assertEquals(1, result.size());
         TimeSeries resultSeries = result.get(0);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(25.0, resultSeries.getSamples().get(0).getValue(), 0.001); // 50.0/200.0 * 100 = 25.0%
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(25.0, resultSeries.getSamples().getValue(0), 0.001); // 50.0/200.0 * 100 = 25.0%
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
     }
 
     public void testSelectiveLabelMatchingWithMultipleKeysException() {
@@ -397,12 +397,12 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
         assertEquals("Should process all series since labels are ignored if it is a single right series", 2, result.size());
         TimeSeries resultSeries = result.get(0);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(25.0, resultSeries.getSamples().get(0).getValue(), 0.001); // 25.0/100.0 * 100 = 25.0%
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(25.0, resultSeries.getSamples().getValue(0), 0.001); // 25.0/100.0 * 100 = 25.0%
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
         resultSeries = result.get(1);
         assertEquals(1, resultSeries.getSamples().size());
-        assertEquals(50.0, resultSeries.getSamples().get(0).getValue(), 0.001); // 25.0/100.0 * 100 = 25.0%
-        assertEquals(1000L, resultSeries.getSamples().get(0).getTimestamp());
+        assertEquals(50.0, resultSeries.getSamples().getValue(0), 0.001); // 25.0/100.0 * 100 = 25.0%
+        assertEquals(1000L, resultSeries.getSamples().getTimestamp(0));
     }
 
     public void testEdgeCases() {
@@ -550,7 +550,7 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
             new FloatSample(1000L, 20.0),  // 20.0/100.0 * 100 = 20.0%
             new FloatSample(2000L, 20.0)   // 40.0/200.0 * 100 = 20.0%
         );
-        assertSamplesEqual("ClusterA samples", expectedSamplesA, resultClusterA.getSamples(), 0.001);
+        assertSamplesEqual("ClusterA samples", expectedSamplesA, resultClusterA.getSamples().toList(), 0.001);
         assertEquals("ratios", resultClusterA.getLabels().get("type"));
         assertEquals("clusterA", resultClusterA.getLabels().get("cluster"));
         assertEquals("api", resultClusterA.getLabels().get("service"));
@@ -562,7 +562,7 @@ public class AsPercentStageTests extends AbstractWireSerializingTestCase<AsPerce
             new FloatSample(1000L, 20.0),  // 30.0/150.0 * 100 = 20.0%
             new FloatSample(2000L, 20.0)   // 60.0/300.0 * 100 = 20.0%
         );
-        assertSamplesEqual("ClusterB samples", expectedSamplesB, resultClusterB.getSamples(), 0.001);
+        assertSamplesEqual("ClusterB samples", expectedSamplesB, resultClusterB.getSamples().toList(), 0.001);
         assertEquals("ratios", resultClusterB.getLabels().get("type"));
         assertEquals("clusterB", resultClusterB.getLabels().get("cluster"));
         assertEquals("api", resultClusterB.getLabels().get("service"));

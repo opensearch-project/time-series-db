@@ -125,7 +125,7 @@ public class SustainStageTests extends AbstractWireSerializingTestCase<SustainSt
             new FloatSample(6000L, 6.0),
             new FloatSample(7000L, 7.0)
         );
-        assertSamplesEqual("Long sustained series", expectedLongSustained, longSustainedResult.getSamples());
+        assertSamplesEqual("Long sustained series", expectedLongSustained, longSustainedResult.getSamples().toList());
 
         // Short result: [] - no samples meet requirement
         TimeSeries shortResult = findSeriesByLabel(result, "type", "short");
@@ -138,12 +138,12 @@ public class SustainStageTests extends AbstractWireSerializingTestCase<SustainSt
         // NaN after result: [3] - sample at 3000 has 3-sample prefix [1,2,3]
         TimeSeries nanAfterResult = findSeriesByLabel(result, "type", "nan_after");
         List<Sample> expectedNanAfter = List.of(new FloatSample(3000L, 3.0));
-        assertSamplesEqual("NaN after series", expectedNanAfter, nanAfterResult.getSamples());
+        assertSamplesEqual("NaN after series", expectedNanAfter, nanAfterResult.getSamples().toList());
 
         // Multi-window result: [3, 7] - two sustained windows meet requirement
         TimeSeries multiWindowResult = findSeriesByLabel(result, "type", "multi_window");
         List<Sample> expectedMultiWindow = List.of(new FloatSample(3000L, 3.0), new FloatSample(7000L, 7.0));
-        assertSamplesEqual("Multi-window series", expectedMultiWindow, multiWindowResult.getSamples());
+        assertSamplesEqual("Multi-window series", expectedMultiWindow, multiWindowResult.getSamples().toList());
 
         // Empty result: no samples
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");

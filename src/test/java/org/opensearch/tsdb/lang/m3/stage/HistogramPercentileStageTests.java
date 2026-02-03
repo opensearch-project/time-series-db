@@ -15,6 +15,7 @@ import org.opensearch.tsdb.TestUtils;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 
 import java.util.ArrayList;
@@ -99,7 +100,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // Check P99 value - with 300 total requests, P99 is at 297th request
         // Cumulative: 10+50+100+80+40+15+4 = 299 requests up to 100ms bucket
         // So P99 (297th request) falls in the 100ms bucket, upper bound = 100ms
-        List<Sample> samples = p99Series.getSamples();
+        List<Sample> samples = p99Series.getSamples().toList();
         assertEquals(1, samples.size());
         assertEquals(100.0, ((FloatSample) samples.get(0)).getValue(), 0.001);
     }
@@ -160,17 +161,17 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // P50 for fast-api: 100th request out of 200 falls at the end of 0-10ms bucket
         TimeSeries p50Fast = fastApiResults.get("p50");
         assertNotNull(p50Fast);
-        assertEquals(10.0, p50Fast.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(10.0, p50Fast.getSamples().getValue(0), 0.001);
 
         // P95 for fast-api: 190th request falls in 25ms-50ms bucket
         TimeSeries p95Fast = fastApiResults.get("p95");
         assertNotNull(p95Fast);
-        assertEquals(50.0, p95Fast.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(50.0, p95Fast.getSamples().getValue(0), 0.001);
 
         // P99 for fast-api: 198th request falls in 50ms-100ms bucket
         TimeSeries p99Fast = fastApiResults.get("p99");
         assertNotNull(p99Fast);
-        assertEquals(100.0, p99Fast.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(100.0, p99Fast.getSamples().getValue(0), 0.001);
 
         // Verify slow-api percentiles
         Map<String, TimeSeries> slowApiResults = resultsByService.get("slow-api");
@@ -180,17 +181,17 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // P50 for slow-api: 75th request out of 150 falls in 50ms-100ms bucket (after 20+30=50)
         TimeSeries p50Slow = slowApiResults.get("p50");
         assertNotNull(p50Slow);
-        assertEquals(100.0, p50Slow.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(100.0, p50Slow.getSamples().getValue(0), 0.001);
 
         // P95 for slow-api: 142.5th request falls in 200ms-500ms bucket
         TimeSeries p95Slow = slowApiResults.get("p95");
         assertNotNull(p95Slow);
-        assertEquals(500.0, p95Slow.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(500.0, p95Slow.getSamples().getValue(0), 0.001);
 
         // P99 for slow-api: 148.5th request falls in 200ms-500ms bucket
         TimeSeries p99Slow = slowApiResults.get("p99");
         assertNotNull(p99Slow);
-        assertEquals(500.0, p99Slow.getSamples().getFirst().getValue(), 0.001);
+        assertEquals(500.0, p99Slow.getSamples().getValue(0), 0.001);
     }
 
     /**
@@ -238,7 +239,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // Verify
         assertEquals(1, result.size());
         TimeSeries p95Series = result.get(0);
-        List<Sample> samples = p95Series.getSamples();
+        List<Sample> samples = p95Series.getSamples().toList();
         assertEquals(3, samples.size());
 
         List<Sample> expectedSamples = List.of(
@@ -376,7 +377,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         TimeSeries p90Series = result.get(0);
 
         // P90 of 100 = 90th value, falls in 50-100 bucket (after 30+40=70)
-        List<Sample> samples = p90Series.getSamples();
+        List<Sample> samples = p90Series.getSamples().toList();
         assertEquals(1, samples.size());
         assertEquals(100.0, ((FloatSample) samples.get(0)).getValue(), 0.001);
 
@@ -414,7 +415,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         TimeSeries p50Series = result.get(0);
 
         // P50 of 100 = 50th value, falls in the 1us-5us bucket (after 25+25=50)
-        List<Sample> samples = p50Series.getSamples();
+        List<Sample> samples = p50Series.getSamples().toList();
         assertEquals(1, samples.size());
         // Upper bound of 1us-5us bucket is 5us = 0.005ms
         assertEquals(0.005, ((FloatSample) samples.get(0)).getValue(), 0.001);
@@ -450,7 +451,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
         // P50 of 100 = 50th value, exactly at end of first bucket
         // The 50th request falls at the boundary of the "0-10ms" bucket
-        List<Sample> samples = p50Series.getSamples();
+        List<Sample> samples = p50Series.getSamples().toList();
         assertEquals(1, samples.size());
         assertEquals(10.0, ((FloatSample) samples.get(0)).getValue(), 0.001);
     }
@@ -561,7 +562,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
         // Should process without error, indicating BucketInfo parsed correctly
         assertEquals(1, result.size());
-        assertEquals(20.0, ((FloatSample) result.get(0).getSamples().get(0)).getValue(), 0.001);
+        assertEquals(20.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testBucketInfoDurationRange() {
@@ -581,7 +582,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
         // Should process without error, indicating BucketInfo parsed correctly
         assertEquals(1, result.size());
-        assertEquals(20.0, ((FloatSample) result.get(0).getSamples().get(0)).getValue(), 0.001);
+        assertEquals(20.0, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testBucketInfoInfinityRange() {
@@ -601,7 +602,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
         // Should process without error, indicating BucketInfo parsed correctly
         assertEquals(1, result.size());
-        assertEquals(Double.POSITIVE_INFINITY, ((FloatSample) result.get(0).getSamples().get(0)).getValue(), 0.001);
+        assertEquals(Double.POSITIVE_INFINITY, result.get(0).getSamples().getValue(0), 0.001);
     }
 
     public void testBucketInfoInvalidRange() {
@@ -647,7 +648,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
         // Both should have same percentile value since they have same bucket structure
         for (TimeSeries series : result) {
-            assertEquals(20.0, ((FloatSample) series.getSamples().get(0)).getValue(), 0.001);
+            assertEquals(20.0, series.getSamples().getValue(0), 0.001);
         }
 
         // Test BucketInfo equals and hashCode directly
@@ -991,7 +992,7 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // Total count = 24, P50 target = 12 (50% of 24)
         // Cumulative: 24 at -infinity-2ms bucket
         // So P50 falls in the -infinity-2ms bucket, upper bound = 2.0ms
-        List<Sample> samples = p50Series.getSamples();
+        List<Sample> samples = p50Series.getSamples().toList();
         assertEquals(1, samples.size());
         assertEquals(2.0, ((FloatSample) samples.get(0)).getValue(), 0.001);
     }
@@ -1109,10 +1110,10 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         TimeSeries p50Series = result.get(0);
 
         // P50 of 100 = 50th value, falls in the 2m-2m11.072s bucket (after 25+25=50)
-        List<Sample> samples = p50Series.getSamples();
+        SampleList samples = p50Series.getSamples();
         assertEquals(1, samples.size());
         // Upper bound of 2m11.072s bucket is 131072ms
-        assertEquals(131072.0, ((FloatSample) samples.get(0)).getValue(), 0.001);
+        assertEquals(131072.0, samples.getValue(0), 0.001);
     }
 
     /**

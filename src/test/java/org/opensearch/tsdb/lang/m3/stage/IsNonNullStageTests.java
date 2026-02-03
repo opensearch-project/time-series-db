@@ -69,7 +69,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
             new FloatSample(3000L, 1.0),  // present
             new FloatSample(4000L, 1.0)   // present
         );
-        assertSamplesEqual("IsNonNull Dense", expectedDense, denseResult.getSamples());
+        assertSamplesEqual("IsNonNull Dense", expectedDense, denseResult.getSamples().toList());
 
         // Sparse result: mix of present and missing
         TimeSeries sparseResult = findSeriesByLabel(result, "type", "sparse");
@@ -79,7 +79,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
             new FloatSample(3000L, 1.0),  // present
             new FloatSample(4000L, 0.0)   // missing
         );
-        assertSamplesEqual("IsNonNull Sparse", expectedSparse, sparseResult.getSamples());
+        assertSamplesEqual("IsNonNull Sparse", expectedSparse, sparseResult.getSamples().toList());
 
         // Empty result: all timestamps missing -> all 0.0
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
@@ -89,7 +89,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
             new FloatSample(3000L, 0.0),  // missing
             new FloatSample(4000L, 0.0)   // missing
         );
-        assertSamplesEqual("IsNonNull Empty", expectedEmpty, emptyResult.getSamples());
+        assertSamplesEqual("IsNonNull Empty", expectedEmpty, emptyResult.getSamples().toList());
     }
 
     /**
@@ -125,7 +125,7 @@ public class IsNonNullStageTests extends AbstractWireSerializingTestCase<IsNonNu
             new FloatSample(5000L, 1.0),  // MIN present
             new FloatSample(6000L, 1.0)   // MAX present
         );
-        assertSamplesEqual("IsNonNull Special Values", expected, result.get(0).getSamples());
+        assertSamplesEqual("IsNonNull Special Values", expected, result.get(0).getSamples().toList());
     }
 
     /**

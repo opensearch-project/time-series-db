@@ -14,6 +14,7 @@ import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.utils.SampleMerger;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -117,7 +118,7 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
         out.writeVInt(timeSeries.size());
         for (TimeSeries series : timeSeries) {
             out.writeInt(0); // hash - placeholder for now
-            List<Sample> samples = series.getSamples();
+            SampleList samples = series.getSamples();
             out.writeVInt(samples.size());
             for (Sample sample : samples) {
                 sample.writeTo(out);
@@ -204,7 +205,7 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
                 if (existingSeries != null) {
                     // Merge samples from same time series across segments using helper
                     // Use assumeSorted=true for reduce operations as samples should be sorted
-                    List<Sample> mergedSamples = MERGE_HELPER.merge(
+                    SampleList mergedSamples = MERGE_HELPER.merge(
                         existingSeries.getSamples(),
                         series.getSamples(),
                         true // assumeSorted - samples should be sorted in reduce phase

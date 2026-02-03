@@ -11,16 +11,13 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,7 +61,7 @@ public class TruncateStage implements UnaryPipelineStage {
         List<TimeSeries> result = new ArrayList<>(input.size());
 
         for (TimeSeries ts : input) {
-            List<Sample> samples = ts.getSamples();
+            SampleList samples = ts.getSamples();
 
             // Calculate the new time range for the truncated series
             // newMinTimestamp: smallest value of form (original_min + N * step) that is >= truncateStart
@@ -104,7 +101,7 @@ public class TruncateStage implements UnaryPipelineStage {
                 );
             } else {
                 // Extract sublist of samples in range
-                List<Sample> truncatedSamples = new ArrayList<>(samples.subList(startIndex, endIndex + 1));
+                SampleList truncatedSamples = samples.subList(startIndex, endIndex + 1);
                 result.add(new TimeSeries(truncatedSamples, ts.getLabels(), newMinTimestamp, newMaxTimestamp, ts.getStep(), ts.getAlias()));
             }
         }
@@ -119,8 +116,8 @@ public class TruncateStage implements UnaryPipelineStage {
      * @param truncateStart the truncation start timestamp
      * @return the start index
      */
-    private int findStartIndex(List<Sample> samples, long truncateStart) {
-        int index = Collections.binarySearch(samples, new FloatSample(truncateStart, 0.0), Comparator.comparingLong(Sample::getTimestamp));
+    private int findStartIndex(SampleList samples, long truncateStart) {
+        int index = samples.binarySearch(truncateStart);
 
         if (index >= 0) {
             // Exact match found, return this index
@@ -140,8 +137,8 @@ public class TruncateStage implements UnaryPipelineStage {
      * @param truncateEnd the truncation end timestamp (exclusive)
      * @return the end index
      */
-    private int findEndIndex(List<Sample> samples, long truncateEnd) {
-        int index = Collections.binarySearch(samples, new FloatSample(truncateEnd, 0.0), Comparator.comparingLong(Sample::getTimestamp));
+    private int findEndIndex(SampleList samples, long truncateEnd) {
+        int index = samples.binarySearch(truncateEnd);
 
         if (index >= 0) {
             // Exact match found, but truncateEnd is exclusive, so return index - 1

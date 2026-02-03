@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.lang.m3.common.SortByType;
 import org.opensearch.tsdb.lang.m3.common.SortOrderType;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.StreamSupport;
 
 /**
  * Pipeline stage that implements M3QL's sort function.
@@ -118,7 +120,7 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the average of all values in the time series as the sorting key.
      */
     private double calculateAverage(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return 0.0;
         }
@@ -139,14 +141,14 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the last of all values in the time series as the sorting key.
      */
     private double calculateCurrent(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return 0.0;
         }
         for (int i = samples.size() - 1; i >= 0; i--) {
-            Sample sample = samples.get(i);
-            if (sample != null && !Double.isNaN(sample.getValue())) {
-                return sample.getValue();
+            double val = samples.getValue(i);
+            if (!Double.isNaN(val)) {
+                return val;
             }
         }
         return 0.0;
@@ -156,7 +158,7 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the maximum value in the time series as the sorting key.
      */
     private double calculateMax(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return Double.NEGATIVE_INFINITY;
         }
@@ -175,7 +177,7 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the minimum value in the time series as the sorting key.
      */
     private double calculateMin(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return 0.0;
         }
@@ -194,7 +196,7 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the sum of all values in the time series as the sorting key.
      */
     private double calculateSum(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return 0.0;
         }
@@ -213,14 +215,14 @@ public class SortStage implements UnaryPipelineStage {
      * Calculate the standard deviation of all values in the time series as the sorting key.
      */
     private double calculateStddev(TimeSeries timeSeries) {
-        List<Sample> samples = timeSeries.getSamples();
+        SampleList samples = timeSeries.getSamples();
         if (samples.isEmpty()) {
             return 0.0;
         }
         double stddev = 0.0;
         if (samples.size() > 1) {
             double avg = calculateAverage(timeSeries);
-            double sumOfSquaredDifferences = samples.stream()
+            double sumOfSquaredDifferences = StreamSupport.stream(samples.spliterator(), false)
                 .filter(s -> s != null && !Double.isNaN(s.getValue()))
                 .map(s -> Math.pow(s.getValue() - avg, 2))
                 .mapToDouble(Double::doubleValue)

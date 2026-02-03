@@ -74,7 +74,7 @@ public class AbstractMapperStageTests extends OpenSearchTestCase {
         assertEquals(1, result.size());
         TimeSeries resultSeries = result.get(0);
         assertEquals(1, resultSeries.getSamples().size()); // Only sample with value 10.0 remains
-        assertEquals(10.0, resultSeries.getSamples().get(0).getValue(), 0.001);
+        assertEquals(10.0, resultSeries.getSamples().getValue(0), 0.001);
 
         // Assert - metadata should be preserved by default implementation
         assertEquals(labels, resultSeries.getLabels());

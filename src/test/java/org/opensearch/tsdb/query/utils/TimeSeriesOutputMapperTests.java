@@ -13,6 +13,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.utils.TimeSeriesOutputMapper.TimeSeriesResult;
@@ -168,7 +169,7 @@ public class TimeSeriesOutputMapperTests extends OpenSearchTestCase {
         List<Sample> samples = Arrays.asList(new FloatSample(1500L, 15.5), new FloatSample(2500L, 25.5), new FloatSample(3500L, 35.5));
 
         // Act
-        List<List<Object>> result = TimeSeriesOutputMapper.transformSamplesToValues(samples);
+        List<List<Object>> result = TimeSeriesOutputMapper.transformSamplesToValues(SampleList.fromList(samples));
 
         // Assert
         assertThat(result, hasSize(3));
@@ -188,7 +189,7 @@ public class TimeSeriesOutputMapperTests extends OpenSearchTestCase {
 
     public void testTransformSamplesToValues_WithEmptySamples() {
         // Act
-        List<List<Object>> result = TimeSeriesOutputMapper.transformSamplesToValues(Collections.emptyList());
+        List<List<Object>> result = TimeSeriesOutputMapper.transformSamplesToValues(SampleList.fromList(Collections.emptyList()));
 
         // Assert
         assertThat(result, hasSize(0));
