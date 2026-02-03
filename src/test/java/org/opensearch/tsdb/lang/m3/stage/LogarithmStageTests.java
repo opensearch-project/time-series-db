@@ -165,7 +165,7 @@ public class LogarithmStageTests extends AbstractWireSerializingTestCase<Logarit
         List<TimeSeries> result = logarithmStage.process(List.of(inputSeries));
 
         // Assert - logarithm values should be monotonically increasing
-        List<Sample> resultSamples = result.getFirst().getSamples();
+        List<Sample> resultSamples = result.getFirst().getSamples().toList();
         for (int i = 1; i < resultSamples.size(); i++) {
             assertTrue("Logarithm should preserve order", resultSamples.get(i).getValue() > resultSamples.get(i - 1).getValue());
         }

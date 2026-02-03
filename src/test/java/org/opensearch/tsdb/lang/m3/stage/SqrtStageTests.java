@@ -165,7 +165,7 @@ public class SqrtStageTests extends AbstractWireSerializingTestCase<SqrtStage> {
         List<TimeSeries> result = sqrtStage.process(List.of(inputSeries));
 
         // Assert - sqrt values should be monotonically increasing
-        List<Sample> resultSamples = result.getFirst().getSamples();
+        List<Sample> resultSamples = result.getFirst().getSamples().toList();
         for (int i = 1; i < resultSamples.size(); i++) {
             assertTrue(
                 "Sqrt should preserve order for non-negative values",

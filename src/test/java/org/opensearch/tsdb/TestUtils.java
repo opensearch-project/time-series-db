@@ -23,6 +23,7 @@ import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexIO;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.BinaryPipelineStage;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -118,6 +119,29 @@ public class TestUtils {
      * @param actual   Actual list of samples
      */
     public static void assertSamplesEqual(String message, List<Sample> expected, List<Sample> actual) {
+        assertSamplesEqual(message, expected, actual, DEFAULT_SAMPLE_DELTA);
+    }
+
+    /**
+     * Compares samples in two lists for equality with default delta tolerance.
+     *
+     * @param message  Description of what is being compared
+     * @param expected Expected list of samples
+     * @param actual   Actual sample list
+     * @param delta    Maximum allowed difference for float value comparison
+     */
+    public static void assertSamplesEqual(String message, List<Sample> expected, SampleList actual, double delta) {
+        assertSamplesEqual(message, expected, actual.toList(), delta);
+    }
+
+    /**
+     * Compares samples in two lists for equality with default delta tolerance.
+     *
+     * @param message  Description of what is being compared
+     * @param expected Expected list of samples
+     * @param actual   Actual sample list
+     */
+    public static void assertSamplesEqual(String message, List<Sample> expected, SampleList actual) {
         assertSamplesEqual(message, expected, actual, DEFAULT_SAMPLE_DELTA);
     }
 
