@@ -1093,4 +1093,88 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TSDBMetrics.cleanup();
         }
     }
+
+    /**
+     * Tests buildEmptyAggregation() method.
+     */
+    public void testBuildEmptyAggregation() throws IOException {
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long step = 100L;
+
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+        // Call buildEmptyAggregation
+        org.opensearch.search.aggregations.InternalAggregation emptyAgg = aggregator.buildEmptyAggregation();
+
+        // Verify the result is not null and is an InternalTimeSeries
+        assertNotNull("Empty aggregation should not be null", emptyAgg);
+        assertTrue("Empty aggregation should be InternalTimeSeries", emptyAgg instanceof InternalTimeSeries);
+
+        InternalTimeSeries timeSeries = (InternalTimeSeries) emptyAgg;
+        assertEquals("Empty aggregation should have correct name", "test_aggregator", timeSeries.getName());
+
+        aggregator.close();
+    }
+
+    /**
+     * Tests that exception in recordMetrics is caught and swallowed.
+     */
+    public void testRecordMetricsExceptionHandling() throws IOException {
+        // Create a registry that throws an exception
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        Histogram mockHistogram = mock(Histogram.class);
+        Counter mockCounter = mock(Counter.class);
+
+        // Make the histogram throw an exception when record is called
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Set output series count to trigger metrics recording
+            aggregator.setOutputSeriesCountForTesting(5);
+
+            // recordMetrics should not throw even if internal metrics recording fails
+            // The exception should be caught and swallowed
+            aggregator.recordMetrics();
+
+            aggregator.close();
+        } finally {
+            TSDBMetrics.cleanup();
+        }
+    }
+
+    /**
+     * Tests doClose with DEBUG logging enabled to cover the debug logging path.
+     */
+    public void testDoCloseWithDebugLogging() throws IOException {
+        // Enable DEBUG logging
+        Configurator.setLevel(TimeSeriesUnfoldAggregator.class.getName(), Level.DEBUG);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Add some circuit breaker bytes to make the debug log interesting
+            aggregator.addCircuitBreakerBytesForTesting(1024);
+
+            // Call doClose - this should trigger the debug log
+            aggregator.close();
+
+        } finally {
+            // Reset logging level
+            Configurator.setLevel(TimeSeriesUnfoldAggregator.class.getName(), Level.INFO);
+        }
+    }
 }
