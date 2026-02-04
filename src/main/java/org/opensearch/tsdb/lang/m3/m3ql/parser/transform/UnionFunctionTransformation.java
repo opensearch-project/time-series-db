@@ -10,16 +10,16 @@ package org.opensearch.tsdb.lang.m3.m3ql.parser.transform;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.GroupNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
-import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.PipelineNode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * AST transformation that converts union function calls into pipeline structures.
  *
  * Transforms: union (expr1) (expr2) (expr3)
- * Into: equivalent of expr1 | expr2 | expr3
+ * Into: equivalent of (expr1) | (expr2) | (expr3)
  *
  * This allows the existing union execution logic to handle the function-style syntax
  * by converting it to the same AST structure as the pipe syntax.
@@ -29,19 +29,24 @@ import java.util.List;
  * Input AST:
  * FunctionNode(union)
  * ├── GroupNode
- * │   └── PipelineNode
+ * │   └── PipelineNode (or Expression nodes)
  * │       └── FunctionNode(mockFetch) [args...]
  * └── GroupNode
- *     └── PipelineNode
+ *     └── PipelineNode (or Expression nodes)
  *         └── FunctionNode(mockFetch) [args...]
  *
  * Output AST:
- * PipelineNode
- * ├── PipelineNode
- * │   └── FunctionNode(mockFetch) [args...]
- * └── PipelineNode
- *     └── FunctionNode(mockFetch) [args...]
+ * PipelineNode (parent, created by ASTTransformer)
+ * ├── GroupNode
+ * │   └── PipelineNode (or Expression nodes)
+ * │       └── FunctionNode(mockFetch) [args...]
+ * └── GroupNode
+ *     └── PipelineNode (or Expression nodes)
+ *         └── FunctionNode(mockFetch) [args...]
  * </pre>
+ *
+ * The transformation preserves the GroupNode structure to match the AST structure
+ * produced by pipe syntax: (expr1) | (expr2) | (expr3)
  */
 public class UnionFunctionTransformation implements ASTTransformation {
     private static final String UNION_FUNCTION = "union";
@@ -69,24 +74,30 @@ public class UnionFunctionTransformation implements ASTTransformation {
             throw new IllegalArgumentException("union function requires at least 2 arguments, got " + children.size());
         }
 
-        // Collect all the function nodes to return as siblings
+        // Return the GroupNodes directly to preserve the structure, matching pipe syntax
+        // This ensures: union (expr1) (expr2) produces the same AST structure as (expr1) | (expr2)
         List<M3ASTNode> resultNodes = new ArrayList<>();
 
-        // Process each argument and extract the functions
-        for (M3ASTNode child : children) {
-            if (child instanceof GroupNode groupNode) {
-                // Extract the inner content from the group (parenthesized expression)
-                List<M3ASTNode> groupChildren = groupNode.getChildren();
-                if (groupChildren.size() == 1 && groupChildren.get(0) instanceof PipelineNode innerPipeline) {
-                    // Single pipeline child in group - extract its children and add them to result
-                    resultNodes.addAll(innerPipeline.getChildren());
-                } else {
-                    // Multiple children or non-pipeline child - add them directly to result
-                    resultNodes.addAll(groupChildren);
-                }
-            } else {
-                // Direct expression (shouldn't happen with proper parentheses, but handle gracefully)
+        for (int i = 0; i < children.size(); i++) {
+            M3ASTNode child = children.get(i);
+            if (child instanceof GroupNode) {
+                // Preserve the GroupNode structure to match pipe syntax behavior
                 resultNodes.add(child);
+            } else {
+                // Union function requires all arguments to be parenthesized expressions (GroupNodes)
+                String childType = child.getClass().getSimpleName();
+                if (child instanceof FunctionNode functionChild) {
+                    childType = "FunctionNode(" + functionChild.getFunctionName() + ")";
+                }
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "union function expects argument %d of type Pipeline (parenthesized expression), received '%s'",
+                        i + 1,
+                        childType
+                    )
+                );
+            }
             }
         }
 
