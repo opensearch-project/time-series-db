@@ -85,15 +85,15 @@ public record ParallelProcessingConfig(boolean enabled, int seriesThreshold, int
 
         // Register listeners for each setting - each listener updates only the changed field
         // while preserving the other values from the current config
-        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED, newEnabled -> { updateEnabled(newEnabled); });
-
-        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD, newThreshold -> {
-            updateSeriesThreshold(newThreshold);
-        });
-
-        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD, newThreshold -> {
-            updateSamplesThreshold(newThreshold);
-        });
+        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED, ParallelProcessingConfig::updateEnabled);
+        clusterSettings.addSettingsUpdateConsumer(
+            TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD,
+            ParallelProcessingConfig::updateSeriesThreshold
+        );
+        clusterSettings.addSettingsUpdateConsumer(
+            TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD,
+            ParallelProcessingConfig::updateSamplesThreshold
+        );
     }
 
     /**
