@@ -175,7 +175,7 @@ public class ClosedChunkIndexManager implements Closeable {
 
     // visible for testing.
     synchronized void runOptimization() {
-        log.info("Starting optimization cycle");
+        log.debug("Starting optimization cycle");
         try {
             if (Instant.now().isAfter(lastRetentionTime.plusMillis(retention.getFrequency()))) {
                 lastRetentionTime = Instant.now();
@@ -262,7 +262,7 @@ public class ClosedChunkIndexManager implements Closeable {
         } catch (Throwable e) {
             log.error("Failed to run optimization cycle", e);
         }
-        log.info("Optimization cycle completed");
+        log.debug("Optimization cycle completed");
     }
 
     private void logCurrentAgeOfIndexes(List<ClosedChunkIndex> currentIndexes, List<ClosedChunkIndex> removedIndexes) {
@@ -412,7 +412,7 @@ public class ClosedChunkIndexManager implements Closeable {
     private Set<ClosedChunkIndex> closeIndexes(Set<ClosedChunkIndex> indexes) throws InterruptedException {
         var closedIndexes = new HashSet<ClosedChunkIndex>();
         for (ClosedChunkIndex index : indexes) {
-            log.info("Attempting to close index: {}", index.getMetadata().directoryName());
+            log.debug("Attempting to close index: {}", index.getMetadata().directoryName());
             try {
                 var readerManager = index.getDirectoryReaderManager();
                 var reader = readerManager.acquire();
@@ -454,7 +454,7 @@ public class ClosedChunkIndexManager implements Closeable {
     }
 
     private void deleteOrphanDirectories() throws IOException {
-        log.info("Starting cleanup of orphan directories");
+        log.debug("Starting cleanup of orphan directories");
         List<Path> currentPaths = new ArrayList<>();
         // prevent indexes pending removal from being deleted to allow proper closing sequence to be executed.
         Set<Path> livePaths = pendingClosureIndexes.stream().map(ClosedChunkIndex::getPath).collect(Collectors.toSet());
@@ -478,7 +478,7 @@ public class ClosedChunkIndexManager implements Closeable {
                 log.info("Deleted orphan directory: {}", path);
             }
         }
-        log.info("Cleanup of orphan directories completed");
+        log.debug("Cleanup of orphan directories completed");
     }
 
     /**
