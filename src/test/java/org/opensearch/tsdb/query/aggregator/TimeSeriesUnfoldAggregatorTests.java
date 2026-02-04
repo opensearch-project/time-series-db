@@ -45,6 +45,7 @@ import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -53,8 +54,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -378,40 +384,6 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests that recordMetrics correctly records all metric types including doc, chunk, and sample counts.
-     * This test ensures code coverage for all the new metric recording paths.
-     */
-    public void testRecordMetricsWithAllMetrics() throws IOException {
-        // Initialize TSDBMetrics with mock registry
-        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
-        Counter mockCounter = mock(Counter.class);
-        Histogram mockHistogram = mock(Histogram.class);
-        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
-        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
-        TSDBMetrics.initialize(mockRegistry);
-
-        try {
-            long minTimestamp = 1000L;
-            long maxTimestamp = 5000L;
-            long step = 100L;
-
-            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
-
-            // Set output series count to trigger metrics recording
-            // This exercises all the metric recording code paths including the new doc/chunk/sample metrics
-            aggregator.setOutputSeriesCountForTesting(10);
-            aggregator.recordMetrics();
-
-            // The test succeeds if recordMetrics doesn't throw an exception
-            // Coverage tool will verify that all code paths were executed
-            aggregator.close();
-
-        } finally {
-            TSDBMetrics.cleanup();
-        }
-    }
-
-    /**
      * Tests that recordMetrics handles the case when TSDBMetrics is not initialized.
      */
     public void testRecordMetricsWhenMetricsNotInitialized() throws IOException {
@@ -473,6 +445,17 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
                 // Now record metrics - this should exercise all the metric recording paths
                 // because we've gone through the aggregation lifecycle
                 aggregator.recordMetrics();
+
+                // Verify that metrics were recorded
+                // mockHistogram.record() should be called exactly 3 times:
+                // 1. collectLatency (since collectDurationNanos > 0)
+                // 2. postCollectLatency (since postCollectDurationNanos > 0)
+                // 3. seriesTotal (since outputSeriesCount = 5 > 0)
+                verify(mockHistogram, times(3)).record(anyDouble(), any(Tags.class));
+
+                // mockCounter.add() should be called exactly once:
+                // 1. resultsTotal with TAGS_STATUS_HITS (since outputSeriesCount > 0)
+                verify(mockCounter, times(1)).add(anyDouble(), any(Tags.class));
 
                 aggregator.close();
             } finally {
@@ -1126,9 +1109,13 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         Histogram mockHistogram = mock(Histogram.class);
         Counter mockCounter = mock(Counter.class);
 
-        // Make the histogram throw an exception when record is called
+        // Configure mocks to be returned by the registry
         when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
         when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+
+        // Make the histogram throw an exception when record is called
+        // This will trigger the exception handling in ExecutionStats.recordMetrics()
+        doThrow(new RuntimeException("Test exception in histogram.record()")).when(mockHistogram).record(anyDouble(), any(Tags.class));
 
         TSDBMetrics.initialize(mockRegistry);
 

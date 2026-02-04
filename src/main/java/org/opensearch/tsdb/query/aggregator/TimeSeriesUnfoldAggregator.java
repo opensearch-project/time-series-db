@@ -341,7 +341,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 if (chunkSamples > 0) {
                     totalSampleCount += chunkSamples;
                 }
-                // Track chunks - fixed to increment per chunk, not per doc
+                // Track chunks
                 executionStats.totalChunkCount++;
                 if (isLiveReader) {
                     executionStats.liveChunkCount++;
@@ -518,10 +518,11 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public void postCollection() throws IOException {
         // End collect phase timing and start postCollect timing
+        long currentTimestamp = System.nanoTime();
         if (executionStats.collectStartNanos > 0) {
-            executionStats.collectDurationNanos = System.nanoTime() - executionStats.collectStartNanos;
+            executionStats.collectDurationNanos = currentTimestamp - executionStats.collectStartNanos;
         }
-        executionStats.postCollectStartNanos = System.nanoTime();
+        executionStats.postCollectStartNanos = currentTimestamp;
 
         try {
             // Process each bucket's time series
@@ -700,6 +701,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
          * Emit all collected metrics to TSDBMetrics in one batch for minimal overhead.
          * All metrics are batched and emitted together at the end in a finally block.
          */
+        // TODO need to go through metrics and figure out if we want to emit metrics even when they are zero
         void recordMetrics() {
             if (!TSDBMetrics.isInitialized()) {
                 return;
