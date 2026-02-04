@@ -38,6 +38,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
+import org.opensearch.tsdb.query.stage.ParallelProcessingConfig;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
 
 import static org.hamcrest.Matchers.containsString;
@@ -77,7 +78,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<Setting<?>> settings = plugin.getSettings();
 
         assertNotNull("Settings list should not be null", settings);
-        assertThat("Should have 23 settings", settings, hasSize(23));
+        assertThat("Should have 26 settings", settings, hasSize(26));
 
         // Verify TSDB_ENGINE_ENABLED is present
         assertTrue("Should contain TSDB_ENGINE_ENABLED setting", settings.contains(TSDBPlugin.TSDB_ENGINE_ENABLED));
@@ -138,6 +139,18 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         assertTrue(
             "Should contain TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE setting",
             settings.contains(TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE)
+        );
+        assertTrue(
+            "Should contain PARALLEL_PROCESSING_ENABLED setting",
+            settings.contains(ParallelProcessingConfig.PARALLEL_PROCESSING_ENABLED)
+        );
+        assertTrue(
+            "Should contain PARALLEL_SERIES_THRESHOLD setting",
+            settings.contains(ParallelProcessingConfig.PARALLEL_SERIES_THRESHOLD)
+        );
+        assertTrue(
+            "Should contain PARALLEL_SAMPLES_THRESHOLD setting",
+            settings.contains(ParallelProcessingConfig.PARALLEL_SAMPLES_THRESHOLD)
         );
     }
 

@@ -62,6 +62,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RemoteIndexSettingsCache;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
+import org.opensearch.tsdb.query.stage.ParallelProcessingConfig;
 import org.opensearch.watcher.ResourceWatcherService;
 
 import java.io.IOException;
@@ -641,7 +642,10 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             TSDB_ENGINE_ENABLE_INTERNAL_AGG_CHUNK_COMPRESSION,
             TSDB_ENGINE_DEFAULT_STEP,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL,
-            TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE
+            TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE,
+            ParallelProcessingConfig.PARALLEL_PROCESSING_ENABLED,
+            ParallelProcessingConfig.PARALLEL_SERIES_THRESHOLD,
+            ParallelProcessingConfig.PARALLEL_SAMPLES_THRESHOLD
         );
     }
 
