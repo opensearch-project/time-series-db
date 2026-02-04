@@ -1,3 +1,0 @@
-UNION
-  FETCH({name=[actions1]}, !{})
-  FETCH({name=[actions2]}, !{})

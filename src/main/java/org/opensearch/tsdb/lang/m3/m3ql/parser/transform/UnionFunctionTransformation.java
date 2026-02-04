@@ -98,7 +98,6 @@ public class UnionFunctionTransformation implements ASTTransformation {
                     )
                 );
             }
-            }
         }
 
         return resultNodes;

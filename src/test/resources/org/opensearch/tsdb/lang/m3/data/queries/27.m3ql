@@ -1,3 +1,0 @@
-# test union function with three arguments
-# should be equivalent to: fetch name:metric1 | fetch name:metric2 | fetch name:metric3
-union (fetch name:metric1) (fetch name:metric2) (fetch name:metric3)

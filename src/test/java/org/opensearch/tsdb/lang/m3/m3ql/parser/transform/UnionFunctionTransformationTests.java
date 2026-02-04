@@ -156,7 +156,6 @@ public class UnionFunctionTransformationTests extends OpenSearchTestCase {
             .collect(Collectors.joining(" | "));
         return rest.isEmpty() ? first : first + " | " + rest;
     }
-    }
 
     /**
      * Test the transformation directly on AST nodes.
@@ -298,7 +297,6 @@ public class UnionFunctionTransformationTests extends OpenSearchTestCase {
         assertEquals(
             "union function expects argument 2 of type Pipeline (parenthesized expression), received 'FunctionNode(sum)'",
             exception2.getMessage()
-        );
         );
     }
 
