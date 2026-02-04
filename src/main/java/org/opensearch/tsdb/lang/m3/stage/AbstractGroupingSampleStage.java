@@ -45,7 +45,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     private static final Logger logger = LogManager.getLogger(AbstractGroupingSampleStage.class);
 
     /**
-     * Configuration for parallel processing thresholds.
+     * Configuration for parallel processing thresholds in grouping stages.
      * Uses default config since stages don't have access to cluster settings.
      * Can be overridden via setParallelConfig for testing.
      */
@@ -75,7 +75,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     }
 
     /**
-     * Set the parallel processing configuration.
+     * Set the parallel processing configuration for grouping stages.
      * Primarily intended for testing to control parallel vs sequential execution.
      *
      * @param config the parallel processing configuration to use
@@ -85,7 +85,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
     }
 
     /**
-     * Get the current parallel processing configuration.
+     * Get the current parallel processing configuration for grouping stages.
      *
      * @return the current configuration
      */
@@ -130,11 +130,11 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
      */
     @Override
     protected final TimeSeries processGroup(List<TimeSeries> groupSeries, Labels groupLabels) {
-        // Calculate dataset characteristics
+        // Get first series once - used for metadata and threshold calculation
         TimeSeries firstSeries = groupSeries.get(0);
         int seriesCount = groupSeries.size();
 
-        // Calculate average samples per series
+        // Calculate average samples per series for threshold checking
         int totalSamples = 0;
         for (TimeSeries series : groupSeries) {
             totalSamples += series.getSamples().size();
@@ -151,7 +151,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
                 seriesCount,
                 avgSamplesPerSeries
             );
-            return processGroupParallel(groupSeries, groupLabels);
+            return processGroupParallel(groupSeries, groupLabels, firstSeries);
         } else {
             logger.debug(
                 "Using sequential processing for stage={}, seriesCount={}, avgSamplesPerSeries={}",
@@ -159,7 +159,7 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
                 seriesCount,
                 avgSamplesPerSeries
             );
-            return processGroupSequential(groupSeries, groupLabels);
+            return processGroupSequential(groupSeries, groupLabels, firstSeries);
         }
     }
 
@@ -169,11 +169,11 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
      *
      * @param groupSeries List of time series in the same group
      * @param groupLabels The labels for this group (null if no grouping)
+     * @param firstSeries The first time series (for metadata extraction)
      * @return Single processed time series for this group
      */
-    private TimeSeries processGroupSequential(List<TimeSeries> groupSeries, Labels groupLabels) {
+    private TimeSeries processGroupSequential(List<TimeSeries> groupSeries, Labels groupLabels, TimeSeries firstSeries) {
         // Calculate expected number of unique timestamps based on time range and step
-        TimeSeries firstSeries = groupSeries.get(0);
         long timeRange = firstSeries.getMaxTimestamp() - firstSeries.getMinTimestamp();
         int expectedTimestamps = (int) (timeRange / firstSeries.getStep()) + 1;
 
@@ -237,10 +237,10 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
      *
      * @param groupSeries List of time series in the same group
      * @param groupLabels The labels for this group (null if no grouping)
+     * @param firstSeries The first time series (for metadata extraction)
      * @return Single processed time series for this group
      */
-    private TimeSeries processGroupParallel(List<TimeSeries> groupSeries, Labels groupLabels) {
-        TimeSeries firstSeries = groupSeries.get(0);
+    private TimeSeries processGroupParallel(List<TimeSeries> groupSeries, Labels groupLabels, TimeSeries firstSeries) {
         long timeRange = firstSeries.getMaxTimestamp() - firstSeries.getMinTimestamp();
         int expectedTimestamps = (int) (timeRange / firstSeries.getStep()) + 1;
 

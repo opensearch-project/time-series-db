@@ -27,19 +27,17 @@ import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeries;
  */
 public class AbstractGroupingSampleStageParallelTests extends OpenSearchTestCase {
 
-    private ParallelProcessingConfig originalConfig;
-
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        // Store original config to restore after tests
-        originalConfig = AbstractGroupingSampleStage.getParallelConfig();
+        // Reset to default config before each test to ensure clean state
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
     }
 
     @Override
     public void tearDown() throws Exception {
-        // Restore original config
-        AbstractGroupingSampleStage.setParallelConfig(originalConfig);
+        // Always reset to default config after tests to avoid affecting other tests
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
         super.tearDown();
     }
 
@@ -334,9 +332,9 @@ public class AbstractGroupingSampleStageParallelTests extends OpenSearchTestCase
     public void testDefaultConfigValues() {
         ParallelProcessingConfig config = ParallelProcessingConfig.defaultConfig();
 
-        assertTrue(config.isEnabled());
-        assertEquals(1000, config.getSeriesThreshold());
-        assertEquals(100, config.getSamplesThreshold());
+        assertTrue(config.enabled());
+        assertEquals(1000, config.seriesThreshold());
+        assertEquals(100, config.samplesThreshold());
 
         // Below default thresholds
         assertFalse(config.shouldUseParallelProcessing(500, 50));
@@ -346,20 +344,19 @@ public class AbstractGroupingSampleStageParallelTests extends OpenSearchTestCase
     }
 
     /**
-     * Test with settings-based config.
+     * Test with custom config values.
      */
-    public void testSettingsBasedConfig() {
-        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
-            .put("tsdb_engine.query.parallel_processing.enabled", true)
-            .put("tsdb_engine.query.parallel_processing.series_threshold", 500)
-            .put("tsdb_engine.query.parallel_processing.samples_threshold", 200)
-            .build();
+    public void testCustomConfig() {
+        // Create config with custom values (simulating what happens after settings are applied)
+        ParallelProcessingConfig config = new ParallelProcessingConfig(
+            true,  // enabled
+            500,   // seriesThreshold
+            200    // samplesThreshold
+        );
 
-        ParallelProcessingConfig config = new ParallelProcessingConfig(settings);
-
-        assertTrue(config.isEnabled());
-        assertEquals(500, config.getSeriesThreshold());
-        assertEquals(200, config.getSamplesThreshold());
+        assertTrue(config.enabled());
+        assertEquals(500, config.seriesThreshold());
+        assertEquals(200, config.samplesThreshold());
 
         // Test threshold behavior
         assertFalse(config.shouldUseParallelProcessing(400, 150)); // Below both

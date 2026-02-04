@@ -38,7 +38,6 @@ import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
-import org.opensearch.tsdb.query.stage.ParallelProcessingConfig;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
 
 import static org.hamcrest.Matchers.containsString;
@@ -141,16 +140,16 @@ public class TSDBPluginTests extends OpenSearchTestCase {
             settings.contains(TSDBPlugin.TSDB_ENGINE_FORCE_MERGE_MAX_SEGMENTS_AFTER_MERGE)
         );
         assertTrue(
-            "Should contain PARALLEL_PROCESSING_ENABLED setting",
-            settings.contains(ParallelProcessingConfig.PARALLEL_PROCESSING_ENABLED)
+            "Should contain GROUPING_STAGE_PARALLEL_ENABLED setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED)
         );
         assertTrue(
-            "Should contain PARALLEL_SERIES_THRESHOLD setting",
-            settings.contains(ParallelProcessingConfig.PARALLEL_SERIES_THRESHOLD)
+            "Should contain GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD)
         );
         assertTrue(
-            "Should contain PARALLEL_SAMPLES_THRESHOLD setting",
-            settings.contains(ParallelProcessingConfig.PARALLEL_SAMPLES_THRESHOLD)
+            "Should contain GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD)
         );
     }
 
@@ -316,6 +315,9 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         allSettings.add(TSDBPlugin.TSDB_ENGINE_WILDCARD_QUERY_CACHE_EXPIRE_AFTER);
         allSettings.add(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL);
         allSettings.add(TSDBPlugin.TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD);
 
         ClusterSettings mockClusterSettings = new ClusterSettings(Settings.EMPTY, allSettings);
         when(mockClusterService.getClusterSettings()).thenReturn(mockClusterSettings);

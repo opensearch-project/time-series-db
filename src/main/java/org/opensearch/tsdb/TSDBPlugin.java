@@ -555,6 +555,52 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         Setting.Property.Dynamic
     );
 
+    // ========== Grouping Stage Parallel Processing Settings ==========
+
+    /**
+     * Enable or disable parallel processing for grouping stages (sum, avg, min, max, count, etc.).
+     * When disabled, grouping stages always use sequential processing.
+     * Useful for debugging or when predictable single-threaded behavior is desired.
+     *
+     * <p>Default: true (enabled)</p>
+     */
+    public static final Setting<Boolean> GROUPING_STAGE_PARALLEL_ENABLED = Setting.boolSetting(
+        "tsdb_engine.query.grouping_stage.parallel_processing.enabled",
+        true, // default
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
+    /**
+     * Minimum number of time series to trigger parallel processing within a grouping stage.
+     * Below this threshold, sequential processing is used to avoid thread overhead.
+     *
+     * <p>Default: 1000 series</p>
+     */
+    public static final Setting<Integer> GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD = Setting.intSetting(
+        "tsdb_engine.query.grouping_stage.parallel_processing.series_threshold",
+        1000, // default
+        0, // min (0 = always parallel)
+        100000, // max
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
+    /**
+     * Minimum average number of samples per series to trigger parallel processing in grouping stages.
+     * This prevents parallelizing sparse time series where overhead may dominate.
+     *
+     * <p>Default: 100 samples</p>
+     */
+    public static final Setting<Integer> GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD = Setting.intSetting(
+        "tsdb_engine.query.grouping_stage.parallel_processing.samples_threshold",
+        100, // default
+        0, // min
+        10000, // max
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
     /**
      * Default constructor
      */
@@ -562,7 +608,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     /**
      * Initialize metrics if telemetry is available.
-     * Also initializes the wildcard query cache with cluster settings.
+     * Also initializes the wildcard query cache and parallel processing config with cluster settings.
      */
     @Override
     public java.util.Collection<Object> createComponents(
@@ -614,6 +660,9 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         // Initialize wildcard query cache with cluster-level settings
         CachedWildcardQueryBuilder.initializeCache(clusterService.getClusterSettings(), clusterService.getSettings());
 
+        // Initialize parallel processing config for grouping stages with cluster-level settings
+        ParallelProcessingConfig.initialize(clusterService.getClusterSettings(), clusterService.getSettings());
+
         return Collections.emptyList();
     }
 
@@ -643,9 +692,9 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             TSDB_ENGINE_DEFAULT_STEP,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE,
-            ParallelProcessingConfig.PARALLEL_PROCESSING_ENABLED,
-            ParallelProcessingConfig.PARALLEL_SERIES_THRESHOLD,
-            ParallelProcessingConfig.PARALLEL_SAMPLES_THRESHOLD
+            GROUPING_STAGE_PARALLEL_ENABLED,
+            GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD,
+            GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD
         );
     }
 
