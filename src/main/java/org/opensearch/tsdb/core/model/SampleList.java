@@ -60,10 +60,20 @@ public interface SampleList extends Iterable<Sample> {
     SampleList subList(int fromIndex, int toIndex);
 
     /**
-     * Search performed on timestamp array, the contract should be the same as
-     * {@link Collections#binarySearch(List, Object)} and {@link java.util.Arrays#binarySearch(int[], int)}
+     * Search performed on timestamp array, if the array is not sorted, then the result is undefined,
+     * the contract should be the same as {@link Collections#binarySearch(List, Object)} and
+     * {@link java.util.Arrays#binarySearch(int[], int)}
      * <br>
      * In most implementation speed should be at least the same as binary search
+     *
+     * @return index of the search key, if it is contained in the array;
+     *         otherwise, <code>(-(<i>insertion point</i>) - 1)</code>.  The
+     *         <i>insertion point</i> is defined as the point at which the
+     *         key would be inserted into the array: the index of the first
+     *         element greater than the key, or {@code a.length} if all
+     *         elements in the array are less than the specified key.  Note
+     *         that this guarantees that the return value will be &gt;= 0 if
+     *         and only if the key is found.
      */
     int search(long timestamp);
 

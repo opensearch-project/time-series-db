@@ -141,10 +141,7 @@ public class FloatSampleList implements SampleList {
 
         @Override
         public Sample merge(Sample other) {
-            if (other.getSampleType() != SampleType.FLOAT_SAMPLE) {
-                throw new IllegalArgumentException("Cannot merge FloatSample type with " + other.getSampleType());
-            }
-            return new FloatSample(getTimestamp(), getValue() + other.getValue());
+            throw new UnsupportedOperationException("This Sample is for iteration only, should not be merged with other Samples");
         }
 
         @Override
@@ -200,6 +197,7 @@ public class FloatSampleList implements SampleList {
             }
             this.values[size] = value;
             this.timestamps[size] = timestamp;
+            assert size == 0 || this.timestamps[size] >= this.timestamps[size - 1] : "timestamp added should be increasing";
             size++;
         }
 
@@ -211,6 +209,8 @@ public class FloatSampleList implements SampleList {
             assert index >= 0 && index < size;
             values[index] = value;
             timestamps[index] = timestamp;
+            assert index == 0 || this.timestamps[index] >= this.timestamps[index - 1] : "timestamp set should be increasing";
+            assert index == size - 1 || this.timestamps[index] <= this.timestamps[index + 1] : "timestamp set should be increasing";
         }
 
         public int size() {
@@ -258,17 +258,13 @@ public class FloatSampleList implements SampleList {
 
         @Override
         public double getValue(int index) {
-            if (index < 0 || index >= size()) {
-                throw new ArrayIndexOutOfBoundsException(index);
-            }
+            assert index >= 0 && index < size();
             return value;
         }
 
         @Override
         public long getTimestamp(int index) {
-            if (index < 0 || index >= size()) {
-                throw new ArrayIndexOutOfBoundsException(index);
-            }
+            assert index >= 0 && index < size();
             return minTimestamp + index * step;
         }
 
@@ -293,10 +289,10 @@ public class FloatSampleList implements SampleList {
         @Override
         public int search(long timestamp) {
             if (timestamp < minTimestamp) {
-                return -1;
+                return -1; // insertion point is 0
             }
             if (timestamp > maxTimestamp) {
-                return -size() - 1;
+                return -size() - 1; // insertion point is size()
             }
             int lowerIndex = Math.toIntExact((timestamp - minTimestamp) / step);
             if ((timestamp - minTimestamp) % step == 0) {

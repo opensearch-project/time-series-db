@@ -24,6 +24,9 @@ public class FloatSampleListTests extends OpenSearchTestCase {
 
         SampleList sampleList = builder.build();
 
+        // cannot call twice
+        expectThrows(IllegalStateException.class, builder::build);
+
         assertEquals(100, sampleList.size());
         for (int i = 0; i < sampleList.size(); i++) {
             if (i % 2 == 0) {
@@ -45,6 +48,9 @@ public class FloatSampleListTests extends OpenSearchTestCase {
         for (Sample sample : sampleList) {
             assertEquals(cnt, sample.getTimestamp());
             assertEquals(cnt * 2, sample.getValue(), 0.0001);
+            assertEquals(SampleType.FLOAT_SAMPLE, sample.getSampleType());
+            expectThrows(UnsupportedOperationException.class, () -> sample.merge(new FloatSample(1, 2)));
+            assertTrue(sample.deepCopy() instanceof FloatSample);
             cnt++;
         }
     }
@@ -93,7 +99,13 @@ public class FloatSampleListTests extends OpenSearchTestCase {
             nextTimestamp += 2000;
         }
 
+        assertEquals(-1, constantList.search(-1000));
         assertEquals(2, constantList.search(4000));
         assertEquals(-3 - 1, constantList.search(5000));
+        assertEquals(-6 - 1, constantList.search(11000));
+
+        SampleList subList = constantList.subList(1, 3);
+        assertEquals(2, subList.size());
+        assertEquals(4000, subList.getTimestamp(1));
     }
 }
