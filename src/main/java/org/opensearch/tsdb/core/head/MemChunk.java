@@ -265,7 +265,11 @@ public class MemChunk {
             ChunkEntry newEntry = new ChunkEntry(newChunk, newChunk.appender());
             chunks.add(newEntry);
             newEntry.append(timestamp, value);
-            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.oooChunksCreated, 1);
+
+            // only increment ooo chunks, as creating the first Chunk in a MemChunk is expected for in-order data
+            if (chunks.size() != 1) {
+                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.oooChunksCreated, 1);
+            }
         }
 
         /**
