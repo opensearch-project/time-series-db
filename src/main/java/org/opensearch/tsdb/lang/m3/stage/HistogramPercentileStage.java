@@ -36,6 +36,8 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.opensearch.tsdb.metrics.TSDBMetricsConstants.NANOS_PER_MILLI;
+
 /**
  * HistogramPercentileStage is a UnaryPipelineStage stage that calculates percentiles from histogram buckets.
  * This stage groups time series by all labels except bucketId and bucket range,
@@ -488,13 +490,13 @@ public class HistogramPercentileStage implements UnaryPipelineStage {
         @Override
         public double lower() {
             // cannot use low.toMillis() directly as that wil discard everything under 1ms for small durations
-            return low.toNanos() / 1_000_000.0; // Convert to milliseconds
+            return low.toNanos() / NANOS_PER_MILLI; // Convert to milliseconds
         }
 
         @Override
         public double upper() {
             // cannot use high.toMillis() directly as that wil discard everything under 1ms for small durations
-            return high.toNanos() / 1_000_000.0; // Convert to milliseconds
+            return high.toNanos() / NANOS_PER_MILLI; // Convert to milliseconds
         }
 
     }

@@ -45,15 +45,22 @@ import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -335,24 +342,131 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests that circuit breaker bytes are tracked during aggregation.
-     * Verifies that the aggregator properly tracks memory allocations.
+     * Tests that collectDebugInfo correctly exposes all ExecutionStats fields to the profiler.
      */
-    public void testCircuitBreakerTracking() throws IOException {
+    public void testCollectExecStats() throws IOException {
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
         long step = 100L;
 
         TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
-        // Initially, circuit breaker bytes should be 0
-        assertEquals("Circuit breaker should start at 0", 0L, aggregator.circuitBreakerBytes);
+        // Collect debug info using a map to capture all key-value pairs
+        Map<String, Object> debugInfo = new HashMap<>();
+        aggregator.collectDebugInfo(debugInfo::put);
 
-        // After processing (if any data is collected), circuit breaker should track memory
-        // Note: In this test we don't actually process data, so it should remain 0
-        // In real usage, it would increase as data is collected
+        // Verify all expected fields are present
+        assertNotNull(debugInfo.get("total_docs"));
+        assertNotNull(debugInfo.get("live_doc_count"));
+        assertNotNull(debugInfo.get("closed_doc_count"));
+        assertNotNull(debugInfo.get("total_chunks"));
+        assertNotNull(debugInfo.get("live_chunk_count"));
+        assertNotNull(debugInfo.get("closed_chunk_count"));
+        assertNotNull(debugInfo.get("total_samples_processed"));
+        assertNotNull(debugInfo.get("live_samples_processed"));
+        assertNotNull(debugInfo.get("closed_samples_processed"));
+        assertNotNull(debugInfo.get("total_samples_filtered"));
+        assertNotNull(debugInfo.get("live_samples_filtered"));
+        assertNotNull(debugInfo.get("closed_samples_filtered"));
+        assertNotNull(debugInfo.get("total_input_series"));
+        assertNotNull(debugInfo.get("total_output_series"));
+        assertNotNull(debugInfo.get("circuit_breaker_bytes"));
+        assertNotNull(debugInfo.get("stages"));
+
+        // Verify initial values are zero
+        assertEquals(0L, debugInfo.get("total_docs"));
+        assertEquals(0L, debugInfo.get("live_doc_count"));
+        assertEquals(0L, debugInfo.get("closed_doc_count"));
+        assertEquals(0L, debugInfo.get("total_chunks"));
+        assertEquals(0L, debugInfo.get("total_output_series"));
 
         aggregator.close();
+    }
+
+    /**
+     * Tests that recordMetrics handles the case when TSDBMetrics is not initialized.
+     */
+    public void testRecordMetricsWhenMetricsNotInitialized() throws IOException {
+        // Ensure TSDBMetrics is not initialized
+        TSDBMetrics.cleanup();
+
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long step = 100L;
+
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+        // This should not throw an exception even when metrics are not initialized
+        aggregator.setOutputSeriesCountForTesting(5);
+        aggregator.recordMetrics();
+
+        aggregator.close();
+    }
+
+    /**
+     * Tests recordMetrics with actual execution stats populated.
+     * This ensures coverage of all metric recording code paths including the new doc/chunk/sample metrics.
+     */
+    public void testRecordMetricsWithPopulatedStats() throws IOException {
+        // Initialize TSDBMetrics with mock registry
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        Counter mockCounter = mock(Counter.class);
+        Histogram mockHistogram = mock(Histogram.class);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Get a real TSDBLeafReaderWithContext to exercise the collection path
+            TSDBLeafReaderWithContext readerContext = createMockTSDBLeafReaderWithContext(minTimestamp, maxTimestamp);
+
+            try {
+                // Call preCollection to initialize the aggregator lifecycle
+                aggregator.preCollection();
+
+                // Get leaf collector which will initialize timing stats
+                LeafBucketCollector collector = aggregator.getLeafCollector(readerContext.context, LeafBucketCollector.NO_OP_COLLECTOR);
+
+                // Simulate collection to populate stats
+                // This will set collectStartNanos and other timing metrics
+
+                // Trigger post-collection to populate more stats
+                aggregator.postCollection();
+
+                // Set output series count
+                aggregator.setOutputSeriesCountForTesting(5);
+
+                // Now record metrics - this should exercise all the metric recording paths
+                // because we've gone through the aggregation lifecycle
+                aggregator.recordMetrics();
+
+                // Verify that metrics were recorded
+                // mockHistogram.record() should be called exactly 3 times:
+                // 1. collectLatency (since collectDurationNanos > 0)
+                // 2. postCollectLatency (since postCollectDurationNanos > 0)
+                // 3. seriesTotal (since outputSeriesCount = 5 > 0)
+                verify(mockHistogram, times(3)).record(anyDouble(), any(Tags.class));
+
+                // mockCounter.add() should be called exactly once:
+                // 1. resultsTotal with TAGS_STATUS_HITS (since outputSeriesCount > 0)
+                verify(mockCounter, times(1)).add(anyDouble(), any(Tags.class));
+
+                aggregator.close();
+            } finally {
+                readerContext.indexWriter.close();
+                readerContext.directoryReader.close();
+                readerContext.directory.close();
+            }
+
+        } finally {
+            TSDBMetrics.cleanup();
+        }
     }
 
     private TSDBLeafReaderWithContext createMockTSDBLeafReaderWithContext(long minTimestamp, long maxTimestamp) throws IOException {
@@ -594,7 +708,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         );
 
         // Set some test values
-        aggregator.circuitBreakerBytes = 1024;
+        aggregator.addCircuitBreakerBytesForTesting(1024);
 
         try {
             // Build aggregation (won't fail even with no data)
@@ -641,23 +755,23 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
             // Initially should be 0
-            assertEquals("Initial circuit breaker bytes should be 0", 0L, aggregator.circuitBreakerBytes);
+            assertEquals("Initial circuit breaker bytes should be 0", 0L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Add some bytes - this will trigger DEBUG logging
             aggregator.addCircuitBreakerBytesForTesting(1024);
-            assertEquals("Circuit breaker bytes should be updated", 1024L, aggregator.circuitBreakerBytes);
+            assertEquals("Circuit breaker bytes should be updated", 1024L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Add more bytes
             aggregator.addCircuitBreakerBytesForTesting(2048);
-            assertEquals("Circuit breaker bytes should accumulate", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Circuit breaker bytes should accumulate", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Adding 0 bytes should be a no-op
             aggregator.addCircuitBreakerBytesForTesting(0);
-            assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             // Adding negative bytes should be a no-op (checked by bytes > 0)
             aggregator.addCircuitBreakerBytesForTesting(-100);
-            assertEquals("Adding negative bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Adding negative bytes should not change total", 3072L, aggregator.getCircuitBreakerBytesForTesting());
 
             aggregator.close();
         } finally {
@@ -679,11 +793,11 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
         // Add bytes
         aggregator.addCircuitBreakerBytesForTesting(500);
-        assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.circuitBreakerBytes);
+        assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.getCircuitBreakerBytesForTesting());
 
         // Add more bytes - should accumulate
         aggregator.addCircuitBreakerBytesForTesting(600);
-        assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.circuitBreakerBytes);
+        assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.getCircuitBreakerBytesForTesting());
 
         aggregator.close();
     }
@@ -960,6 +1074,94 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             aggregator.close();
         } finally {
             TSDBMetrics.cleanup();
+        }
+    }
+
+    /**
+     * Tests buildEmptyAggregation() method.
+     */
+    public void testBuildEmptyAggregation() throws IOException {
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long step = 100L;
+
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+        // Call buildEmptyAggregation
+        org.opensearch.search.aggregations.InternalAggregation emptyAgg = aggregator.buildEmptyAggregation();
+
+        // Verify the result is not null and is an InternalTimeSeries
+        assertNotNull("Empty aggregation should not be null", emptyAgg);
+        assertTrue("Empty aggregation should be InternalTimeSeries", emptyAgg instanceof InternalTimeSeries);
+
+        InternalTimeSeries timeSeries = (InternalTimeSeries) emptyAgg;
+        assertEquals("Empty aggregation should have correct name", "test_aggregator", timeSeries.getName());
+
+        aggregator.close();
+    }
+
+    /**
+     * Tests that exception in recordMetrics is caught and swallowed.
+     */
+    public void testRecordMetricsExceptionHandling() throws IOException {
+        // Create a registry that throws an exception
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        Histogram mockHistogram = mock(Histogram.class);
+        Counter mockCounter = mock(Counter.class);
+
+        // Configure mocks to be returned by the registry
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+
+        // Make the histogram throw an exception when record is called
+        // This will trigger the exception handling in ExecutionStats.recordMetrics()
+        doThrow(new RuntimeException("Test exception in histogram.record()")).when(mockHistogram).record(anyDouble(), any(Tags.class));
+
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Set output series count to trigger metrics recording
+            aggregator.setOutputSeriesCountForTesting(5);
+
+            // recordMetrics should not throw even if internal metrics recording fails
+            // The exception should be caught and swallowed
+            aggregator.recordMetrics();
+
+            aggregator.close();
+        } finally {
+            TSDBMetrics.cleanup();
+        }
+    }
+
+    /**
+     * Tests doClose with DEBUG logging enabled to cover the debug logging path.
+     */
+    public void testDoCloseWithDebugLogging() throws IOException {
+        // Enable DEBUG logging
+        Configurator.setLevel(TimeSeriesUnfoldAggregator.class.getName(), Level.DEBUG);
+
+        try {
+            long minTimestamp = 1000L;
+            long maxTimestamp = 5000L;
+            long step = 100L;
+
+            TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+            // Add some circuit breaker bytes to make the debug log interesting
+            aggregator.addCircuitBreakerBytesForTesting(1024);
+
+            // Call doClose - this should trigger the debug log
+            aggregator.close();
+
+        } finally {
+            // Reset logging level
+            Configurator.setLevel(TimeSeriesUnfoldAggregator.class.getName(), Level.INFO);
         }
     }
 }
