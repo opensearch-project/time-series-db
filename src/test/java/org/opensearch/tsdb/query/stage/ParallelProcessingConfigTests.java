@@ -7,9 +7,14 @@
  */
 package org.opensearch.tsdb.query.stage;
 
+import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.TSDBPlugin;
+import org.opensearch.tsdb.lang.m3.stage.AbstractGroupingSampleStage;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Tests for ParallelProcessingConfig.
@@ -206,5 +211,107 @@ public class ParallelProcessingConfigTests extends OpenSearchTestCase {
         assertTrue(toString.contains("enabled=true"));
         assertTrue(toString.contains("seriesThreshold=100"));
         assertTrue(toString.contains("samplesThreshold=50"));
+    }
+
+    /**
+     * Test initialize method with default settings.
+     */
+    public void testInitializeWithDefaultSettings() {
+        // Reset to known state
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.sequentialOnly());
+
+        // Create ClusterSettings with our settings registered
+        Set<org.opensearch.common.settings.Setting<?>> settingsSet = new HashSet<>();
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED);
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD);
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD);
+
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, settingsSet);
+
+        // Initialize
+        ParallelProcessingConfig.initialize(clusterSettings, Settings.EMPTY);
+
+        // Verify config was set on AbstractGroupingSampleStage
+        ParallelProcessingConfig config = AbstractGroupingSampleStage.getParallelConfig();
+        assertTrue("Config should be enabled by default", config.enabled());
+        assertEquals("Default series threshold should be 1000", 1000, config.seriesThreshold());
+        assertEquals("Default samples threshold should be 100", 100, config.samplesThreshold());
+
+        // Reset
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
+    }
+
+    /**
+     * Test initialize method with custom settings.
+     */
+    public void testInitializeWithCustomSettings() {
+        // Reset to known state
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.sequentialOnly());
+
+        // Create custom settings
+        Settings customSettings = Settings.builder()
+            .put("tsdb_engine.query.grouping_stage.parallel_processing.enabled", false)
+            .put("tsdb_engine.query.grouping_stage.parallel_processing.series_threshold", 500)
+            .put("tsdb_engine.query.grouping_stage.parallel_processing.samples_threshold", 250)
+            .build();
+
+        // Create ClusterSettings with our settings registered
+        Set<org.opensearch.common.settings.Setting<?>> settingsSet = new HashSet<>();
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED);
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD);
+        settingsSet.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD);
+
+        ClusterSettings clusterSettings = new ClusterSettings(customSettings, settingsSet);
+
+        // Initialize
+        ParallelProcessingConfig.initialize(clusterSettings, customSettings);
+
+        // Verify config was set with custom values
+        ParallelProcessingConfig config = AbstractGroupingSampleStage.getParallelConfig();
+        assertFalse("Config should be disabled", config.enabled());
+        assertEquals("Series threshold should be 500", 500, config.seriesThreshold());
+        assertEquals("Samples threshold should be 250", 250, config.samplesThreshold());
+
+        // Reset
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
+    }
+
+    /**
+     * Test dynamic update methods preserve other values when updating individual settings.
+     */
+    public void testDynamicUpdateMethods() {
+        // Set initial config
+        AbstractGroupingSampleStage.setParallelConfig(new ParallelProcessingConfig(true, 1000, 100));
+
+        // Test updateEnabled - only enabled should change
+        ParallelProcessingConfig.updateEnabled(false);
+        ParallelProcessingConfig config = AbstractGroupingSampleStage.getParallelConfig();
+        assertFalse("Enabled should be false", config.enabled());
+        assertEquals("Series threshold should be preserved", 1000, config.seriesThreshold());
+        assertEquals("Samples threshold should be preserved", 100, config.samplesThreshold());
+
+        // Test updateSeriesThreshold - only series threshold should change
+        ParallelProcessingConfig.updateSeriesThreshold(5000);
+        config = AbstractGroupingSampleStage.getParallelConfig();
+        assertFalse("Enabled should still be false", config.enabled());
+        assertEquals("Series threshold should be updated", 5000, config.seriesThreshold());
+        assertEquals("Samples threshold should be preserved", 100, config.samplesThreshold());
+
+        // Test updateSamplesThreshold - only samples threshold should change
+        ParallelProcessingConfig.updateSamplesThreshold(500);
+        config = AbstractGroupingSampleStage.getParallelConfig();
+        assertFalse("Enabled should still be false", config.enabled());
+        assertEquals("Series threshold should be preserved", 5000, config.seriesThreshold());
+        assertEquals("Samples threshold should be updated", 500, config.samplesThreshold());
+
+        // Test re-enabling
+        ParallelProcessingConfig.updateEnabled(true);
+        config = AbstractGroupingSampleStage.getParallelConfig();
+        assertTrue("Enabled should be true after re-enable", config.enabled());
+        assertEquals("Series threshold should be preserved", 5000, config.seriesThreshold());
+        assertEquals("Samples threshold should be preserved", 500, config.samplesThreshold());
+
+        // Reset
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
     }
 }

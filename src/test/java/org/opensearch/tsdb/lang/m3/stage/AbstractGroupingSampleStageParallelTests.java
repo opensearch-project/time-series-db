@@ -327,42 +327,26 @@ public class AbstractGroupingSampleStageParallelTests extends OpenSearchTestCase
     }
 
     /**
-     * Test default config values.
+     * Test get and set parallel config on AbstractGroupingSampleStage.
      */
-    public void testDefaultConfigValues() {
-        ParallelProcessingConfig config = ParallelProcessingConfig.defaultConfig();
+    public void testGetAndSetParallelConfig() {
+        // Set a custom config
+        ParallelProcessingConfig customConfig = new ParallelProcessingConfig(false, 500, 200);
+        AbstractGroupingSampleStage.setParallelConfig(customConfig);
 
-        assertTrue(config.enabled());
-        assertEquals(1000, config.seriesThreshold());
-        assertEquals(100, config.samplesThreshold());
+        // Verify getParallelConfig returns the same config
+        ParallelProcessingConfig retrieved = AbstractGroupingSampleStage.getParallelConfig();
+        assertEquals(customConfig, retrieved);
+        assertFalse(retrieved.enabled());
+        assertEquals(500, retrieved.seriesThreshold());
+        assertEquals(200, retrieved.samplesThreshold());
 
-        // Below default thresholds
-        assertFalse(config.shouldUseParallelProcessing(500, 50));
-
-        // Above default thresholds
-        assertTrue(config.shouldUseParallelProcessing(2000, 200));
-    }
-
-    /**
-     * Test with custom config values.
-     */
-    public void testCustomConfig() {
-        // Create config with custom values (simulating what happens after settings are applied)
-        ParallelProcessingConfig config = new ParallelProcessingConfig(
-            true,  // enabled
-            500,   // seriesThreshold
-            200    // samplesThreshold
-        );
-
-        assertTrue(config.enabled());
-        assertEquals(500, config.seriesThreshold());
-        assertEquals(200, config.samplesThreshold());
-
-        // Test threshold behavior
-        assertFalse(config.shouldUseParallelProcessing(400, 150)); // Below both
-        assertFalse(config.shouldUseParallelProcessing(600, 150)); // Above series, below samples
-        assertFalse(config.shouldUseParallelProcessing(400, 250)); // Below series, above samples
-        assertTrue(config.shouldUseParallelProcessing(600, 250));  // Above both
+        // Reset and verify
+        AbstractGroupingSampleStage.setParallelConfig(ParallelProcessingConfig.defaultConfig());
+        retrieved = AbstractGroupingSampleStage.getParallelConfig();
+        assertTrue(retrieved.enabled());
+        assertEquals(1000, retrieved.seriesThreshold());
+        assertEquals(100, retrieved.samplesThreshold());
     }
 
     /**

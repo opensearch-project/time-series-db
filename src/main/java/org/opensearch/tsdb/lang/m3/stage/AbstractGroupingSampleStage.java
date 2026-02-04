@@ -130,7 +130,8 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
      */
     @Override
     protected final TimeSeries processGroup(List<TimeSeries> groupSeries, Labels groupLabels) {
-        // Get first series once - used for metadata and threshold calculation
+        // Get first series for metadata extraction (timestamps, step, alias)
+        // Threshold decision uses seriesCount and avgSamplesPerSeries (calculated below)
         TimeSeries firstSeries = groupSeries.get(0);
         int seriesCount = groupSeries.size();
 

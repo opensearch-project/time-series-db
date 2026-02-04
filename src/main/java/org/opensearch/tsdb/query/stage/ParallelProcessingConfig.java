@@ -83,40 +83,54 @@ public record ParallelProcessingConfig(boolean enabled, int seriesThreshold, int
             initialConfig.samplesThreshold()
         );
 
-        // Register listeners for each setting - each listener recreates the config with all current values
-        // This ensures atomic updates when any setting changes
-        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED, newEnabled -> {
-            updateConfig(clusterSettings, "enabled", newEnabled);
-        });
+        // Register listeners for each setting - each listener updates only the changed field
+        // while preserving the other values from the current config
+        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED, newEnabled -> { updateEnabled(newEnabled); });
 
         clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD, newThreshold -> {
-            updateConfig(clusterSettings, "seriesThreshold", newThreshold);
+            updateSeriesThreshold(newThreshold);
         });
 
         clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD, newThreshold -> {
-            updateConfig(clusterSettings, "samplesThreshold", newThreshold);
+            updateSamplesThreshold(newThreshold);
         });
     }
 
     /**
-     * Helper method to update config when any setting changes.
-     * Reads all current setting values from ClusterSettings to ensure consistency.
+     * Update the enabled setting while preserving other values.
+     * Package-private for testing.
      */
-    private static void updateConfig(ClusterSettings clusterSettings, String changedSetting, Object newValue) {
+    static void updateEnabled(boolean newEnabled) {
+        ParallelProcessingConfig current = AbstractGroupingSampleStage.getParallelConfig();
         ParallelProcessingConfig newConfig = new ParallelProcessingConfig(
-            clusterSettings.get(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED),
-            clusterSettings.get(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD),
-            clusterSettings.get(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD)
+            newEnabled,
+            current.seriesThreshold(),
+            current.samplesThreshold()
         );
         AbstractGroupingSampleStage.setParallelConfig(newConfig);
-        logger.info(
-            "Updated parallel processing config ({}={}): enabled={}, seriesThreshold={}, samplesThreshold={}",
-            changedSetting,
-            newValue,
-            newConfig.enabled(),
-            newConfig.seriesThreshold(),
-            newConfig.samplesThreshold()
-        );
+        logger.info("Updated parallel processing config: enabled={}", newEnabled);
+    }
+
+    /**
+     * Update the series threshold setting while preserving other values.
+     * Package-private for testing.
+     */
+    static void updateSeriesThreshold(int newThreshold) {
+        ParallelProcessingConfig current = AbstractGroupingSampleStage.getParallelConfig();
+        ParallelProcessingConfig newConfig = new ParallelProcessingConfig(current.enabled(), newThreshold, current.samplesThreshold());
+        AbstractGroupingSampleStage.setParallelConfig(newConfig);
+        logger.info("Updated parallel processing config: seriesThreshold={}", newThreshold);
+    }
+
+    /**
+     * Update the samples threshold setting while preserving other values.
+     * Package-private for testing.
+     */
+    static void updateSamplesThreshold(int newThreshold) {
+        ParallelProcessingConfig current = AbstractGroupingSampleStage.getParallelConfig();
+        ParallelProcessingConfig newConfig = new ParallelProcessingConfig(current.enabled(), current.seriesThreshold(), newThreshold);
+        AbstractGroupingSampleStage.setParallelConfig(newConfig);
+        logger.info("Updated parallel processing config: samplesThreshold={}", newThreshold);
     }
 
     /**
