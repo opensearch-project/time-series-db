@@ -7,6 +7,10 @@
  */
 package org.opensearch.tsdb.core.chunk;
 
+import org.opensearch.telemetry.metrics.Counter;
+import org.opensearch.telemetry.metrics.Histogram;
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.head.ChunkOptions;
 import org.opensearch.tsdb.core.head.MemChunk;
@@ -14,7 +18,9 @@ import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.head.MemSeriesReader;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.ByteLabels;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
 
+import java.io.Closeable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -24,6 +30,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class MMappedChunksManagerTests extends OpenSearchTestCase {
 
@@ -371,5 +386,97 @@ public class MMappedChunksManagerTests extends OpenSearchTestCase {
         Map<Long, Set<MemChunk>> result = manager.getAllMMappedChunks();
 
         assertTrue("Should handle empty chunk sets but they will not be returned in getAllMMappedChunks()", result.isEmpty());
+    }
+
+    // ========== Metrics Tests ==========
+
+    public void testMetricsFullFlow() throws Exception {
+        // Setup mock registry to capture both histogram calls and gauge supplier
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        Histogram mockHistogram = mock(Histogram.class);
+        Closeable mockGauge = mock(Closeable.class);
+
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mock(Counter.class));
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
+
+        // Capture the supplier passed to createGauge
+        final Supplier<Double>[] capturedSupplier = new Supplier[1];
+        when(mockRegistry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenAnswer(
+            invocation -> {
+                capturedSupplier[0] = invocation.getArgument(3);
+                return mockGauge;
+            }
+        );
+
+        // Initialize TSDBMetrics with MMappedChunksManager metrics
+        TSDBMetrics.initialize(mockRegistry, MMappedChunksManager.getMetricsInitializer());
+
+        try {
+            // 1. Create manager - should register metrics
+            MMappedChunksManager testManager = new MMappedChunksManager(seriesReader);
+
+            // Verify histogram was created for chunksPerSeries
+            verify(mockRegistry).createHistogram(eq(MMappedChunksManager.Metrics.CHUNKS_PER_SERIES), anyString(), anyString());
+
+            // Verify gauge was created for totalChunks
+            verify(mockRegistry).createGauge(
+                eq(MMappedChunksManager.Metrics.TOTAL_CHUNKS),
+                anyString(),
+                anyString(),
+                any(Supplier.class),
+                any(Tags.class)
+            );
+
+            // 2. Initially, gauge should return 0
+            assertNotNull("Gauge supplier should be captured", capturedSupplier[0]);
+            assertEquals("Initial gauge value should be 0", 0.0, capturedSupplier[0].get(), 0.001);
+
+            // 3. Add chunks with different per-series counts
+            Map<Long, Set<MemChunk>> mMappedChunks = new HashMap<>();
+            mMappedChunks.put(series1.getReference(), Set.of(chunk1, chunk2)); // 2 chunks for series1
+            mMappedChunks.put(series2.getReference(), Set.of(chunk3)); // 1 chunk for series2
+            testManager.addMMappedChunks(mMappedChunks);
+
+            // 4. Verify gauge returns correct total (3 chunks)
+            assertEquals("Gauge should return total chunk count of 3", 3.0, capturedSupplier[0].get(), 0.001);
+
+            // 5. Verify histogram recorded per-series chunk counts
+            verify(mockHistogram).record(eq(2.0), any(Tags.class)); // series1 has 2 chunks
+            verify(mockHistogram).record(eq(1.0), any(Tags.class)); // series2 has 1 chunk
+
+            // 6. Add reader version - chunks should still be tracked
+            testManager.addReaderVersionToChunks(1L, mMappedChunks);
+            assertEquals("Gauge should still return 3 after adding reader version", 3.0, capturedSupplier[0].get(), 0.001);
+
+            // 7. Remove chunks - gauge should update
+            testManager.removeMMappedChunksForReaderVersion(1L, mMappedChunks);
+            assertEquals("Gauge should return 0 after removing all chunks", 0.0, capturedSupplier[0].get(), 0.001);
+
+            // 8. Close manager - gauge should be closed
+            testManager.close();
+            verify(mockGauge, times(1)).close();
+        } finally {
+            TSDBMetrics.cleanup();
+        }
+    }
+
+    public void testMetricsWithoutInitialization() {
+        // Test that metrics work gracefully when TSDBMetrics is not initialized
+        TSDBMetrics.cleanup(); // Ensure metrics are not initialized
+
+        // Create manager - should not throw exception
+        MMappedChunksManager testManager = new MMappedChunksManager(seriesReader);
+
+        // Add chunks - should not throw exception
+        Map<Long, Set<MemChunk>> mMappedChunks = new HashMap<>();
+        mMappedChunks.put(series1.getReference(), Set.of(chunk1));
+        testManager.addMMappedChunks(mMappedChunks);
+
+        // Remove chunks - should not throw exception
+        testManager.addReaderVersionToChunks(1L, mMappedChunks);
+        testManager.removeMMappedChunksForReaderVersion(1L, mMappedChunks);
+
+        // Close - should not throw exception
+        testManager.close();
     }
 }
