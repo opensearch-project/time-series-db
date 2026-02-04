@@ -707,9 +707,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_EMPTY);
             }
 
-            // Record circuit breaker MB (histogram for distribution tracking)
+            // Record circuit breaker MiB (histogram for distribution tracking)
             if (circuitBreakerBytes > 0) {
-                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerMB, circuitBreakerBytes / (1024.0 * 1024.0));
+                TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerMiB, circuitBreakerBytes / (1024.0 * 1024.0));
             }
         } catch (Exception e) {
             // Swallow exceptions in metrics recording to avoid impacting actual operation

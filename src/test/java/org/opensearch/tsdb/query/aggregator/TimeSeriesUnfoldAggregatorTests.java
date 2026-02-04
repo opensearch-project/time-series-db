@@ -339,7 +339,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests that recordMetrics correctly records circuit breaker MB histogram when circuitBreakerBytes > 0.
+     * Tests that recordMetrics correctly records circuit breaker MiB histogram when circuitBreakerBytes > 0.
      */
     public void testRecordMetricsWithCircuitBreakerBytes() throws IOException {
         // Initialize TSDBMetrics with mock registry
@@ -348,9 +348,9 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
         // Default histogram for other metrics (must be defined first)
         when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
-        // Create a specific mock for the circuit breaker MB histogram (defined last to take precedence)
-        Histogram circuitBreakerMBHistogram = mock(Histogram.class);
-        when(mockRegistry.createHistogram(contains("circuit_breaker.mb"), anyString(), anyString())).thenReturn(circuitBreakerMBHistogram);
+        // Create a specific mock for the circuit breaker MiB histogram (defined last to take precedence)
+        Histogram circuitBreakerMiBHistogram = mock(Histogram.class);
+        when(mockRegistry.createHistogram(contains("circuit_breaker.mib"), anyString(), anyString())).thenReturn(circuitBreakerMiBHistogram);
 
         TSDBMetrics.initialize(mockRegistry);
 
@@ -362,11 +362,11 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
             // Set circuit breaker bytes > 0 to trigger the histogram recording path
-            aggregator.circuitBreakerBytes = 10 * 1024 * 1024; // 10 MB
+            aggregator.circuitBreakerBytes = 10 * 1024 * 1024; // 10 MiB
             aggregator.recordMetrics();
 
-            // Verify the histogram was called with the correct value (10 MB)
-            verify(circuitBreakerMBHistogram).record(eq(10.0), eq(Tags.EMPTY));
+            // Verify the histogram was called with the correct value (10 MiB)
+            verify(circuitBreakerMiBHistogram).record(eq(10.0), eq(Tags.EMPTY));
 
             aggregator.close();
 
