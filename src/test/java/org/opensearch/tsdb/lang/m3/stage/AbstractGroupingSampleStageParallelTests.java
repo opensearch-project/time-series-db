@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.model.Sample;
@@ -24,7 +26,11 @@ import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.createTimeSeries;
 /**
  * Tests for parallel processing functionality in AbstractGroupingSampleStage.
  * Verifies that parallel and sequential processing produce identical results.
+ *
+ * Note: Uses ThreadLeakScope.NONE because parallelStream() uses ForkJoinPool.commonPool()
+ * which creates worker threads that persist beyond test execution (with JVM-managed keepalive).
  */
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class AbstractGroupingSampleStageParallelTests extends OpenSearchTestCase {
 
     @Override
