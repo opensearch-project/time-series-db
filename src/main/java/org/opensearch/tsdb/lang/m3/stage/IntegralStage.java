@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
+
 import static org.opensearch.common.Booleans.parseBooleanStrict;
 
 /**
@@ -204,5 +206,28 @@ public class IntegralStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Boolean.hashCode(resetOnNull);
+    }
+
+    /**
+     * Estimate temporary memory overhead for integral (cumulative sum) calculations.
+     * IntegralStage creates new sample lists for computed cumulative values.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // New ArrayList for results
+            int numSamples = ts.getSamples().size();
+            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+        }
+
+        return totalOverhead;
     }
 }

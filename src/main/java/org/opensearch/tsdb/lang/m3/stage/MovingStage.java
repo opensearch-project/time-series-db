@@ -33,6 +33,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
+
 /**
  * Pipeline stage that implements M3QL's moving function for time-based intervals.
  * Uses circular buffers for efficient computation of moving aggregations.
@@ -207,5 +209,44 @@ public class MovingStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(interval, function);
+    }
+
+    /**
+     * Estimate temporary memory overhead for moving window operations.
+     * MovingStage uses circular buffers and TreeMap for median calculations.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        // Estimate window size based on interval and actual step size
+        int estimatedWindowSize = 50; // Conservative default
+        TimeSeries first = input.get(0);
+        if (first.getStep() > 0) {
+            estimatedWindowSize = Math.max(1, (int) (interval / first.getStep()));
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // Circular buffer for window values
+            totalOverhead += MemoryEstimationConstants.ARRAY_HEADER_OVERHEAD + (estimatedWindowSize
+                * MemoryEstimationConstants.DOUBLE_SIZE);
+
+            // TreeMap overhead only for MEDIAN (RunningMedian uses TreeMap)
+            if (function.getType() == WindowAggregationType.Type.MEDIAN) {
+                totalOverhead += estimatedWindowSize * MemoryEstimationConstants.TREEMAP_ENTRY_OVERHEAD;
+            }
+
+            // Result ArrayList
+            int numSamples = ts.getSamples().size();
+            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+        }
+
+        return totalOverhead;
     }
 }

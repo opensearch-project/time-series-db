@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
+
 /**
  * Pipeline stage that implements M3QL's derivative function.
  *
@@ -140,5 +142,28 @@ public class DerivativeStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return NAME.hashCode();
+    }
+
+    /**
+     * Estimate temporary memory overhead for derivative operations.
+     * DerivativeStage creates new sample lists for computed values.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // New ArrayList for results
+            int numSamples = ts.getSamples().size();
+            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+        }
+
+        return totalOverhead;
     }
 }

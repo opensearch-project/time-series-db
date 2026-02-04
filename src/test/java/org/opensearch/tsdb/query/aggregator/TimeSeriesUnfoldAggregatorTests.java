@@ -655,9 +655,9 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             aggregator.addCircuitBreakerBytesForTesting(0);
             assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
 
-            // Adding negative bytes should be a no-op (checked by bytes > 0)
+            // Adding negative bytes releases memory (decrements the total)
             aggregator.addCircuitBreakerBytesForTesting(-100);
-            assertEquals("Adding negative bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
+            assertEquals("Adding negative bytes should release memory", 2972L, aggregator.circuitBreakerBytes);
 
             aggregator.close();
         } finally {

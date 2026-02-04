@@ -35,6 +35,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
+
 /**
  * Pipeline stage that summarizes time series data into interval buckets.
  *
@@ -353,5 +355,31 @@ public class SummarizeStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(interval, function, alignToFrom, referenceTimeConstant);
+    }
+
+    /**
+     * Estimate temporary memory overhead for summarize operations.
+     * SummarizeStage uses BucketMapper, BucketSummarizer, and result ArrayLists.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            totalOverhead += MemoryEstimationConstants.BUCKET_MAPPER_OVERHEAD;
+            totalOverhead += MemoryEstimationConstants.BUCKET_SUMMARIZER_OVERHEAD;
+
+            // Result ArrayList
+            int numSamples = ts.getSamples().size();
+            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+        }
+
+        return totalOverhead;
     }
 }

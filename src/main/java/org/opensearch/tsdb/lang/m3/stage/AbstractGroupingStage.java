@@ -28,6 +28,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.LongConsumer;
+
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 
 /**
  * Abstract base class for pipeline stages that support label grouping.
@@ -80,6 +83,18 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
      * @return The processed time series
      */
     public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord) {
+        return process(input, isCoord, null);
+    }
+
+    /**
+     * Process a list of time series with coordination control and circuit breaker tracking.
+     *
+     * @param input The input time series to process
+     * @param isCoord Whether this is called from coordination aggregator (enables normalization and materialization)
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
+     * @return The processed time series
+     */
+    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord, LongConsumer circuitBreakerConsumer) {
         if (input == null) {
             throw new NullPointerException(getName() + " stage received null input");
         }
@@ -102,7 +117,8 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             return List.of(processedSeries);
         } else {
             // Label grouping: group by specified labels and aggregate within each group
-            result = processWithLabelGrouping(input, isCoord);
+            // Pass circuit breaker consumer for granular tracking of cardinality
+            result = processWithLabelGrouping(input, isCoord, circuitBreakerConsumer);
             // Apply sample materialization if called from coordination aggregator
             if (isCoord && needsMaterialization()) {
                 result.replaceAll(this::materializeSamples);
@@ -119,6 +135,17 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
     * @return List of aggregated time series grouped by labels
     */
     protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord) {
+        return processWithLabelGrouping(input, isCoord, null);
+    }
+
+    /**
+    * Process time series with label grouping and circuit breaker tracking.
+    * @param input List of time series to process
+    * @param isCoord Whether this is called from coordination aggregator (enables normalization per group)
+    * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created
+    * @return List of aggregated time series grouped by labels
+    */
+    protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord, LongConsumer circuitBreakerConsumer) {
         // Group by ByteLabels for proper equality and hashing
         Map<ByteLabels, List<TimeSeries>> labelGroupToSeries = new HashMap<>();
 
@@ -132,8 +159,19 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
                 continue;
             }
 
+            // Track if this is a new group for circuit breaker
+            boolean isNewGroup = !labelGroupToSeries.containsKey(groupLabels);
+
             // Add this series to the appropriate group using ByteLabels as key
             labelGroupToSeries.computeIfAbsent(groupLabels, k -> new ArrayList<>()).add(series);
+
+            // Granular circuit breaker tracking: track bytes when a NEW group is created
+            // This catches cardinality explosion in real-time
+            if (isNewGroup && circuitBreakerConsumer != null) {
+                long groupOverhead = MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD + groupLabels.estimateBytes()
+                    + MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
+                circuitBreakerConsumer.accept(groupOverhead);
+            }
         }
 
         // Process each group and combine results
@@ -396,5 +434,22 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         }
         AbstractGroupingStage that = (AbstractGroupingStage) obj;
         return groupByLabels.equals(that.groupByLabels);
+    }
+
+    /**
+     * Process with context for grouping stages.
+     * This overrides the default to pass the coordinator flag and circuit breaker consumer to the process method.
+     *
+     * <p>Circuit breaker tracking is done granularly inside {@link #processWithLabelGrouping} as each
+     * new group is created, rather than estimating upfront. This catches cardinality explosion in real-time.</p>
+     *
+     * @param input The input time series
+     * @param coordinatorExecution true if executing at coordinator level
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created
+     * @return The processed time series
+     */
+    @Override
+    public List<TimeSeries> processWithContext(List<TimeSeries> input, boolean coordinatorExecution, LongConsumer circuitBreakerConsumer) {
+        return process(input, coordinatorExecution, circuitBreakerConsumer);
     }
 }

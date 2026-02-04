@@ -12,6 +12,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * Interface for unary pipeline stages that operate on a single time series input.
@@ -100,5 +101,39 @@ public interface UnaryPipelineStage extends PipelineStage {
     @Override
     default boolean isCoordinatorOnly() {
         return false;
+    }
+
+    /**
+     * Estimate the memory overhead this stage will allocate during processing.
+     *
+     * <p>This is used by the circuit breaker to track memory usage during stage execution.
+     * The estimate represents allocations like HashMaps, buffers, and intermediate structures
+     * that the stage needs to perform its work.</p>
+     *
+     * <p>Stages with significant allocations (grouping maps, sliding window buffers,
+     * sparse-to-dense expansion, etc.) should override this method to return an estimate.</p>
+     *
+     * @param input The input time series that will be processed
+     * @return Estimated memory overhead in bytes, 0 if minimal
+     */
+    default long estimateMemoryOverhead(List<TimeSeries> input) {
+        return 0;
+    }
+
+    /**
+     * Process a single time series input with context about execution location.
+     *
+     * <p>This method is called by the executor and provides the coordinator flag.
+     * By default, it delegates to {@link #process(List)} ignoring the flag.
+     * Stages that behave differently at coordinator vs shard level (like grouping stages)
+     * should override this method.</p>
+     *
+     * @param input The input time series to process
+     * @param coordinatorExecution true if executing at coordinator level, false if at shard level
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
+     * @return The transformed time series
+     */
+    default List<TimeSeries> processWithContext(List<TimeSeries> input, boolean coordinatorExecution, LongConsumer circuitBreakerConsumer) {
+        return process(input);
     }
 }

@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
+
 /**
  * Pipeline stage that fills missing data points with a default value.
  * Creates a dense time series using the metadata from the input TimeSeries.
@@ -173,5 +175,28 @@ public class TransformNullStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(fillValue);
+    }
+
+    /**
+     * Estimate temporary memory overhead for transform null operations.
+     * TransformNullStage creates new sample lists with filled values.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // New ArrayList for results
+            int numSamples = ts.getSamples().size();
+            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+        }
+
+        return totalOverhead;
     }
 }
