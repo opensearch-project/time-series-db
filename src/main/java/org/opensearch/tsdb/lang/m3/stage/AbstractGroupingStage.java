@@ -149,6 +149,10 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         // Group by ByteLabels for proper equality and hashing
         Map<ByteLabels, List<TimeSeries>> labelGroupToSeries = new HashMap<>();
 
+        // Batched circuit breaker tracking: accumulate bytes locally and flush when threshold exceeded.
+        // This reduces overhead while still catching cardinality explosion.
+        long pendingBytes = 0;
+
         for (TimeSeries series : input) {
             // Extract the grouped labels, dropping series with missing labels
             ByteLabels groupLabels = extractGroupLabelsDirect(series);
@@ -165,13 +169,23 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             // Add this series to the appropriate group using ByteLabels as key
             labelGroupToSeries.computeIfAbsent(groupLabels, k -> new ArrayList<>()).add(series);
 
-            // Granular circuit breaker tracking: track bytes when a NEW group is created
-            // This catches cardinality explosion in real-time
+            // Accumulate memory overhead for new groups
             if (isNewGroup && circuitBreakerConsumer != null) {
                 long groupOverhead = MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD + groupLabels.estimateBytes()
                     + MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
-                circuitBreakerConsumer.accept(groupOverhead);
+                pendingBytes += groupOverhead;
+
+                // Flush to circuit breaker when batch threshold exceeded
+                if (pendingBytes >= MemoryEstimationConstants.CIRCUIT_BREAKER_BATCH_THRESHOLD) {
+                    circuitBreakerConsumer.accept(pendingBytes);
+                    pendingBytes = 0;
+                }
             }
+        }
+
+        // Flush any remaining pending bytes
+        if (circuitBreakerConsumer != null && pendingBytes > 0) {
+            circuitBreakerConsumer.accept(pendingBytes);
         }
 
         // Process each group and combine results

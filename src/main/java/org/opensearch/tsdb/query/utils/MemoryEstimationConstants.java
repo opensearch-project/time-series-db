@@ -126,6 +126,14 @@ public final class MemoryEstimationConstants {
      */
     public static final long BUCKET_SUMMARIZER_OVERHEAD = 48;
 
+    /**
+     * Circuit breaker batch threshold in bytes (5 MB).
+     * When tracking memory in tight loops (e.g., group creation), bytes are accumulated locally
+     * and only flushed to the circuit breaker when this threshold is exceeded. This reduces
+     * the overhead of frequent circuit breaker calls while still catching runaway allocations.
+     */
+    public static final long CIRCUIT_BREAKER_BATCH_THRESHOLD = 5 * 1024 * 1024;
+
     // ============= Generic Memory Estimation Methods =============
 
     /**
