@@ -87,6 +87,23 @@ public class AliasByDistinctTagsStageTests extends AbstractWireSerializingTestCa
         assertNull(defaultStage.getTagNames());
     }
 
+    public void testFromArgsWithQuotedStrings() {
+        // Test with quoted "true"
+        AliasByDistinctTagsStage trueStage = AliasByDistinctTagsStage.fromArgs(Map.of("include_keys", "true"));
+        assertTrue(trueStage.isIncludeKeys());
+
+        // Test with quoted "false"
+        AliasByDistinctTagsStage falseStage = AliasByDistinctTagsStage.fromArgs(Map.of("include_keys", "false"));
+        assertFalse(falseStage.isIncludeKeys());
+
+        // Test case insensitivity
+        AliasByDistinctTagsStage upperCaseStage = AliasByDistinctTagsStage.fromArgs(Map.of("include_keys", "TRUE"));
+        assertTrue(upperCaseStage.isIncludeKeys());
+
+        // Test invalid quoted string
+        assertThrows(IllegalArgumentException.class, () -> AliasByDistinctTagsStage.fromArgs(Map.of("include_keys", "invalid")));
+    }
+
     public void testFactoryCreation() {
         Map<String, Object> args = Map.of("include_keys", true);
         AliasByDistinctTagsStage stage = (AliasByDistinctTagsStage) PipelineStageFactory.createWithArgs("aliasByDistinctTags", args);

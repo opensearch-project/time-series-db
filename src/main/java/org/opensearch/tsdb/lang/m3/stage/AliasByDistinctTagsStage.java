@@ -252,10 +252,22 @@ public class AliasByDistinctTagsStage implements UnaryPipelineStage {
         }
 
         // Parse includeKeys parameter (default to false)
+        // Accepts both Boolean and String ("true"/"false") values
         boolean includeKeys = false;
         Object includeKeysObj = args.get(INCLUDE_KEYS_ARG);
         if (includeKeysObj instanceof Boolean) {
             includeKeys = (Boolean) includeKeysObj;
+        } else if (includeKeysObj instanceof String) {
+            String includeKeysStr = (String) includeKeysObj;
+            if ("true".equalsIgnoreCase(includeKeysStr)) {
+                includeKeys = true;
+            } else if ("false".equalsIgnoreCase(includeKeysStr)) {
+                includeKeys = false;
+            } else {
+                throw new IllegalArgumentException(
+                    "include_keys must be \"true\" or \"false\" (with quotes), got: \"" + includeKeysStr + "\""
+                );
+            }
         }
 
         // Parse tagNames parameter (optional)

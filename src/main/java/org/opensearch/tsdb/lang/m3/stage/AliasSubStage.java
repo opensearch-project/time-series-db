@@ -35,7 +35,6 @@ public class AliasSubStage implements UnaryPipelineStage {
     public static final String NAME = "aliasSub";
     private static final String SEARCH_PATTERN_ARG = "search_pattern";
     private static final String REPLACEMENT_ARG = "replacement";
-    private static final Pattern BACK_REFERENCE_PATTERN = Pattern.compile("\\\\(\\d+)");
 
     private final String searchPattern;
     private final String replacement;
@@ -72,7 +71,7 @@ public class AliasSubStage implements UnaryPipelineStage {
                 Matcher matcher = compiledPattern.matcher(seriesName);
 
                 // Apply regex replacement with backreference support
-                String newAlias = replaceAll(seriesName, matcher, replacement);
+                String newAlias = RegexReplacementUtil.replaceAll(seriesName, matcher, replacement);
 
                 // Create new TimeSeries with updated alias
                 TimeSeries newTs = new TimeSeries(
@@ -89,41 +88,6 @@ public class AliasSubStage implements UnaryPipelineStage {
                 result.add(ts);
             }
         }
-        return result;
-    }
-
-    private String replaceAll(String originalValue, Matcher matcher, String replacement) {
-        if (!matcher.find()) {
-            return originalValue; // No match, return original value
-        }
-
-        // Get all captured groups
-        String[] groups = new String[matcher.groupCount() + 1];
-        groups[0] = matcher.group(); // Full match
-        for (int i = 1; i <= matcher.groupCount(); i++) {
-            groups[i] = matcher.group(i);
-        }
-
-        // First, convert \1 style back-references to actual values in the replacement string
-        Matcher backRefMatcher = BACK_REFERENCE_PATTERN.matcher(replacement);
-        StringBuffer processedReplacement = new StringBuffer();
-
-        while (backRefMatcher.find()) {
-            int groupIndex = Integer.parseInt(backRefMatcher.group(1));
-
-            if (groupIndex >= groups.length) {
-                throw new IllegalArgumentException("Invalid group reference in " + replacement + ": \\" + groupIndex);
-            }
-
-            String replacementValue = groups[groupIndex] != null ? groups[groupIndex] : "";
-            backRefMatcher.appendReplacement(processedReplacement, Matcher.quoteReplacement(replacementValue));
-        }
-        backRefMatcher.appendTail(processedReplacement);
-
-        // Reset matcher and do final replacement with processed replacement string
-        matcher.reset();
-        String result = matcher.replaceAll(processedReplacement.toString());
-
         return result;
     }
 
