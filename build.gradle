@@ -339,7 +339,7 @@ configurations {
 dependencies {
     javacc 'net.java.dev.javacc:javacc:7.0.13'
     implementation "${opensearch_group}.plugin:store-subdirectory:${opensearch_version}"
-    implementation 'com.google.re2j:re2j:1.7'
+    implementation 'com.google.re2j:re2j:1.8'
 
     // JOL (Java Object Layout) for memory layout testing
     testImplementation 'org.openjdk.jol:jol-core:0.17'
