@@ -54,8 +54,10 @@ allprojects {
     }
 
     plugins.withId('java') {
-        targetCompatibility = JavaVersion.VERSION_21
-        sourceCompatibility = JavaVersion.VERSION_21
+        java {
+            targetCompatibility = JavaVersion.VERSION_21
+            sourceCompatibility = JavaVersion.VERSION_21
+        }
     }
 }
 
