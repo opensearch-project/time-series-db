@@ -459,7 +459,6 @@ public class ClosedChunkIndexManager implements Closeable {
         // prevent indexes pending removal from being deleted to allow proper closing sequence to be executed.
         Set<Path> livePaths = pendingClosureIndexes.stream().map(ClosedChunkIndex::getPath).collect(Collectors.toSet());
 
-
         lock.lock();
         try (var paths = Files.newDirectoryStream(dir, BLOCK_PREFIX + "*")) {
             for (Path path : paths) {
