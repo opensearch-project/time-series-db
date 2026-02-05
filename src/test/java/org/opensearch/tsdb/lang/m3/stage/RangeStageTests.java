@@ -43,7 +43,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
 
         assertEquals(1, result.size());
         TimeSeries ranged = result.get(0);
-        assertEquals(3, ranged.getSamples().size());
+        assertEquals(3, ranged.getSamples().toList().size());
 
         // Check that values are ranged and materialized to FloatSample
         // ts1: [10, 20, 30], ts2: [20, 40, 60], ts3: [5, 15, 25], ts4: [3, 6, 9], ts5: [1, 2, 3]
@@ -58,7 +58,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 38.0), // max(20,40,15,6,2) - min(20,40,15,6,2) = 40 - 2 = 38
                 new FloatSample(3000L, 57.0) // max(30,60,25,9,3) - min(30,60,25,9,3) = 60 - 3 = 57
             ),
-            ranged.getSamples()
+            ranged.getSamples().toList()
         );
     }
 
@@ -72,7 +72,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         // Find the api group (ts1 + ts2) - ranges of [10,20] [20,40] [30,60]
         TimeSeries apiGroup = result.stream().filter(ts -> "api".equals(ts.getLabels().get("service"))).findFirst().orElse(null);
         assertNotNull(apiGroup);
-        assertEquals(3, apiGroup.getSamples().size());
+        assertEquals(3, apiGroup.getSamples().toList().size());
         assertSamplesEqual(
             "API group range",
             List.of(
@@ -80,13 +80,13 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 20.0), // max(20, 40) - min(20, 40) = 40 - 20 = 20
                 new FloatSample(3000L, 30.0) // max(30, 60) - min(30, 60) = 60 - 30 = 30
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
 
         // Find the service1 group (ts3) - single series, range is always 0
         TimeSeries service1Group = result.stream().filter(ts -> "service1".equals(ts.getLabels().get("service"))).findFirst().orElse(null);
         assertNotNull(service1Group);
-        assertEquals(3, service1Group.getSamples().size());
+        assertEquals(3, service1Group.getSamples().toList().size());
         assertSamplesEqual(
             "Service1 group range",
             List.of(
@@ -94,13 +94,13 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 0.0), // Only one value: 15 - 15 = 0
                 new FloatSample(3000L, 0.0)  // Only one value: 25 - 25 = 0
             ),
-            service1Group.getSamples()
+            service1Group.getSamples().toList()
         );
 
         // Find the service2 group (ts4) - single series, range is always 0
         TimeSeries service2Group = result.stream().filter(ts -> "service2".equals(ts.getLabels().get("service"))).findFirst().orElse(null);
         assertNotNull(service2Group);
-        assertEquals(3, service2Group.getSamples().size());
+        assertEquals(3, service2Group.getSamples().toList().size());
         assertSamplesEqual(
             "Service2 group range",
             List.of(
@@ -108,7 +108,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 0.0), // Only one value: 6 - 6 = 0
                 new FloatSample(3000L, 0.0)  // Only one value: 9 - 9 = 0
             ),
-            service2Group.getSamples()
+            service2Group.getSamples().toList()
         );
     }
 
@@ -125,7 +125,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         assertEquals(1, timeSeries.size());
 
         TimeSeries reduced = timeSeries.get(0);
-        assertEquals(3, reduced.getSamples().size());
+        assertEquals(3, reduced.getSamples().toList().size());
 
         // Values should be ranged across aggregations (materialized to FloatSample during final reduce)
         assertSamplesEqual(
@@ -135,7 +135,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 38.0), // max(40) - min(2) = 38
                 new FloatSample(3000L, 57.0) // max(60) - min(3) = 57
             ),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -152,7 +152,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         assertEquals(1, timeSeries.size());
 
         TimeSeries reduced = timeSeries.get(0);
-        assertEquals(3, reduced.getSamples().size());
+        assertEquals(3, reduced.getSamples().toList().size());
 
         // Values should remain as MinMaxSample during intermediate reduce (no materialization)
         assertSamplesEqual(
@@ -162,7 +162,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new MinMaxSample(2000L, 2.0, 40.0),   // min=2, max=40 from all values
                 new MinMaxSample(3000L, 3.0, 60.0)    // min=3, max=60 from all values
             ),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -187,7 +187,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         assertEquals(1, timeSeries.size());
 
         TimeSeries reduced = timeSeries.get(0);
-        assertEquals(3, reduced.getSamples().size());
+        assertEquals(3, reduced.getSamples().toList().size());
 
         // NaN values should be skipped:
         // 1000L: range(10, 20) = 20 - 10 = 10
@@ -200,7 +200,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 0.0),   // Only 40 is valid, so 40 - 40 = 0
                 new FloatSample(3000L, 0.0)    // Only 30 is valid, so 30 - 30 = 0
             ),
-            reduced.getSamples()
+            reduced.getSamples().toList()
         );
     }
 
@@ -244,7 +244,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
 
         assertEquals(1, result.size());
         TimeSeries apiGroup = result.get(0);
-        assertEquals(3, apiGroup.getSamples().size()); // Union of all timestamps
+        assertEquals(3, apiGroup.getSamples().toList().size()); // Union of all timestamps
 
         // Union of timestamps: [1000L, 2000L, 3000L]
         // 1000L: both series have data -> max(10.0, 20.0) - min(10.0, 20.0) = 10.0
@@ -257,7 +257,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new FloatSample(2000L, 0.0),  // Only 40 is present, so 40 - 40 = 0
                 new FloatSample(3000L, 0.0)   // Only 30 is present, so 30 - 30 = 0
             ),
-            apiGroup.getSamples()
+            apiGroup.getSamples().toList()
         );
     }
 
@@ -282,7 +282,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
 
         assertEquals(1, result.size());
         TimeSeries ranged = result.get(0);
-        assertEquals(3, ranged.getSamples().size());
+        assertEquals(3, ranged.getSamples().toList().size());
 
         // Check that values remain as MinMaxSample (no materialization)
         assertSamplesEqual(
@@ -292,7 +292,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
                 new MinMaxSample(2000L, 2.0, 40.0),  // min=min(20,40,15,6,2)=2, max=max(20,40,15,6,2)=40
                 new MinMaxSample(3000L, 3.0, 60.0)   // min=min(30,60,25,9,3)=3, max=max(30,60,25,9,3)=60
             ),
-            ranged.getSamples()
+            ranged.getSamples().toList()
         );
     }
 
