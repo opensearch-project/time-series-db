@@ -232,8 +232,8 @@ public abstract class AbstractGroupingSampleStage extends AbstractGroupingStage 
      * <ul>
      *   <li>Uses {@link ConcurrentHashMap} for thread-safe aggregation</li>
      *   <li>Uses parallel streams backed by {@link java.util.concurrent.ForkJoinPool#commonPool()}</li>
-     *   <li>Each time series is processed independently (embarrassingly parallel)</li>
-     *   <li>Merge operations are thread-safe (Sample implementations must be immutable)</li>
+     *   <li>Each time series is processed independently</li>
+     *   <li>Merge operations are thread-safe </li>
      * </ul>
      *
      * @param groupSeries List of time series in the same group
