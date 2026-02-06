@@ -136,9 +136,12 @@ public interface SampleList extends Iterable<Sample> {
 
     final class ListWrapper implements SampleList {
         private final List<Sample> inner;
+        private final long estimatedBytes;
 
         private ListWrapper(List<Sample> inner) {
             this.inner = inner;
+            // Pre-compute at construction for O(1) access
+            this.estimatedBytes = ARRAYLIST_OVERHEAD + ARRAY_HEADER_OVERHEAD + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
         }
 
         @Override
@@ -209,8 +212,7 @@ public interface SampleList extends Iterable<Sample> {
 
         @Override
         public long estimateBytes() {
-            // ArrayList overhead + array header + references + sample objects
-            return ARRAYLIST_OVERHEAD + ARRAY_HEADER_OVERHEAD + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
+            return estimatedBytes;  // O(1) - pre-computed at construction
         }
     }
 }
