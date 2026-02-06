@@ -67,19 +67,23 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
         // Test valid samples
         testCalculateAverageCase("1.0,2.0,3.0,4.0,5.0", 3.0);
         // Test empty samples
-        testCalculateAverageCase("", 0.0);
+        testCalculateAverageCase("", Double.NaN);
         // Test with NaN values
         testCalculateAverageCase("1.0,NaN,3.0", 2.0);
         // Test with null values
         testCalculateAverageCase("2.0,null,4.0", 3.0);
         // Test all invalid samples
-        testCalculateAverageCase("NaN,null,NaN", 0.0);
+        testCalculateAverageCase("NaN,null,NaN", Double.NaN);
     }
 
     private void testCalculateAverageCase(String valuesStr, double expected) {
         TimeSeries timeSeries = createTimeSeriesFromString("test", valuesStr);
         double average = SortComparatorUtil.calculateAverage(timeSeries);
-        assertEquals(expected, average, 0.001);
+        if (Double.isNaN(expected)) {
+            assertTrue("Expected NaN but got: " + average, Double.isNaN(average));
+        } else {
+            assertEquals(expected, average, 0.001);
+        }
     }
 
     // ========== calculateCurrent() Tests ==========
@@ -88,19 +92,23 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
         // Test valid samples (last value)
         testCalculateCurrentCase("1.0,2.0,3.0,4.0", 4.0);
         // Test empty samples
-        testCalculateCurrentCase("", 0.0);
+        testCalculateCurrentCase("", Double.NaN);
         // Test trailing NaN
         testCalculateCurrentCase("1.0,2.0,NaN", 2.0);
         // Test trailing null
         testCalculateCurrentCase("1.0,5.0,null", 5.0);
         // Test all invalid samples
-        testCalculateCurrentCase("NaN,null,NaN", 0.0);
+        testCalculateCurrentCase("NaN,null,NaN", Double.NaN);
     }
 
     private void testCalculateCurrentCase(String valuesStr, double expected) {
         TimeSeries timeSeries = createTimeSeriesFromString("test", valuesStr);
         double current = SortComparatorUtil.calculateCurrent(timeSeries);
-        assertEquals(expected, current, 0.0);
+        if (Double.isNaN(expected)) {
+            assertTrue("Expected NaN but got: " + current, Double.isNaN(current));
+        } else {
+            assertEquals(expected, current, 0.0);
+        }
     }
 
     // ========== calculateMax() Tests ==========
@@ -108,12 +116,15 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
     public void testCalculateMax() {
         // Valid samples
         assertEquals(4.0, SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", "3.0,1.0,4.0,2.0")), 0.0);
-        // Empty samples (returns NEGATIVE_INFINITY)
-        assertEquals(Double.NEGATIVE_INFINITY, SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", "")), 0.0);
+        // Empty samples (now returns NaN)
+        assertTrue("Expected NaN for empty series", Double.isNaN(SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", ""))));
         // With NaN values
         assertEquals(3.0, SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", "1.0,NaN,3.0")), 0.0);
         // All invalid samples
-        assertEquals(0.0, SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", "NaN,null,NaN")), 0.0);
+        assertTrue(
+            "Expected NaN for all invalid samples",
+            Double.isNaN(SortComparatorUtil.calculateMax(createTimeSeriesFromString("test", "NaN,null,NaN")))
+        );
     }
 
     // ========== calculateMin() Tests ==========
@@ -122,11 +133,14 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
         // Valid samples
         assertEquals(1.0, SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", "3.0,1.0,4.0,2.0")), 0.0);
         // Empty samples
-        assertEquals(0.0, SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", "")), 0.0);
+        assertTrue("Expected NaN for empty series", Double.isNaN(SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", ""))));
         // With NaN values
         assertEquals(2.0, SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", "5.0,NaN,2.0")), 0.0);
         // All invalid samples
-        assertEquals(0.0, SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", "NaN,null,NaN")), 0.0);
+        assertTrue(
+            "Expected NaN for all invalid samples",
+            Double.isNaN(SortComparatorUtil.calculateMin(createTimeSeriesFromString("test", "NaN,null,NaN")))
+        );
     }
 
     // ========== calculateSum() Tests ==========
@@ -135,9 +149,14 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
         // Valid samples
         assertEquals(6.0, SortComparatorUtil.calculateSum(createTimeSeriesFromString("test", "1.0,2.0,3.0")), 0.001);
         // Empty samples
-        assertEquals(0.0, SortComparatorUtil.calculateSum(createTimeSeriesFromString("test", "")), 0.0);
+        assertTrue("Expected NaN for empty series", Double.isNaN(SortComparatorUtil.calculateSum(createTimeSeriesFromString("test", ""))));
         // With NaN values
         assertEquals(4.0, SortComparatorUtil.calculateSum(createTimeSeriesFromString("test", "1.0,NaN,3.0")), 0.001);
+        // All invalid samples
+        assertTrue(
+            "Expected NaN for all invalid samples",
+            Double.isNaN(SortComparatorUtil.calculateSum(createTimeSeriesFromString("test", "NaN,null,NaN")))
+        );
     }
 
     // ========== calculateStddev() Tests ==========
@@ -146,13 +165,24 @@ public class SortComparatorUtilTests extends OpenSearchTestCase {
         // Valid samples (sqrt(8))
         assertEquals(2.828, SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "1.0,5.0")), 0.01);
         // Empty samples
-        assertEquals(0.0, SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "")), 0.0);
+        assertTrue(
+            "Expected NaN for empty series",
+            Double.isNaN(SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "")))
+        );
         // Single sample
-        assertEquals(0.0, SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "5.0")), 0.0);
+        assertTrue(
+            "Expected NaN for single sample",
+            Double.isNaN(SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "5.0")))
+        );
         // Identical values
         assertEquals(0.0, SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "3.0,3.0,3.0")), 0.0);
         // With NaN values
         assertEquals(2.828, SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "2.0,NaN,6.0")), 0.01);
+        // All invalid samples
+        assertTrue(
+            "Expected NaN for all invalid samples",
+            Double.isNaN(SortComparatorUtil.calculateStddev(createTimeSeriesFromString("test", "NaN,null,NaN")))
+        );
     }
 
     // ========== extractAlias() Tests ==========
