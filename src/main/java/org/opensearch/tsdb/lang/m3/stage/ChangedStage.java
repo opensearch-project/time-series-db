@@ -130,13 +130,6 @@ public class ChangedStage implements UnaryPipelineStage {
     }
 
     @Override
-    public boolean supportConcurrentSegmentSearch() {
-        // This stage requires information from prior samples, so it cannot support
-        // concurrent segment search
-        return false;
-    }
-
-    @Override
     public void toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         // No parameters
     }
