@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -91,7 +92,7 @@ public abstract class BaseQueryExecutor {
     /**
      * Validate query response against expected Prometheus matrix format.
      * Validates both response structure (series count) and data content (metrics and values).
-     * Also validates aliases when specified in the expected data.
+     * When alias is specified, includes __name__ in metric matching logic.
      *
      * @param query The query configuration containing expected response
      * @param actualResponse The actual response from query execution
@@ -103,7 +104,6 @@ public abstract class BaseQueryExecutor {
 
         validateResponseStructure(queryName, expectedResponse, actualResponse);
         validateDataContent(queryName, expectedResponse, actualResponse);
-        validateAliases(queryName, query.expected().data(), actualResponse);
     }
 
     /**
@@ -141,8 +141,18 @@ public abstract class BaseQueryExecutor {
                 }
             }
 
-            // For test framework, use original metric labels (aliases are validated separately)
-            results.add(new TimeSeriesResult(expectedData.metric(), values));
+            // Reject explicit __name__ tags to avoid conflicts with alias functionality
+            if (expectedData.metric().containsKey("__name__")) {
+                throw new IllegalArgumentException("Explicit __name__ tag is not allowed in test data. Use 'alias' field instead.");
+            }
+
+            // When alias is specified, include __name__ in the metric labels for matching
+            Map<String, String> metricLabels = new HashMap<>(expectedData.metric());
+            if (expectedData.alias() != null) {
+                metricLabels.put("__name__", expectedData.alias());
+            }
+
+            results.add(new TimeSeriesResult(metricLabels, values));
         }
 
         return new PromMatrixResponse(expected.status(), new PromMatrixData(results));
@@ -188,42 +198,6 @@ public abstract class BaseQueryExecutor {
                 String.format(Locale.ROOT, "%s: Unexpected metric %s", queryName, actualMetric),
                 expectedMap.containsKey(actualMetric)
             );
-        }
-    }
-
-    /**
-     * Validate aliases when specified in expected data.
-     * Skips alias check if alias is not specified in the expected data.
-     *
-     * @param queryName The query name for error messages
-     * @param expectedDataList The expected data configurations
-     * @param actualResponse The actual response from query execution
-     */
-    private void validateAliases(String queryName, List<ExpectedData> expectedDataList, PromMatrixResponse actualResponse) {
-        // Create a map of actual response by metric labels for easy lookup
-        Map<Map<String, String>, TimeSeriesResult> actualMap = actualResponse.data()
-            .result()
-            .stream()
-            .collect(Collectors.toMap(TimeSeriesResult::metric, Function.identity()));
-
-        for (ExpectedData expectedData : expectedDataList) {
-            // Only validate alias if it's specified in the expected data
-            if (expectedData.alias() != null) {
-                TimeSeriesResult actualResult = actualMap.get(expectedData.metric());
-                assertNotNull(
-                    String.format(Locale.ROOT, "%s: Missing metric %s for alias validation", queryName, expectedData.metric()),
-                    actualResult
-                );
-
-                // Check if the actual response has the expected alias in the __name__ label
-                String actualAlias = actualResult.metric().get("__name__");
-                assertEquals(
-                    String.format(Locale.ROOT, "%s: Alias mismatch for metric %s", queryName, expectedData.metric()),
-                    expectedData.alias(),
-                    actualAlias
-                );
-            }
-            // If alias is null in expected data, skip alias check (user doesn't want to validate alias)
         }
     }
 
