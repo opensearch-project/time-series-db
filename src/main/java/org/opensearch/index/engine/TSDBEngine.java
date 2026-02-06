@@ -1191,6 +1191,16 @@ public class TSDBEngine extends Engine {
         return maxSeenAutoIdTimestamp.get();
     }
 
+    /** Reloads a block already in the blocks directory (no copy). */
+    public boolean reloadLocalBlock(String blockDirName) throws IOException {
+        return closedChunkIndexManager.reloadLocalBlock(blockDirName);
+    }
+
+    /** Scans blocks directory and loads any unregistered blocks. */
+    public List<String> reloadAllLocalBlocks() throws IOException {
+        return closedChunkIndexManager.reloadAllLocalBlocks();
+    }
+
     /**
      * Prepares an index operation from the source document.
      *

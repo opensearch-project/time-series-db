@@ -350,7 +350,9 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
         // Create a specific mock for the circuit breaker MiB histogram (defined last to take precedence)
         Histogram circuitBreakerMiBHistogram = mock(Histogram.class);
-        when(mockRegistry.createHistogram(contains("circuit_breaker.mib"), anyString(), anyString())).thenReturn(circuitBreakerMiBHistogram);
+        when(mockRegistry.createHistogram(contains("circuit_breaker.mib"), anyString(), anyString())).thenReturn(
+            circuitBreakerMiBHistogram
+        );
 
         TSDBMetrics.initialize(mockRegistry);
 
