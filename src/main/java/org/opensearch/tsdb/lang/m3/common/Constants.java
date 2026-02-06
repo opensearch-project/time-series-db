@@ -51,7 +51,6 @@ public class Constants {
             "asMultiBurnRate",
             "burnRate",
             "burnRateMultiplier",
-            "changed",
             "constantLine",
             "divideWhen",
             "histogramCDF",
@@ -125,6 +124,11 @@ public class Constants {
          * derivative function name.
          */
         public static final String DERIVATIVE = "derivative";
+
+        /**
+         * changed function name.
+         */
+        public static final String CHANGED = "changed";
 
         /**
          * fetch function name.
