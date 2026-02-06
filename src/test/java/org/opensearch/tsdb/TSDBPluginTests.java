@@ -8,12 +8,15 @@
 package org.opensearch.tsdb;
 
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.store.Directory;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.index.shard.IndexSettingProvider;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
@@ -147,6 +150,75 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         assertThat("Setting key should be correct", setting.getKey(), equalTo("index.tsdb_engine.enabled"));
         assertThat("Default value should be false", setting.getDefault(org.opensearch.common.settings.Settings.EMPTY), equalTo(false));
         assertTrue("Should be index-scoped", setting.hasIndexScope());
+    }
+
+    // ========== Index Setting Provider Tests ==========
+
+    public void testGetAdditionalIndexSettingProviders() {
+        Collection<IndexSettingProvider> providers = plugin.getAdditionalIndexSettingProviders();
+
+        assertNotNull("Index setting providers should not be null", providers);
+        assertThat("Should have 1 index setting provider", providers.size(), equalTo(1));
+    }
+
+    public void testIndexSettingProviderSetsPeriodicFlushIntervalWhenTSDBEnabled() {
+        Collection<IndexSettingProvider> providers = plugin.getAdditionalIndexSettingProviders();
+        IndexSettingProvider provider = providers.iterator().next();
+
+        // Create settings with TSDB engine enabled
+        Settings templateAndRequestSettings = Settings.builder().put("index.tsdb_engine.enabled", true).build();
+
+        Settings additionalSettings = provider.getAdditionalIndexSettings("test-index", false, templateAndRequestSettings);
+
+        assertNotNull("Additional settings should not be null", additionalSettings);
+        assertThat(
+            "periodic_flush_interval should be set to 10s",
+            additionalSettings.get(IndexSettings.INDEX_PERIODIC_FLUSH_INTERVAL_SETTING.getKey()),
+            equalTo("10s")
+        );
+    }
+
+    public void testIndexSettingProviderReturnsEmptyWhenTSDBDisabled() {
+        Collection<IndexSettingProvider> providers = plugin.getAdditionalIndexSettingProviders();
+        IndexSettingProvider provider = providers.iterator().next();
+
+        // Create settings with TSDB engine disabled (explicit false)
+        Settings templateAndRequestSettings = Settings.builder().put("index.tsdb_engine.enabled", false).build();
+
+        Settings additionalSettings = provider.getAdditionalIndexSettings("test-index", false, templateAndRequestSettings);
+
+        assertNotNull("Additional settings should not be null", additionalSettings);
+        assertTrue("Additional settings should be empty when TSDB is disabled", additionalSettings.isEmpty());
+    }
+
+    public void testIndexSettingProviderPeriodicFlushIntervalValue() {
+        Collection<IndexSettingProvider> providers = plugin.getAdditionalIndexSettingProviders();
+        IndexSettingProvider provider = providers.iterator().next();
+
+        // Create settings with TSDB engine enabled
+        Settings templateAndRequestSettings = Settings.builder().put("index.tsdb_engine.enabled", true).build();
+
+        Settings additionalSettings = provider.getAdditionalIndexSettings("test-index", false, templateAndRequestSettings);
+
+        // Parse the TimeValue and verify it's 10 seconds
+        TimeValue periodicFlushInterval = IndexSettings.INDEX_PERIODIC_FLUSH_INTERVAL_SETTING.get(additionalSettings);
+        assertThat("periodic_flush_interval should be 10 seconds", periodicFlushInterval.seconds(), equalTo(10L));
+    }
+
+    public void testIndexSettingProviderRespectsUserSpecifiedPeriodicFlushInterval() {
+        Collection<IndexSettingProvider> providers = plugin.getAdditionalIndexSettingProviders();
+        IndexSettingProvider provider = providers.iterator().next();
+
+        // Create settings with TSDB engine enabled AND user-specified periodic_flush_interval
+        Settings templateAndRequestSettings = Settings.builder()
+            .put("index.tsdb_engine.enabled", true)
+            .put("index.periodic_flush_interval", "20s")
+            .build();
+
+        Settings additionalSettings = provider.getAdditionalIndexSettings("test-index", false, templateAndRequestSettings);
+
+        // Provider should return empty settings since user has explicitly specified the value
+        assertTrue("Additional settings should be empty when user has specified periodic_flush_interval", additionalSettings.isEmpty());
     }
 
     public void testTSDBEngineTimeUnitSettingWithValidMilliseconds() {

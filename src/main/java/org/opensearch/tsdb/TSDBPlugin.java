@@ -31,6 +31,7 @@ import org.opensearch.env.ShardLock;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.EngineFactory;
 import org.opensearch.index.engine.TSDBEngineFactory;
+import org.opensearch.index.shard.IndexSettingProvider;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.store.Store;
 import org.opensearch.plugins.ActionPlugin;
@@ -66,6 +67,7 @@ import org.opensearch.watcher.ResourceWatcherService;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -643,6 +645,38 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE
         );
+    }
+
+    /**
+     * Returns index setting providers that automatically configure index settings for TSDB indexes.
+     * When TSDB engine is enabled, sets periodic_flush_interval to 10s to ensure regular flush triggers.
+     */
+    @Override
+    public Collection<IndexSettingProvider> getAdditionalIndexSettingProviders() {
+        return Collections.singletonList(new TSDBIndexSettingProvider());
+    }
+
+    /**
+     * Index setting provider for TSDB indexes.
+     * Automatically sets periodic_flush_interval to 10s when TSDB engine is enabled,
+     * unless the user has explicitly specified a value.
+     */
+    static class TSDBIndexSettingProvider implements IndexSettingProvider {
+        private static final TimeValue TSDB_PERIODIC_FLUSH_INTERVAL = TimeValue.timeValueSeconds(10);
+
+        @Override
+        public Settings getAdditionalIndexSettings(String indexName, boolean isDataStreamIndex, Settings templateAndRequestSettings) {
+            // Check if TSDB engine is enabled for this index
+            if (TSDB_ENGINE_ENABLED.get(templateAndRequestSettings)) {
+                // Only set periodic_flush_interval if user hasn't explicitly specified it
+                if (templateAndRequestSettings.get(IndexSettings.INDEX_PERIODIC_FLUSH_INTERVAL_SETTING.getKey()) == null) {
+                    return Settings.builder()
+                        .put(IndexSettings.INDEX_PERIODIC_FLUSH_INTERVAL_SETTING.getKey(), TSDB_PERIODIC_FLUSH_INTERVAL)
+                        .build();
+                }
+            }
+            return Settings.EMPTY;
+        }
     }
 
     @Override
