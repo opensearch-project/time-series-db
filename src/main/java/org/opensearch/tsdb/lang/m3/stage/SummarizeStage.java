@@ -361,6 +361,9 @@ public class SummarizeStage implements UnaryPipelineStage {
      * Estimate temporary memory overhead for summarize operations.
      * SummarizeStage uses BucketMapper, BucketSummarizer, and result ArrayLists.
      *
+     * <p>For result samples, delegates to {@link SampleList#estimateBytes()} ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
      * @param input The input time series
      * @return Estimated temporary memory overhead in bytes
      */
@@ -372,12 +375,12 @@ public class SummarizeStage implements UnaryPipelineStage {
 
         long totalOverhead = 0;
         for (TimeSeries ts : input) {
+            // Stage-specific overhead
             totalOverhead += MemoryEstimationConstants.BUCKET_MAPPER_OVERHEAD;
             totalOverhead += MemoryEstimationConstants.BUCKET_SUMMARIZER_OVERHEAD;
 
-            // Result ArrayList
-            int numSamples = ts.getSamples().size();
-            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            // New TimeSeries with result samples (delegated estimation)
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().estimateBytes();
         }
 
         return totalOverhead;

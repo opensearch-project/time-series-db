@@ -215,6 +215,9 @@ public class MovingStage implements UnaryPipelineStage {
      * Estimate temporary memory overhead for moving window operations.
      * MovingStage uses circular buffers and TreeMap for median calculations.
      *
+     * <p>For result samples, delegates to {@link SampleList#estimateBytes()} ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
      * @param input The input time series
      * @return Estimated temporary memory overhead in bytes
      */
@@ -233,7 +236,7 @@ public class MovingStage implements UnaryPipelineStage {
 
         long totalOverhead = 0;
         for (TimeSeries ts : input) {
-            // Circular buffer for window values
+            // Circular buffer for window values (stage-specific)
             totalOverhead += MemoryEstimationConstants.ARRAY_HEADER_OVERHEAD + (estimatedWindowSize
                 * MemoryEstimationConstants.DOUBLE_SIZE);
 
@@ -242,9 +245,8 @@ public class MovingStage implements UnaryPipelineStage {
                 totalOverhead += estimatedWindowSize * MemoryEstimationConstants.TREEMAP_ENTRY_OVERHEAD;
             }
 
-            // Result ArrayList
-            int numSamples = ts.getSamples().size();
-            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            // New TimeSeries with result samples (delegated estimation)
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().estimateBytes();
         }
 
         return totalOverhead;

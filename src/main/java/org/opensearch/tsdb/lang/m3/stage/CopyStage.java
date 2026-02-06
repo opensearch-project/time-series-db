@@ -61,8 +61,10 @@ public class CopyStage implements UnaryPipelineStage {
 
     /**
      * Estimate memory overhead for deep copy operations.
-     * CopyStage creates a full deep copy of all time series including all samples.
-     * This is O(n * m) where n = series count, m = samples per series.
+     * CopyStage creates a full deep copy of all time series including labels, samples, and alias.
+     *
+     * <p>Delegates to {@link TimeSeries#estimateBytes()} for per-series estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
      *
      * @param input The input time series
      * @return Estimated memory overhead in bytes
@@ -73,29 +75,11 @@ public class CopyStage implements UnaryPipelineStage {
             return 0;
         }
 
-        // Result ArrayList
+        // Result ArrayList + deep copy of each TimeSeries
         long totalOverhead = MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
-
-        // Full deep copy of each TimeSeries (including all samples)
         for (TimeSeries ts : input) {
-            // New TimeSeries object
-            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD;
-
-            // Deep copy of labels
-            if (ts.getLabels() != null) {
-                totalOverhead += ts.getLabels().estimateBytes();
-            }
-
-            // Deep copy of ALL samples (this is the expensive part)
-            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
-            totalOverhead += ts.getSamples().size() * TimeSeries.ESTIMATED_SAMPLE_SIZE;
-
-            // Alias string if present
-            if (ts.getAlias() != null) {
-                totalOverhead += MemoryEstimationConstants.STRING_OVERHEAD + ts.getAlias().length() * 2L;
-            }
+            totalOverhead += ts.estimateBytes();
         }
-
         return totalOverhead;
     }
 

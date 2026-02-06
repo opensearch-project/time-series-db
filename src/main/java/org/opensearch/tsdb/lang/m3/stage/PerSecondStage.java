@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
-
 /**
  * Pipeline stage that implements M3QL's perSecond function.
  *
@@ -158,7 +156,10 @@ public class PerSecondStage implements UnaryPipelineStage {
 
     /**
      * Estimate temporary memory overhead for per-second rate calculations.
-     * PerSecondStage creates new sample lists for computed rate values.
+     * PerSecondStage creates new TimeSeries with new sample lists (reusing labels).
+     *
+     * <p>Delegates to {@link SampleList#estimateBytes()} for sample estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
      *
      * @param input The input time series
      * @return Estimated temporary memory overhead in bytes
@@ -171,11 +172,9 @@ public class PerSecondStage implements UnaryPipelineStage {
 
         long totalOverhead = 0;
         for (TimeSeries ts : input) {
-            // New ArrayList for results
-            int numSamples = ts.getSamples().size();
-            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            // New TimeSeries object + new sample list (labels are reused by reference)
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().estimateBytes();
         }
-
         return totalOverhead;
     }
 }

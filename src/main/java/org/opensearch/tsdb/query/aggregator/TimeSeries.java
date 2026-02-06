@@ -289,6 +289,37 @@ public class TimeSeries {
     }
 
     /**
+     * Estimate the total memory usage of this TimeSeries in bytes.
+     * Aggregates the memory of all components: object overhead, labels, samples, and alias.
+     *
+     * <p>This method delegates to the underlying components' estimation methods, ensuring
+     * accurate estimates even as implementations change (e.g., different SampleList implementations).</p>
+     *
+     * @return estimated memory usage in bytes
+     */
+    public long estimateBytes() {
+        long bytes = ESTIMATED_MEMORY_OVERHEAD;
+
+        // Labels memory
+        if (labels != null) {
+            bytes += labels.estimateBytes();
+        }
+
+        // Samples memory - delegated to SampleList implementation
+        if (samples != null) {
+            bytes += samples.estimateBytes();
+        }
+
+        // Alias string memory (object header + char array)
+        if (alias != null) {
+            // String object: ~24 bytes base + 2 bytes per char (UTF-16)
+            bytes += 24 + alias.length() * 2L;
+        }
+
+        return bytes;
+    }
+
+    /**
      * Get the estimated memory overhead constant for testing.
      * Package-private for test validation.
      *

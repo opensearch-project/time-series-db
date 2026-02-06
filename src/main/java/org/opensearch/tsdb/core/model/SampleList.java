@@ -18,6 +18,34 @@ import java.util.List;
  */
 public interface SampleList extends Iterable<Sample> {
 
+    // Memory estimation constants for SampleList implementations
+    // These are used by estimateBytes() implementations
+
+    /**
+     * Estimated overhead for ArrayList wrapper in bytes.
+     * Object header (12) + elementData ref (4) + size (4) + modCount (4) = 24 bytes
+     */
+    long ARRAYLIST_OVERHEAD = 24;
+
+    /**
+     * Estimated overhead for array header in bytes.
+     * Object header (12) + length field (4) = 16 bytes, often 12 with alignment
+     */
+    long ARRAY_HEADER_OVERHEAD = 12;
+
+    /**
+     * Estimated size per Sample object in bytes.
+     * With scalar replacement (common in hot paths): 16 bytes (8-byte timestamp + 8-byte value)
+     * Without scalar replacement: ~32 bytes (includes object header)
+     * Conservative estimate assuming scalar replacement.
+     */
+    long ESTIMATED_SAMPLE_SIZE = 16;
+
+    /**
+     * Size of an object reference with compressed OOPs enabled (typical production JVM).
+     */
+    long REFERENCE_SIZE = 4;
+
     /**
      * Get the size of this list, should be a fast operation unless specifically noticed
      * This does not guarantee the returned number is for non-NaN or not, the only guarantee
@@ -86,6 +114,17 @@ public interface SampleList extends Iterable<Sample> {
      *       clear about the cost
      */
     List<Sample> toList();
+
+    /**
+     * Estimate the memory usage of this sample list in bytes.
+     * Each implementation knows its internal structure best and should provide an accurate estimate.
+     *
+     * <p>Implementations are encouraged to pre-compute this value during construction for O(1) access,
+     * rather than calculating on each call.</p>
+     *
+     * @return estimated memory usage in bytes
+     */
+    long estimateBytes();
 
     /**
      * Wrap a java List to {@link SampleList}, it's helpful when some stage need to create an instantiated sample,
@@ -166,6 +205,12 @@ public interface SampleList extends Iterable<Sample> {
         @Override
         public String toString() {
             return inner.toString();
+        }
+
+        @Override
+        public long estimateBytes() {
+            // ArrayList overhead + array header + references + sample objects
+            return ARRAYLIST_OVERHEAD + ARRAY_HEADER_OVERHEAD + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
         }
     }
 }

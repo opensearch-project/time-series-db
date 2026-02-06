@@ -168,7 +168,10 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
 
     /**
      * Estimate memory overhead for mapper stage operations.
-     * Mapper stages allocate new ArrayLists for results and new Sample objects for each sample.
+     * Mapper stages allocate new TimeSeries objects with new samples (same cardinality as input).
+     *
+     * <p>Delegates to {@link TimeSeries#estimateBytes()} for per-series estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
      *
      * @param input The input time series
      * @return Estimated memory overhead in bytes
@@ -179,20 +182,11 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
             return 0;
         }
 
-        long totalOverhead = 0;
-
-        // Result ArrayList
-        totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
-
+        // Result ArrayList + new TimeSeries objects (delegated estimation)
+        long totalOverhead = MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
         for (TimeSeries ts : input) {
-            // New TimeSeries object
-            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD;
-
-            // New ArrayList for mapped samples + new Sample objects
-            int numSamples = ts.getSamples().size();
-            totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (numSamples * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            totalOverhead += ts.estimateBytes();
         }
-
         return totalOverhead;
     }
 
