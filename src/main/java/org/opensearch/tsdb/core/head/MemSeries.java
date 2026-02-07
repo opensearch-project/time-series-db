@@ -103,14 +103,17 @@ public class MemSeries {
      * @param timestamp the sample timestamp
      * @param value the sample value
      * @param options the chunk options
+     * @return true if a new chunk was created, false if an existing chunk was reused
      */
-    public void append(long seqNo, long timestamp, double value, ChunkOptions options) {
-        MemChunk chunk = appendPreprocessor(seqNo, timestamp, Encoding.XOR, options);
-        chunk.append(timestamp, value, seqNo);
+    public boolean append(long seqNo, long timestamp, double value, ChunkOptions options) {
+        AppendPreprocessorResult result = appendPreprocessor(seqNo, timestamp, Encoding.XOR, options);
+        result.chunk().append(timestamp, value, seqNo);
 
         if (seqNo > this.maxSeqNo) {
             this.maxSeqNo = seqNo;
         }
+
+        return result.chunkCreated();
     }
 
     /**
@@ -192,6 +195,15 @@ public class MemSeries {
      * @param minTimestamp   the minimum timestamp of the non-closable chunks
      */
     public record ClosableChunkResult(List<MemChunk> closableChunks, long minSeqNo, long minTimestamp) {
+    }
+
+    /**
+     * Result of the append preprocessor operation.
+     *
+     * @param chunk        the chunk to which the sample should be appended
+     * @param chunkCreated true if a new chunk was created, false if an existing chunk was reused
+     */
+    public record AppendPreprocessorResult(MemChunk chunk, boolean chunkCreated) {
     }
 
     /**
@@ -286,32 +298,43 @@ public class MemSeries {
     }
 
     /**
+     * Finds a chunk that can hold the given timestamp, or null if none exists.
+     * Searches backwards from head chunk.
+     *
+     * @param timestamp the sample timestamp
+     * @return the chunk that can hold the timestamp, or null if none
+     */
+    private MemChunk findChunkForTimestamp(long timestamp) {
+        MemChunk chunk = headChunk;
+        while (!chunk.canHold(timestamp) && chunk.getPrev() != null) {
+            chunk = chunk.getPrev();
+        }
+        return chunk.canHold(timestamp) ? chunk : null;
+    }
+
+    /**
      * Preprocess a sample, returning the destination MemChunk if exists, or creating a new one if needed.
      *
      * @param seqNo sample seqNo
      * @param timestamp sample timestamp
      * @param encoding chunk encoding
      * @param options chunk options
-     * @return the MemChunk to which the sample should be appended
+     * @return the result containing the MemChunk and whether a new chunk was created
      */
-    private MemChunk appendPreprocessor(long seqNo, long timestamp, Encoding encoding, ChunkOptions options) {
+    private AppendPreprocessorResult appendPreprocessor(long seqNo, long timestamp, Encoding encoding, ChunkOptions options) {
         if (headChunk == null || timestamp >= headChunk.getMaxTimestamp()) {
             headChunk = createHeadChunk(seqNo, timestamp, encoding, options.chunkRange());
-            return headChunk; // TODO: add metric for chunk creation
+            return new AppendPreprocessorResult(headChunk, true);
         }
 
-        // iterate backwards to find a chunk that can hold the sample
-        MemChunk chunk = headChunk;
-        while (!chunk.canHold(timestamp) && chunk.getPrev() != null) {
-            chunk = chunk.getPrev();
+        MemChunk chunk = findChunkForTimestamp(timestamp);
+        if (chunk != null) {
+            return new AppendPreprocessorResult(chunk, false);
         }
 
-        if (!chunk.canHold(timestamp)) {
-            // could not find a chunk that can hold the sample, create a new chunk in the correct position
-            return createOldChunk(seqNo, timestamp, encoding, options.chunkRange()); // TODO: add metric for chunk creation
-        }
-
-        return chunk;
+        // could not find a chunk that can hold the sample, create a new chunk in the correct position
+        MemChunk newChunk = createOldChunk(seqNo, timestamp, encoding, options.chunkRange());
+        return new AppendPreprocessorResult(newChunk, true);
     }
 
     private MemChunk createHeadChunk(long seqNo, long timestamp, Encoding encoding, long chunkRange) {

@@ -124,7 +124,7 @@ public class HeadTests extends OpenSearchTestCase {
 
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, 0, seriesLabels, timestamp, value, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         head.getLiveSeriesIndex().getDirectoryReaderManager().maybeRefreshBlocking();
@@ -221,7 +221,7 @@ public class HeadTests extends OpenSearchTestCase {
                 i * 10.0,
                 () -> {}
             );
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         assertEquals("getNumSeries returns 2", 2, head.getNumSeries());
@@ -267,7 +267,7 @@ public class HeadTests extends OpenSearchTestCase {
         for (int i = 0; i < numSamples; i++) {
             Head.HeadAppender appender1 = head.newAppender();
             appender1.preprocess(Engine.Operation.Origin.PRIMARY, i, series1Reference, series1, 1000L * (i + 1), 10 * i, () -> {});
-            appender1.append(() -> {}, () -> {});
+            appender1.append(chunkCreated -> {}, () -> {});
         }
 
         Head.IndexChunksResult indexChunksResult = head.closeHeadChunks(true, 100);
@@ -297,7 +297,10 @@ public class HeadTests extends OpenSearchTestCase {
         while (i < 7) {
             Head.HeadAppender appender1 = newHead.newAppender();
             appender1.preprocess(Engine.Operation.Origin.PRIMARY, i, series1Reference, series1, 1000L * (i + 1), 10 * i, () -> {});
-            assertFalse("Previously MMAPed sample for seqNo " + i + " is not appended again", appender1.append(() -> {}, () -> {}));
+            assertFalse(
+                "Previously MMAPed sample for seqNo " + i + " is not appended again",
+                appender1.append(chunkCreated -> {}, () -> {})
+            );
             i++;
         }
 
@@ -305,7 +308,7 @@ public class HeadTests extends OpenSearchTestCase {
         while (i < numSamples) {
             Head.HeadAppender appender1 = newHead.newAppender();
             appender1.preprocess(Engine.Operation.Origin.PRIMARY, i, series1Reference, series1, 1000L * (i + 1), 10 * i, () -> {});
-            assertTrue("Previously in-memory sample for seqNo " + i + " is appended", appender1.append(() -> {}, () -> {}));
+            assertTrue("Previously in-memory sample for seqNo " + i + " is appended", appender1.append(chunkCreated -> {}, () -> {}));
             i++;
         }
 
@@ -344,7 +347,7 @@ public class HeadTests extends OpenSearchTestCase {
         for (int i = 0; i < 40; i++) {
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, seqNo++, seriesRef, seriesLabels, 1000L * (i + 1), 10.0 * i, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         MemSeries series = head.getSeriesMap().getByReference(seriesRef);
@@ -397,7 +400,7 @@ public class HeadTests extends OpenSearchTestCase {
         for (int i = 0; i < 24; i++) {
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, seqNo++, seriesRef, seriesLabels, 1000L * (i + 1), 10.0 * i, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         MemSeries series = head.getSeriesMap().getByReference(seriesRef);
@@ -439,7 +442,7 @@ public class HeadTests extends OpenSearchTestCase {
 
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, 0, seriesLabels, timestamp, value, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         head.getLiveSeriesIndex().getDirectoryReaderManager().maybeRefreshBlocking();
@@ -458,7 +461,7 @@ public class HeadTests extends OpenSearchTestCase {
 
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, 0, seriesLabels, timestamp, value, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         head.closeHeadChunks(true, 100);
@@ -988,7 +991,7 @@ public class HeadTests extends OpenSearchTestCase {
                             1.0,
                             () -> {}
                         );
-                        appender.append(() -> createdResults.add(created), () -> {});
+                        appender.append(chunkCreated -> createdResults.add(created), () -> {});
                     } catch (InterruptedException e) {
                         fail("Thread was interrupted: " + e.getMessage());
                     }
@@ -1110,7 +1113,7 @@ public class HeadTests extends OpenSearchTestCase {
         boolean[] failureCalled = { false };
 
         // Call append without preprocess - should detect null series and call failureCallback
-        assertThrows(RuntimeException.class, () -> appender.append(() -> successCalled[0] = true, () -> failureCalled[0] = true));
+        assertThrows(RuntimeException.class, () -> appender.append(chunkCreated -> successCalled[0] = true, () -> failureCalled[0] = true));
 
         assertFalse("Success callback should not be called", successCalled[0]);
         assertTrue("Failure callback should be called for null series", failureCalled[0]);
@@ -1146,7 +1149,7 @@ public class HeadTests extends OpenSearchTestCase {
         boolean[] successCalled = { false };
 
         MemSeries series = head.getSeriesMap().getByReference(hash);
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> appender.append(() -> {
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> appender.append(chunkCreated -> {
             successCalled[0] = true;
             throw new RuntimeException("Simulated callback failure");
         }, () -> failureCalled[0] = true));
@@ -1183,7 +1186,7 @@ public class HeadTests extends OpenSearchTestCase {
         Head.HeadAppender appender1 = head.newAppender();
         boolean created1 = appender1.preprocess(Engine.Operation.Origin.PRIMARY, 0, hash, labels, 2000L, 100.0, () -> {});
         assertTrue("First appender should create series", created1);
-        appender1.append(() -> {}, () -> {});
+        appender1.append(chunkCreated -> {}, () -> {});
 
         // 2. For same series, preprocess next sample
         Head.HeadAppender appender2 = head.newAppender();
@@ -1198,7 +1201,10 @@ public class HeadTests extends OpenSearchTestCase {
         boolean[] successCalled = { false };
         boolean[] failureCalled = { false };
 
-        assertThrows(RuntimeException.class, () -> appender2.append(() -> successCalled[0] = true, () -> failureCalled[0] = true));
+        assertThrows(
+            RuntimeException.class,
+            () -> appender2.append(chunkCreated -> successCalled[0] = true, () -> failureCalled[0] = true)
+        );
 
         assertFalse("Success callback should not be called for failed series", successCalled[0]);
         assertTrue("Failure callback should be called for failed series", failureCalled[0]);
@@ -1274,13 +1280,13 @@ public class HeadTests extends OpenSearchTestCase {
         Head.HeadAppender appender1 = head.newAppender();
         boolean created1 = appender1.preprocess(Engine.Operation.Origin.PRIMARY, 0, hash, labels, 10000L, 100.0, () -> {});
         assertTrue("First sample should create series", created1);
-        appender1.append(() -> {}, () -> {});
+        appender1.append(chunkCreated -> {}, () -> {});
 
         // Sample within OOO window (OOO cutoff = 8000ms, so 10000 - 8000 = 2000). Sample at 5000 is within window.
         Head.HeadAppender appender2 = head.newAppender();
         boolean created2 = appender2.preprocess(Engine.Operation.Origin.PRIMARY, 1, hash, labels, 5000L, 200.0, () -> {});
         assertFalse("Second sample should not create series", created2);
-        appender2.append(() -> {}, () -> {});
+        appender2.append(chunkCreated -> {}, () -> {});
 
         // Sample outside OOO window - should throw exception (1000 < 2000)
         Head.HeadAppender appender3 = head.newAppender();
@@ -1334,33 +1340,33 @@ public class HeadTests extends OpenSearchTestCase {
         long hash1 = labels1.stableHash();
         Head.HeadAppender appender1 = head.newAppender();
         appender1.preprocess(Engine.Operation.Origin.REPLICA, 0, hash1, labels1, 10000L, 100.0, () -> {});
-        appender1.append(() -> {}, () -> {});
+        appender1.append(chunkCreated -> {}, () -> {});
 
         Head.HeadAppender appender2 = head.newAppender();
         appender2.preprocess(Engine.Operation.Origin.REPLICA, 1, hash1, labels1, 1000L, 200.0, () -> {});
-        appender2.append(() -> {}, () -> {});
+        appender2.append(chunkCreated -> {}, () -> {});
 
         // Test PEER_RECOVERY origin
         Labels labels2 = ByteLabels.fromStrings("__name__", "metric2", "host", "server2");
         long hash2 = labels2.stableHash();
         Head.HeadAppender appender3 = head.newAppender();
         appender3.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 2, hash2, labels2, 10000L, 100.0, () -> {});
-        appender3.append(() -> {}, () -> {});
+        appender3.append(chunkCreated -> {}, () -> {});
 
         Head.HeadAppender appender4 = head.newAppender();
         appender4.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 3, hash2, labels2, 1000L, 200.0, () -> {});
-        appender4.append(() -> {}, () -> {});
+        appender4.append(chunkCreated -> {}, () -> {});
 
         // Test LOCAL_TRANSLOG_RECOVERY origin
         Labels labels3 = ByteLabels.fromStrings("__name__", "metric3", "host", "server3");
         long hash3 = labels3.stableHash();
         Head.HeadAppender appender5 = head.newAppender();
         appender5.preprocess(Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY, 4, hash3, labels3, 10000L, 100.0, () -> {});
-        appender5.append(() -> {}, () -> {});
+        appender5.append(chunkCreated -> {}, () -> {});
 
         Head.HeadAppender appender6 = head.newAppender();
         appender6.preprocess(Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY, 5, hash3, labels3, 1000L, 200.0, () -> {});
-        appender6.append(() -> {}, () -> {});
+        appender6.append(chunkCreated -> {}, () -> {});
 
         // Verify all series exist with correct maxSeqNo
         assertEquals(1, head.getSeriesMap().getByReference(hash1).getMaxSeqNo());
@@ -1388,7 +1394,7 @@ public class HeadTests extends OpenSearchTestCase {
 
         Head.HeadAppender appender = head.newAppender();
         assertTrue(appender.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 0, ref, null, 1000L, 100.0, () -> {}));
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
 
         MemSeries series = head.getSeriesMap().getByReference(ref);
         assertTrue(series.isStub());
@@ -1416,12 +1422,12 @@ public class HeadTests extends OpenSearchTestCase {
         // Create stub
         Head.HeadAppender a1 = head.newAppender();
         assertTrue(a1.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 0, ref, null, 1000L, 100.0, () -> {}));
-        a1.append(() -> {}, () -> {});
+        a1.append(chunkCreated -> {}, () -> {});
 
         // Upgrade with labels
         Head.HeadAppender a2 = head.newAppender();
         assertTrue(a2.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 1, ref, labels, 2000L, 200.0, () -> {}));
-        a2.append(() -> {}, () -> {});
+        a2.append(chunkCreated -> {}, () -> {});
 
         MemSeries upgraded = head.getSeriesMap().getByReference(ref);
         assertFalse(upgraded.isStub());
@@ -1456,7 +1462,7 @@ public class HeadTests extends OpenSearchTestCase {
         for (int i = 0; i < 5; i++) {
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PEER_RECOVERY, i, ref, null, 1000L + i * 100, 100.0, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         assertTrue(head.getSeriesMap().getByReference(ref).isStub());
@@ -1464,7 +1470,7 @@ public class HeadTests extends OpenSearchTestCase {
         // Upgrade
         Head.HeadAppender appender = head.newAppender();
         appender.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 5, ref, labels, 1500L, 105.0, () -> {});
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
 
         MemSeries upgraded = head.getSeriesMap().getByReference(ref);
         assertFalse(upgraded.isStub());
@@ -1523,7 +1529,7 @@ public class HeadTests extends OpenSearchTestCase {
         // Create a stub series with data during recovery
         Head.HeadAppender appender = head.newAppender();
         assertTrue(appender.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 0, ref, null, 1000L, 100.0, () -> {}));
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
 
         // Verify series is a stub with data
         MemSeries series = head.getSeriesMap().getByReference(ref);
@@ -1562,7 +1568,7 @@ public class HeadTests extends OpenSearchTestCase {
         // Create a stub series with data during recovery
         Head.HeadAppender appender = head.newAppender();
         assertTrue(appender.preprocess(Engine.Operation.Origin.PEER_RECOVERY, 0, ref, null, 1000L, 100.0, () -> {}));
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
 
         // Verify series is a stub with data
         MemSeries series = head.getSeriesMap().getByReference(ref);
@@ -1607,7 +1613,7 @@ public class HeadTests extends OpenSearchTestCase {
         for (int i = 1; i < 20; i++) {
             Head.HeadAppender appender = head.newAppender();
             appender.preprocess(Engine.Operation.Origin.PRIMARY, i, series1Ref, series1Labels, i * 1000L, i * 10.0, () -> {});
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         // This creates a series with maxSeqNo=0 that's eligible for removal
@@ -1651,7 +1657,7 @@ public class HeadTests extends OpenSearchTestCase {
         assertEquals("Series 2 refCount should still be 1", 1, series2.getRefCount());
 
         // Now complete the append operation - this should decrement refCount
-        appender2.append(() -> {}, () -> {});
+        appender2.append(chunkCreated -> {}, () -> {});
 
         // Verify refCount is decremented
         assertEquals("Series 2 refCount should be 0 after append", 0, series2.getRefCount());
@@ -1689,7 +1695,7 @@ public class HeadTests extends OpenSearchTestCase {
 
         Head.HeadAppender appender1 = head.newAppender();
         appender1.preprocess(Engine.Operation.Origin.PRIMARY, 0, ref, labels, 1000L, 100.0, () -> {});
-        appender1.append(() -> {}, () -> {});
+        appender1.append(chunkCreated -> {}, () -> {});
 
         MemSeries series = head.getSeriesMap().getByReference(ref);
         assertNotNull("Series should exist", series);
@@ -1744,7 +1750,7 @@ public class HeadTests extends OpenSearchTestCase {
         // Create a series
         Head.HeadAppender appender1 = head.newAppender();
         appender1.preprocess(Engine.Operation.Origin.PRIMARY, 0, ref, labels, 1000L, 100.0, () -> {});
-        appender1.append(() -> {}, () -> {});
+        appender1.append(chunkCreated -> {}, () -> {});
 
         MemSeries series1 = head.getSeriesMap().getByReference(ref);
         assertNotNull("Series should exist", series1);
@@ -1766,7 +1772,7 @@ public class HeadTests extends OpenSearchTestCase {
         assertEquals("New series refCount should be 1 (from preprocess)", 1, series2.getRefCount());
 
         // Complete the append
-        appender2.append(() -> {}, () -> {});
+        appender2.append(chunkCreated -> {}, () -> {});
         assertEquals("RefCount should be 0 after append", 0, series2.getRefCount());
 
         head.close();
@@ -1876,7 +1882,7 @@ public class HeadTests extends OpenSearchTestCase {
         // Create a series
         Head.HeadAppender appender = head.newAppender();
         appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, ref, labels, 1000L, 100.0, () -> {});
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
 
         MemSeries series = head.getSeriesMap().getByReference(ref);
         assertNotNull("Series should exist", series);
@@ -1945,7 +1951,7 @@ public class HeadTests extends OpenSearchTestCase {
         assertFalse("Series should not be deleted", series.isDeleted());
 
         // Complete the append
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
         assertEquals("RefCount should be 0 after append", 0, series.getRefCount());
 
         // Now tryMarkDeleted should succeed
@@ -1999,7 +2005,7 @@ public class HeadTests extends OpenSearchTestCase {
                 i * 10.0,
                 () -> {}
             );
-            appender.append(() -> {}, () -> {});
+            appender.append(chunkCreated -> {}, () -> {});
         }
 
         // First closeHeadChunks to close some chunks and establish minSeqNoToKeep
@@ -2035,7 +2041,7 @@ public class HeadTests extends OpenSearchTestCase {
                 deletionDoneLatch.await();
 
                 // Complete the append
-                appender.append(() -> {}, () -> {});
+                appender.append(chunkCreated -> {}, () -> {});
             } catch (Exception e) {
                 logger.error("Append thread failed", e);
             }
@@ -2346,7 +2352,7 @@ public class HeadTests extends OpenSearchTestCase {
     private void appendSampleWithSeqNo(Head head, Labels labels, long timestamp, double value, long seqNo) throws InterruptedException {
         Head.HeadAppender appender = head.newAppender();
         appender.preprocess(Engine.Operation.Origin.PRIMARY, seqNo, labels.stableHash(), labels, timestamp, value, () -> {});
-        appender.append(() -> {}, () -> {});
+        appender.append(chunkCreated -> {}, () -> {});
     }
 
     /**

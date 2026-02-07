@@ -10,6 +10,8 @@ package org.opensearch.tsdb.core.head;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.tsdb.core.model.Labels;
 
+import java.util.function.Consumer;
+
 /**
  * An appender is used to append samples
  */
@@ -40,12 +42,13 @@ public interface Appender {
     /**
      * Append the sample to the series found or created during preprocessing. Execute a callback under the series lock.
      * This allows for atomic operations that need to be synchronized with append such as writing to the translog.
+     * The callback receives a boolean indicating whether a new chunk was created during the append operation.
      * The failure callback is executed in case of any errors.
      *
-     * @param callback the callback to execute under the series lock
+     * @param callback the callback to execute under the series lock, receives true if a new chunk was created
      * @param failureCallback the callback to execute on failure
      * @return true if appending is successful, false otherwise
      * @throws InterruptedException if the thread is interrupted while waiting for the series lock (append failed)
      */
-    boolean append(Runnable callback, Runnable failureCallback) throws InterruptedException;
+    boolean append(Consumer<Boolean> callback, Runnable failureCallback) throws InterruptedException;
 }

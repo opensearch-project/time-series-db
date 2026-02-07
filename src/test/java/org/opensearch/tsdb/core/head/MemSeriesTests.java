@@ -447,4 +447,72 @@ public class MemSeriesTests extends OpenSearchTestCase {
     private ChunkIterator getMergedDedupedIterator(List<ChunkIterator> iterators) {
         return new DedupIterator(new MergeIterator(iterators), DedupIterator.DuplicatePolicy.FIRST);
     }
+
+    public void testAppendReturnsChunkCreatedStatus() {
+        Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
+        MemSeries series = new MemSeries(123L, labels);
+        long chunkRange = 8000L;
+        ChunkOptions options = new ChunkOptions(chunkRange, 8);
+
+        // Case 1: First append creates first chunk [0-8000] - should return true
+        boolean created = series.append(1, 1000L, 10.0, options);
+        assertTrue("Should create chunk for first sample", created);
+
+        // Case 2: Append within existing chunk range - should return false
+        created = series.append(2, 2000L, 11.0, options);
+        assertFalse("Should not create chunk for timestamp within existing range", created);
+
+        created = series.append(3, 7999L, 12.0, options);
+        assertFalse("Should not create chunk for timestamp within existing range", created);
+
+        // Case 3: Append at chunk boundary - should return true (new head chunk)
+        created = series.append(4, 8000L, 13.0, options);
+        assertTrue("Should create new chunk at boundary", created);
+
+        // Case 4: Append within new head chunk [8000-16000] - should return false
+        created = series.append(5, 10000L, 14.0, options);
+        assertFalse("Should not create chunk for timestamp within head chunk", created);
+
+        // Case 5: Append OOO in first chunk range - should return false
+        created = series.append(6, 3000L, 15.0, options);
+        assertFalse("Should not create chunk for OOO timestamp in existing chunk", created);
+
+        // Case 6: Create gap by adding chunk [24000-32000]
+        created = series.append(7, 25000L, 30.0, options);
+        assertTrue("Should create new head chunk beyond existing range", created);
+
+        // Case 7: Append in gap between chunks [16000-24000] - should create new old chunk
+        created = series.append(8, 17000L, 16.0, options);
+        assertTrue("Should create new chunk for timestamp in gap", created);
+    }
+
+    public void testAppendReturnsChunkCreatedStatusWithOOO() {
+        Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
+        MemSeries series = new MemSeries(123L, labels);
+        long chunkRange = 8000L;
+        ChunkOptions options = new ChunkOptions(chunkRange, 8);
+
+        // Create chunks [8000-16000] and [24000-32000] with gaps
+        boolean created = series.append(1, 9000L, 10.0, options);
+        assertTrue("Should create first chunk", created);
+
+        created = series.append(2, 25000L, 20.0, options);
+        assertTrue("Should create chunk beyond existing range", created);
+
+        // Append in gap before first chunk [0-8000] - should create new chunk
+        created = series.append(3, 1000L, 11.0, options);
+        assertTrue("Should create chunk before first chunk", created);
+
+        // Append in gap between chunks [16000-24000] - should create new chunk
+        created = series.append(4, 17000L, 12.0, options);
+        assertTrue("Should create chunk in gap", created);
+
+        // Append in existing chunk [8000-16000] - should not create new chunk
+        created = series.append(5, 10000L, 13.0, options);
+        assertFalse("Should not create chunk in existing range", created);
+
+        // Append in existing chunk [24000-32000] - should not create new chunk
+        created = series.append(6, 26000L, 14.0, options);
+        assertFalse("Should not create chunk in existing head range", created);
+    }
 }
