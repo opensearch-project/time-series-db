@@ -43,7 +43,7 @@
         "step" : 100000,
         "stages" : [
           {
-            "type" : "headTail",
+            "type" : "slice",
             "limit" : 5,
             "mode" : "head"
           }

@@ -74,7 +74,6 @@ public class Constants {
             "sustainedBelow",
             "switch",
             "tagCompare",
-            "topK",
             "timestamp",
             "toHistogram",
             "toHistogramLinearBuckets",

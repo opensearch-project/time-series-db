@@ -38,10 +38,10 @@ import java.util.Map;
  * On each shard, it limits to the first/last n series, and during reduce, it combines
  * results from all shards.
  */
-@PipelineStageAnnotation(name = "headTail")
-public class HeadTailStage implements UnaryPipelineStage {
+@PipelineStageAnnotation(name = "slice")
+public class SliceStage implements UnaryPipelineStage {
     /** The name identifier for this pipeline stage type. */
-    public static final String NAME = "headTail";
+    public static final String NAME = "slice";
     /** The argument name for limit parameter. */
     public static final String LIMIT_ARG = "limit";
     /** The argument name for mode parameter. */
@@ -51,12 +51,12 @@ public class HeadTailStage implements UnaryPipelineStage {
     private final HeadTailMode mode;
 
     /**
-     * Constructs a new HeadTailStage with the specified limit and mode.
+     * Constructs a new SliceStage with the specified limit and mode.
      *
      * @param limit the number of series to return
      * @param mode the operation mode (HEAD or TAIL)
      */
-    public HeadTailStage(int limit, HeadTailMode mode) {
+    public SliceStage(int limit, HeadTailMode mode) {
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be positive, got: " + limit);
         }
@@ -167,31 +167,31 @@ public class HeadTailStage implements UnaryPipelineStage {
     }
 
     /**
-     * Create a HeadTailStage instance from the input stream for deserialization.
+     * Create a SliceStage instance from the input stream for deserialization.
      *
      * @param in the stream input to read from
-     * @return a new HeadTailStage instance with the deserialized parameters
+     * @return a new SliceStage instance with the deserialized parameters
      * @throws IOException if an I/O error occurs during deserialization
      */
-    public static HeadTailStage readFrom(StreamInput in) throws IOException {
+    public static SliceStage readFrom(StreamInput in) throws IOException {
         int limit = in.readInt();
         String modeStr = in.readString();
         HeadTailMode mode = HeadTailMode.fromString(modeStr);
-        return new HeadTailStage(limit, mode);
+        return new SliceStage(limit, mode);
     }
 
     /**
-     * Create a HeadTailStage from arguments map (for PipelineStageFactory compatibility).
+     * Create a SliceStage from arguments map (for PipelineStageFactory compatibility).
      * Reads mode from args, defaults to HEAD mode for backward compatibility.
      *
      * @param args Map of argument names to values
-     * @return HeadTailStage instance
+     * @return SliceStage instance
      * @throws IllegalArgumentException if arguments are invalid
      */
-    public static HeadTailStage fromArgs(Map<String, Object> args) {
+    public static SliceStage fromArgs(Map<String, Object> args) {
         int limit = parseLimit(args);
         HeadTailMode mode = parseMode(args);
-        return new HeadTailStage(limit, mode);
+        return new SliceStage(limit, mode);
     }
 
     /**
@@ -262,7 +262,7 @@ public class HeadTailStage implements UnaryPipelineStage {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        HeadTailStage other = (HeadTailStage) obj;
+        SliceStage other = (SliceStage) obj;
         return limit == other.limit && mode == other.mode;
     }
 

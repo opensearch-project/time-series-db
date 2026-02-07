@@ -60,7 +60,7 @@ import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
 import org.opensearch.tsdb.lang.m3.stage.IntegralStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
-import org.opensearch.tsdb.lang.m3.stage.HeadTailStage;
+import org.opensearch.tsdb.lang.m3.stage.SliceStage;
 import org.opensearch.tsdb.lang.m3.stage.ShowTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
 import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
@@ -564,9 +564,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(HeadPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        // Create HeadTailStage with HEAD mode
-        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), HeadTailMode.HEAD);
-        stageStack.add(headTailStage);
+        // Create SliceStage with HEAD mode
+        SliceStage sliceStage = new SliceStage(planNode.getLimit(), HeadTailMode.HEAD);
+        stageStack.add(sliceStage);
 
         return planNode.getChildren().getFirst().accept(this);
     }
@@ -575,9 +575,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(TailPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        // Create HeadTailStage with TAIL mode
-        HeadTailStage headTailStage = new HeadTailStage(planNode.getLimit(), HeadTailMode.TAIL);
-        stageStack.add(headTailStage);
+        // Create SliceStage with TAIL mode
+        SliceStage sliceStage = new SliceStage(planNode.getLimit(), HeadTailMode.TAIL);
+        stageStack.add(sliceStage);
 
         return planNode.getChildren().getFirst().accept(this);
     }

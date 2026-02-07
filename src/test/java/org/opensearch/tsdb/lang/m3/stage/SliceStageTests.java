@@ -22,46 +22,46 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTailStage> {
+public class SliceStageTests extends AbstractWireSerializingTestCase<SliceStage> {
 
     public void testConstructorWithLimit() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
-        assertEquals("headTail", stage.getName());
+        assertEquals("slice", stage.getName());
     }
 
     public void testConstructorWithNegativeLimit() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new HeadTailStage(-1, HeadTailMode.HEAD));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new SliceStage(-1, HeadTailMode.HEAD));
         assertEquals("Limit must be positive, got: -1", e.getMessage());
     }
 
     public void testConstructorWithZeroLimit() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new HeadTailStage(0, HeadTailMode.HEAD));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new SliceStage(0, HeadTailMode.HEAD));
         assertEquals("Limit must be positive, got: 0", e.getMessage());
     }
 
     public void testProcessWithEmptyInput() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
         List<TimeSeries> input = new ArrayList<>();
         List<TimeSeries> result = stage.process(input);
         assertTrue(result.isEmpty());
     }
 
     public void testProcessWithNullInput() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
-        TestUtils.assertNullInputThrowsException(stage, "headTail");
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
+        TestUtils.assertNullInputThrowsException(stage, "slice");
     }
 
     public void testFromArgsWithLimit() {
         Map<String, Object> args = Map.of("limit", 5, "mode", "head");
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
     }
 
     public void testFromArgsWithDefaultLimit() {
-        HeadTailStage stage = HeadTailStage.fromArgs(Map.of("mode", "tail"));
+        SliceStage stage = SliceStage.fromArgs(Map.of("mode", "tail"));
         assertEquals(10, stage.getLimit());
         assertEquals(HeadTailMode.TAIL, stage.getMode());
     }
@@ -70,20 +70,20 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
         Map<String, Object> args = new HashMap<>();
         args.put("limit", null);
         args.put("mode", "head");
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(10, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
     }
 
     public void testFromArgsWithInvalidStringLimit() {
         Map<String, Object> args = Map.of("limit", "invalid", "mode", "tail");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> SliceStage.fromArgs(args));
         assertEquals("Invalid type for 'limit' argument. Expected integer, but got: invalid", e.getMessage());
     }
 
     public void testFromArgsWithZeroLimit() {
         Map<String, Object> args = Map.of("limit", 0, "mode", "head");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> SliceStage.fromArgs(args));
         assertEquals("Limit must be positive, got: 0", e.getMessage());
     }
 
@@ -91,41 +91,41 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
         Map<String, Object> args = new HashMap<>();
         args.put("limit", 5);
         args.put("mode", null);
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode()); // Should default to HEAD when mode is null
     }
 
     public void testFromArgsBackwardCompatibility() {
         Map<String, Object> args = Map.of("limit", 7);
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(7, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode()); // Should default to HEAD mode
     }
 
     public void testFromArgsBackwardCompatibilityWithEmptyArgs() {
-        HeadTailStage stage = HeadTailStage.fromArgs(Map.of());
+        SliceStage stage = SliceStage.fromArgs(Map.of());
         assertEquals(10, stage.getLimit()); // Default limit
         assertEquals(HeadTailMode.HEAD, stage.getMode()); // Should default to HEAD mode
     }
 
     public void testFromArgsWithExplicitMode() {
         Map<String, Object> args = Map.of("limit", 5, "mode", "tail");
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.TAIL, stage.getMode());
     }
 
     public void testFromArgsWithExplicitHeadMode() {
         Map<String, Object> args = Map.of("limit", 3, "mode", "head");
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         assertEquals(3, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
     }
 
     public void testFromArgsWithInvalidMode() {
         Map<String, Object> args = Map.of("limit", 5, "mode", "invalid");
-        HeadTailStage stage = HeadTailStage.fromArgs(args);
+        SliceStage stage = SliceStage.fromArgs(args);
         // HeadTailMode.fromString defaults to HEAD for invalid strings
         assertEquals(5, stage.getLimit());
         assertEquals(HeadTailMode.HEAD, stage.getMode());
@@ -133,22 +133,22 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
 
     public void testFromArgsWithInvalidModeType() {
         Map<String, Object> args = Map.of("limit", 5, "mode", 123);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HeadTailStage.fromArgs(args));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> SliceStage.fromArgs(args));
         assertEquals("Invalid type for 'mode' argument. Expected String, but got Integer", e.getMessage());
     }
 
     public void testIsCoordinatorOnly() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
         assertFalse(stage.isCoordinatorOnly());
     }
 
     public void testIsGlobalAggregation() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
         assertTrue(stage.isGlobalAggregation());
     }
 
     public void testReduce() {
-        HeadTailStage stage = new HeadTailStage(3, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(3, HeadTailMode.HEAD);
 
         // Create mock aggregations with time series
         List<TimeSeries> series1 = List.of(
@@ -179,7 +179,7 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
     }
 
     public void testReduceWithLimitGreaterThanTotal() {
-        HeadTailStage stage = new HeadTailStage(10, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(10, HeadTailMode.HEAD);
 
         List<TimeSeries> series1 = List.of(StageTestUtils.createTimeSeries("ts1", Map.of("name", "series1"), List.of(1.0)));
         List<TimeSeries> series2 = List.of(StageTestUtils.createTimeSeries("ts2", Map.of("name", "series2"), List.of(2.0)));
@@ -199,7 +199,7 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
     }
 
     public void testReduceWithEmptyAggregations() {
-        HeadTailStage stage = new HeadTailStage(5, HeadTailMode.HEAD);
+        SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> stage.reduce(Collections.emptyList(), true));
         assertEquals("Aggregations list cannot be null or empty", e.getMessage());
     }
@@ -217,7 +217,7 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
             StageTestUtils.createTimeSeries("ts5", Map.of("name", "series5"), List.of(5.0))
         );
 
-        HeadTailStage stage = new HeadTailStage(3, HeadTailMode.TAIL);
+        SliceStage stage = new SliceStage(3, HeadTailMode.TAIL);
         List<TimeSeries> result = stage.process(input);
 
         // Test tail with limit 3 - should return last 3 series (series3, series4, series5)
@@ -237,7 +237,7 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
             StageTestUtils.createTimeSeries("ts2", Map.of("name", "series2"), List.of(2.0))
         );
 
-        HeadTailStage stage = new HeadTailStage(10, HeadTailMode.TAIL);
+        SliceStage stage = new SliceStage(10, HeadTailMode.TAIL);
         List<TimeSeries> result = stage.process(input);
 
         // Test tail with limit 10 (greater than input size 2) - should return all 2 series
@@ -247,24 +247,24 @@ public class HeadTailStageTests extends AbstractWireSerializingTestCase<HeadTail
     }
 
     @Override
-    protected HeadTailStage createTestInstance() {
+    protected SliceStage createTestInstance() {
         HeadTailMode mode = randomBoolean() ? HeadTailMode.HEAD : HeadTailMode.TAIL;
-        return new HeadTailStage(randomIntBetween(1, 100), mode);
+        return new SliceStage(randomIntBetween(1, 100), mode);
     }
 
     @Override
-    protected Writeable.Reader<HeadTailStage> instanceReader() {
-        return HeadTailStage::readFrom;
+    protected Writeable.Reader<SliceStage> instanceReader() {
+        return SliceStage::readFrom;
     }
 
     @Override
-    protected HeadTailStage mutateInstance(HeadTailStage instance) {
+    protected SliceStage mutateInstance(SliceStage instance) {
         // Randomly mutate either the limit or the mode
         if (randomBoolean()) {
-            return new HeadTailStage(instance.getLimit() + 1, instance.getMode());
+            return new SliceStage(instance.getLimit() + 1, instance.getMode());
         } else {
             HeadTailMode newMode = instance.getMode() == HeadTailMode.HEAD ? HeadTailMode.TAIL : HeadTailMode.HEAD;
-            return new HeadTailStage(instance.getLimit(), newMode);
+            return new SliceStage(instance.getLimit(), newMode);
         }
     }
 }

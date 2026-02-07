@@ -53,7 +53,7 @@
             "sortOrder" : "asc"
           },
           {
-            "type" : "headTail",
+            "type" : "slice",
             "limit" : 5,
             "mode" : "head"
           }
