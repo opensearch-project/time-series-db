@@ -21,8 +21,11 @@ import org.opensearch.tsdb.lang.m3.common.ValueFilterType;
 import org.opensearch.tsdb.lang.m3.common.WindowAggregationType;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByBucketPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByDistinctTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
@@ -294,6 +297,49 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
         assertEquals("TagSubPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test AliasSubPlanNode with correct number of children (1).
+     */
+    public void testAliasSubPlanNodeWithOneChild() {
+        AliasSubPlanNode planNode = new AliasSubPlanNode(1, "(.+)_(.+)", "$2-$1");
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test AliasSubPlanNode with incorrect number of children (0).
+     */
+    public void testAliasSubPlanNodeWithNoChildren() {
+        AliasSubPlanNode planNode = new AliasSubPlanNode(1, "test", "replace");
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("AliasSubPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test AliasByBucketPlanNode with correct number of children (1).
+     */
+    public void testAliasByBucketPlanNodeWithOneChild() {
+        AliasByBucketPlanNode planNode = new AliasByBucketPlanNode(1, "le");
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test AliasByDistinctTagsPlanNode with correct number of children (1).
+     */
+    public void testAliasByDistinctTagsPlanNodeWithOneChild() {
+        AliasByDistinctTagsPlanNode planNode = new AliasByDistinctTagsPlanNode(1, true, List.of("env"));
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
     }
 
     /**

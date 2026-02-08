@@ -17,6 +17,7 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
+import org.opensearch.tsdb.lang.m3.utils.BucketParsingUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -652,10 +653,10 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         }
 
         // Test BucketInfo equals and hashCode directly
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "10-20");
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b1", "10-20");
-        HistogramPercentileStage.BucketInfo bucket3 = new HistogramPercentileStage.BucketInfo("b2", "10-20");
-        HistogramPercentileStage.BucketInfo bucket4 = new HistogramPercentileStage.BucketInfo("b1", "20-30");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "10-20");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b1", "10-20");
+        BucketParsingUtils.BucketInfo bucket3 = new BucketParsingUtils.BucketInfo("b2", "10-20");
+        BucketParsingUtils.BucketInfo bucket4 = new BucketParsingUtils.BucketInfo("b1", "20-30");
 
         // Test reflexive property
         assertEquals("BucketInfo should equal itself", bucket1, bucket1);
@@ -682,128 +683,128 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         assertNotEquals("BucketInfo should not equal different type", bucket1, "string");
 
         // Test with duration ranges
-        HistogramPercentileStage.BucketInfo durationBucket1 = new HistogramPercentileStage.BucketInfo("d1", "10ms-20ms");
-        HistogramPercentileStage.BucketInfo durationBucket2 = new HistogramPercentileStage.BucketInfo("d1", "10ms-20ms");
+        BucketParsingUtils.BucketInfo durationBucket1 = new BucketParsingUtils.BucketInfo("d1", "10ms-20ms");
+        BucketParsingUtils.BucketInfo durationBucket2 = new BucketParsingUtils.BucketInfo("d1", "10ms-20ms");
         assertEquals("Duration buckets should be equal", durationBucket1, durationBucket2);
         assertEquals("Duration buckets should have same hash code", durationBucket1.hashCode(), durationBucket2.hashCode());
 
         // Test with infinity buckets
-        HistogramPercentileStage.BucketInfo infBucket1 = new HistogramPercentileStage.BucketInfo("inf1", "infinity");
-        HistogramPercentileStage.BucketInfo infBucket2 = new HistogramPercentileStage.BucketInfo("inf1", "infinity");
+        BucketParsingUtils.BucketInfo infBucket1 = new BucketParsingUtils.BucketInfo("inf1", "infinity");
+        BucketParsingUtils.BucketInfo infBucket2 = new BucketParsingUtils.BucketInfo("inf1", "infinity");
         assertEquals("Infinity buckets should be equal", infBucket1, infBucket2);
         assertEquals("Infinity buckets should have same hash code", infBucket1.hashCode(), infBucket2.hashCode());
     }
 
     public void testBucketInfoValueRangeBasic() {
         // Test basic value range parsing
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b1", "10-20");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b1", "10-20");
         assertEquals(10.0, bucket.getLowerBound(), 0.001);
         assertEquals(20.0, bucket.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoValueRangeWithDecimals() {
         // Test value range with decimal numbers
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b2", "1.5-3.7");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b2", "1.5-3.7");
         assertEquals(1.5, bucket.getLowerBound(), 0.001);
         assertEquals(3.7, bucket.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoValueRangeWithNegativeNumbers() {
         // Test value range with negative numbers
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b3", "-10-5");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b3", "-10-5");
         assertEquals(-10.0, bucket.getLowerBound(), 0.001);
         assertEquals(5.0, bucket.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoDurationRangeMilliseconds() {
         // Test duration range in milliseconds
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b4", "10ms-50ms");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b4", "10ms-50ms");
         assertEquals(10.0, bucket.getLowerBound(), 0.001);
         assertEquals(50.0, bucket.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoDurationRangeSeconds() {
         // Test duration range in seconds
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b5", "1s-5s");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b5", "1s-5s");
         assertEquals(1000.0, bucket.getLowerBound(), 0.001); // 1 second = 1000ms
         assertEquals(5000.0, bucket.getUpperBound(), 0.001); // 5 seconds = 5000ms
     }
 
     public void testBucketInfoDurationRangeMinutes() {
         // Test duration range in minutes
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b6", "1m-2m");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b6", "1m-2m");
         assertEquals(60000.0, bucket.getLowerBound(), 0.001); // 1 minute = 60000ms
         assertEquals(120000.0, bucket.getUpperBound(), 0.001); // 2 minutes = 120000ms
     }
 
     public void testBucketInfoDurationRangeHours() {
         // Test duration range in hours
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b7", "1h-3h");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b7", "1h-3h");
         assertEquals(3600000.0, bucket.getLowerBound(), 0.001); // 1 hour = 3600000ms
         assertEquals(10800000.0, bucket.getUpperBound(), 0.001); // 3 hours = 10800000ms
     }
 
     public void testBucketInfoDurationRangeNanoseconds() {
         // Test duration range in nanoseconds
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b8", "1000ns-5000ns");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b8", "1000ns-5000ns");
         assertEquals(0.001, bucket.getLowerBound(), 0.0001); // 1000ns = 0.001ms
         assertEquals(0.005, bucket.getUpperBound(), 0.0001); // 5000ns = 0.005ms
     }
 
     public void testBucketInfoDurationRangeMicroseconds() {
         // Test duration range in microseconds
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b9", "100us-500us");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b9", "100us-500us");
         assertEquals(0.1, bucket1.getLowerBound(), 0.0001); // 100µs = 0.1ms
         assertEquals(0.5, bucket1.getUpperBound(), 0.0001); // 500µs = 0.5ms
 
         // Test with µ symbol
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b10", "100µs-500µs");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b10", "100µs-500µs");
         assertEquals(0.1, bucket2.getLowerBound(), 0.0001);
         assertEquals(0.5, bucket2.getUpperBound(), 0.0001);
     }
 
     public void testBucketInfoInfinityRangeComprehensive() {
         // Test infinity range
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b11", "infinity");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b11", "infinity");
         assertEquals(0.0, bucket1.getLowerBound(), 0.001);
         assertEquals(Double.POSITIVE_INFINITY, bucket1.getUpperBound(), 0.001);
 
         // Test +Inf notation
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b12", "+Inf");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b12", "+Inf");
         assertEquals(0.0, bucket2.getLowerBound(), 0.001);
         assertEquals(Double.POSITIVE_INFINITY, bucket2.getUpperBound(), 0.001);
 
         // Test value range with infinity upper bound
-        HistogramPercentileStage.BucketInfo bucket3 = new HistogramPercentileStage.BucketInfo("b13", "100-infinity");
+        BucketParsingUtils.BucketInfo bucket3 = new BucketParsingUtils.BucketInfo("b13", "100-infinity");
         assertEquals(100.0, bucket3.getLowerBound(), 0.001);
         assertEquals(100.0, bucket3.getUpperBound(), 0.001); // For infinity buckets, upper bound equals lower bound
     }
 
     public void testBucketInfoDurationInfinityRange() {
         // Test duration with positive infinity
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b13", "1s-infinity");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b13", "1s-infinity");
         assertEquals(1000.0, bucket.getLowerBound(), 0.001);
         assertEquals(1000.0, bucket.getUpperBound(), 0.001); // For infinity buckets, upper bound equals lower bound
 
         // Test duration with +Inf notation
-        HistogramPercentileStage.BucketInfo bucketPlusInf = new HistogramPercentileStage.BucketInfo("b14", "500ms-+Inf");
+        BucketParsingUtils.BucketInfo bucketPlusInf = new BucketParsingUtils.BucketInfo("b14", "500ms-+Inf");
         assertEquals(500.0, bucketPlusInf.getLowerBound(), 0.001);
         assertEquals(500.0, bucketPlusInf.getUpperBound(), 0.001); // For infinity buckets, upper bound equals lower bound
 
         // Test duration with negative infinity (-Inf)
-        HistogramPercentileStage.BucketInfo negInfBucket = new HistogramPercentileStage.BucketInfo("b15", "-Inf-100ms");
+        BucketParsingUtils.BucketInfo negInfBucket = new BucketParsingUtils.BucketInfo("b15", "-Inf-100ms");
         // -Inf should be represented as Duration.ofNanos(Long.MIN_VALUE) which converts to a very large negative millisecond value
         double expectedNegInfMs = Long.MIN_VALUE / 1_000_000.0; // Convert nanoseconds to milliseconds
         assertEquals(expectedNegInfMs, negInfBucket.getLowerBound(), 0.001);
         assertEquals(100.0, negInfBucket.getUpperBound(), 0.001);
 
         // Test zero to positive infinity
-        HistogramPercentileStage.BucketInfo zeroToInf = new HistogramPercentileStage.BucketInfo("b16", "0-infinity");
+        BucketParsingUtils.BucketInfo zeroToInf = new BucketParsingUtils.BucketInfo("b16", "0-infinity");
         assertEquals(0.0, zeroToInf.getLowerBound(), 0.001);
         assertEquals(0.0, zeroToInf.getUpperBound(), 0.001); // For infinity buckets, upper bound equals lower bound
 
         // Test duration with negative infinity (-infinity lowercase)
-        HistogramPercentileStage.BucketInfo negInfinityBucket = new HistogramPercentileStage.BucketInfo("b17", "-infinity-2ms");
+        BucketParsingUtils.BucketInfo negInfinityBucket = new BucketParsingUtils.BucketInfo("b17", "-infinity-2ms");
         double expectedNegInfinityMs = Long.MIN_VALUE / 1_000_000.0; // Convert nanoseconds to milliseconds
         assertEquals(expectedNegInfinityMs, negInfinityBucket.getLowerBound(), 0.001);
         assertEquals(2.0, negInfinityBucket.getUpperBound(), 0.001);
@@ -811,14 +812,14 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
     public void testBucketInfoZeroDuration() {
         // Test zero duration as lower bound
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b14", "0-10ms");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b14", "0-10ms");
         assertEquals(0.0, bucket.getLowerBound(), 0.001);
         assertEquals(10.0, bucket.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoToString() {
         // Test toString method
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b1", "10-20");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b1", "10-20");
         String toString = bucket.toString();
 
         assertTrue("toString should contain bucketId", toString.contains("bucketId='b1'"));
@@ -829,54 +830,54 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
 
     public void testBucketInfoInvalidRangeFormats() {
         // Test invalid range formats
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b1", "invalid-format"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b1", "invalid-format"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b2", "10"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b2", "10"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b3", ""));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b3", ""));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b4", null));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b4", null));
     }
 
     public void testBucketInfoInvalidDurationFormats() {
         // Test invalid duration formats
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b1", "10invalid-20invalid"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b1", "10invalid-20invalid"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b2", "10x-20x"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b2", "10x-20x"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b3", "abc-def"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b3", "abc-def"));
     }
 
     public void testBucketInfoInvalidValueRanges() {
         // Test invalid value ranges (high <= low)
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b1", "20-10"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b1", "20-10"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b2", "5-5"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b2", "5-5"));
 
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b3", "10ms-5ms"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b3", "10ms-5ms"));
     }
 
     public void testBucketInfoMixedPrecisionDurations() {
         // Test various precision combinations
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "1.5s-2.5s");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "1.5s-2.5s");
         assertEquals(1500.0, bucket1.getLowerBound(), 0.001);
         assertEquals(2500.0, bucket1.getUpperBound(), 0.001);
 
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b2", "0.5ms-1.5ms");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b2", "0.5ms-1.5ms");
         assertEquals(0.5, bucket2.getLowerBound(), 0.001);
         assertEquals(1.5, bucket2.getUpperBound(), 0.001);
     }
 
     public void testBucketInfoLargeDurations() {
         // Test large duration values
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b1", "24h-48h");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b1", "24h-48h");
         assertEquals(86400000.0, bucket.getLowerBound(), 0.001); // 24 hours = 86400000ms
         assertEquals(172800000.0, bucket.getUpperBound(), 0.001); // 48 hours = 172800000ms
     }
 
     public void testBucketInfoSmallDurations() {
         // Test very small duration values
-        HistogramPercentileStage.BucketInfo bucket = new HistogramPercentileStage.BucketInfo("b1", "1ns-10ns");
+        BucketParsingUtils.BucketInfo bucket = new BucketParsingUtils.BucketInfo("b1", "1ns-10ns");
         assertEquals(0.000001, bucket.getLowerBound(), 0.0000001); // 1ns = 0.000001ms
         assertEquals(0.00001, bucket.getUpperBound(), 0.0000001); // 10ns = 0.00001ms
     }
@@ -885,44 +886,44 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
         // Test comprehensive coverage of parseDurationRange() with -Inf, +Inf, and edge cases
 
         // Test -Inf to positive value (most negative duration to normal duration)
-        HistogramPercentileStage.BucketInfo negInfToPosValue = new HistogramPercentileStage.BucketInfo("edge1", "-Inf-1s");
+        BucketParsingUtils.BucketInfo negInfToPosValue = new BucketParsingUtils.BucketInfo("edge1", "-Inf-1s");
         double expectedNegInfMs = Long.MIN_VALUE / 1_000_000.0; // -Inf as nanoseconds converted to milliseconds
         assertEquals(expectedNegInfMs, negInfToPosValue.getLowerBound(), 0.001);
         assertEquals(1000.0, negInfToPosValue.getUpperBound(), 0.001);
 
         // Test -Inf to zero - this should be a valid value range
-        HistogramPercentileStage.BucketInfo negativeInfToZero = new HistogramPercentileStage.BucketInfo("edge2", "-Inf-0");
+        BucketParsingUtils.BucketInfo negativeInfToZero = new BucketParsingUtils.BucketInfo("edge2", "-Inf-0");
         assertEquals(Double.NEGATIVE_INFINITY, negativeInfToZero.getLowerBound(), 0.001);
         assertEquals(0, negativeInfToZero.getUpperBound(), 0.001);
 
         // Test -infinity (lowercase) to zero - this should be a valid value range
-        HistogramPercentileStage.BucketInfo negativeInfinityToZero = new HistogramPercentileStage.BucketInfo("edge2b", "-infinity-0");
+        BucketParsingUtils.BucketInfo negativeInfinityToZero = new BucketParsingUtils.BucketInfo("edge2b", "-infinity-0");
         assertEquals(Double.NEGATIVE_INFINITY, negativeInfinityToZero.getLowerBound(), 0.001);
         assertEquals(0, negativeInfinityToZero.getUpperBound(), 0.001);
 
         // Test positive value to +Inf
-        HistogramPercentileStage.BucketInfo posValueToPosInf = new HistogramPercentileStage.BucketInfo("edge3", "10ms-+Inf");
+        BucketParsingUtils.BucketInfo posValueToPosInf = new BucketParsingUtils.BucketInfo("edge3", "10ms-+Inf");
         assertEquals(10.0, posValueToPosInf.getLowerBound(), 0.001);
         assertEquals(10.0, posValueToPosInf.getUpperBound(), 0.001); // For +Inf buckets, upper = lower
 
         // Test zero to +Inf
-        HistogramPercentileStage.BucketInfo zeroToPosInf = new HistogramPercentileStage.BucketInfo("edge4", "0-+Inf");
+        BucketParsingUtils.BucketInfo zeroToPosInf = new BucketParsingUtils.BucketInfo("edge4", "0-+Inf");
         assertEquals(0.0, zeroToPosInf.getLowerBound(), 0.001);
         assertEquals(0.0, zeroToPosInf.getUpperBound(), 0.001); // For +Inf buckets, upper = lower
 
         // Test parseDurationRange with fractional values involving infinity
-        HistogramPercentileStage.BucketInfo fracToPosInf = new HistogramPercentileStage.BucketInfo("frac1", "2.5s-infinity");
+        BucketParsingUtils.BucketInfo fracToPosInf = new BucketParsingUtils.BucketInfo("frac1", "2.5s-infinity");
         assertEquals(2500.0, fracToPosInf.getLowerBound(), 0.001);
         assertEquals(2500.0, fracToPosInf.getUpperBound(), 0.001); // For infinity buckets, upper = lower
 
         // Test that equal infinity buckets are equal
-        HistogramPercentileStage.BucketInfo infBucket1 = new HistogramPercentileStage.BucketInfo("inf1", "-Inf-5s");
-        HistogramPercentileStage.BucketInfo infBucket2 = new HistogramPercentileStage.BucketInfo("inf1", "-Inf-5s");
+        BucketParsingUtils.BucketInfo infBucket1 = new BucketParsingUtils.BucketInfo("inf1", "-Inf-5s");
+        BucketParsingUtils.BucketInfo infBucket2 = new BucketParsingUtils.BucketInfo("inf1", "-Inf-5s");
         assertEquals("Negative infinity buckets should be equal", infBucket1, infBucket2);
         assertEquals("Negative infinity buckets should have equal hash codes", infBucket1.hashCode(), infBucket2.hashCode());
 
         // Test that different infinity buckets are not equal
-        HistogramPercentileStage.BucketInfo differentInf = new HistogramPercentileStage.BucketInfo("inf1", "-Inf-10s");
+        BucketParsingUtils.BucketInfo differentInf = new BucketParsingUtils.BucketInfo("inf1", "-Inf-10s");
         assertNotEquals("Different negative infinity ranges should not be equal", infBucket1, differentInf);
 
         // Test toString contains correct information for infinity buckets
@@ -1005,20 +1006,20 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
      */
     public void testComplexDurationFormats() {
         // Test the specific failing cases mentioned in the issue
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "2m11.072s-infinity");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "2m11.072s-infinity");
         assertEquals(131072.0, bucket1.getLowerBound(), 0.001); // 2m + 11.072s = 120000ms + 11072ms = 131072ms
 
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b2", "32.768s-1m5.536s");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b2", "32.768s-1m5.536s");
         assertEquals(32768.0, bucket2.getLowerBound(), 0.001); // 32.768s = 32768ms
         assertEquals(65536.0, bucket2.getUpperBound(), 0.001); // 1m + 5.536s = 60000ms + 5536ms = 65536ms
 
         // Test other multi-unit combinations
-        HistogramPercentileStage.BucketInfo bucket3 = new HistogramPercentileStage.BucketInfo("b3", "2m37s-5m10s");
+        BucketParsingUtils.BucketInfo bucket3 = new BucketParsingUtils.BucketInfo("b3", "2m37s-5m10s");
         assertEquals(157000.0, bucket3.getLowerBound(), 0.001); // 2m37s = 120000ms + 37000ms = 157000ms
         assertEquals(310000.0, bucket3.getUpperBound(), 0.001); // 5m10s = 300000ms + 10000ms = 310000ms
 
         // Test hour + minute combinations
-        HistogramPercentileStage.BucketInfo bucket4 = new HistogramPercentileStage.BucketInfo("b4", "1h30m-2h45m");
+        BucketParsingUtils.BucketInfo bucket4 = new BucketParsingUtils.BucketInfo("b4", "1h30m-2h45m");
         assertEquals(5400000.0, bucket4.getLowerBound(), 0.001); // 1h30m = 3600000ms + 1800000ms = 5400000ms
         assertEquals(9900000.0, bucket4.getUpperBound(), 0.001); // 2h45m = 7200000ms + 2700000ms = 9900000ms
     }
@@ -1028,17 +1029,17 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
      */
     public void testFractionalMultiUnit() {
         // Test fractional seconds with minutes
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "1m30.5s-2m45.25s");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "1m30.5s-2m45.25s");
         assertEquals(90500.0, bucket1.getLowerBound(), 0.001); // 1m30.5s = 60000ms + 30500ms = 90500ms
         assertEquals(165250.0, bucket1.getUpperBound(), 0.001); // 2m45.25s = 120000ms + 45250ms = 165250ms
 
         // Test fractional minutes
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b2", "1.5m-2.5m");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b2", "1.5m-2.5m");
         assertEquals(90000.0, bucket2.getLowerBound(), 0.001); // 1.5m = 90000ms
         assertEquals(150000.0, bucket2.getUpperBound(), 0.001); // 2.5m = 150000ms
 
         // Test fractional hours with minutes
-        HistogramPercentileStage.BucketInfo bucket3 = new HistogramPercentileStage.BucketInfo("b3", "1.5h30m-2h30m");
+        BucketParsingUtils.BucketInfo bucket3 = new BucketParsingUtils.BucketInfo("b3", "1.5h30m-2h30m");
         assertEquals(7200000.0, bucket3.getLowerBound(), 0.001); // 1.5h + 30m = 5400000ms + 1800000ms = 7200000ms
         assertEquals(9000000.0, bucket3.getUpperBound(), 0.001); // 2h30m = 7200000ms + 1800000ms = 9000000ms
     }
@@ -1048,12 +1049,12 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
      */
     public void testWorkaroundReplacement() {
         // Test microsecond replacement
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "100__s-200__s");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "100__s-200__s");
         assertEquals(0.1, bucket1.getLowerBound(), 0.0001); // 100µs = 0.1ms
         assertEquals(0.2, bucket1.getUpperBound(), 0.0001); // 200µs = 0.2ms
 
         // Test mixed with other units
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b2", "1ms100__s-5ms");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b2", "1ms100__s-5ms");
         assertEquals(1.1, bucket2.getLowerBound(), 0.0001); // 1ms + 100µs = 1.1ms
         assertEquals(5.0, bucket2.getUpperBound(), 0.001); // 5ms
     }
@@ -1063,21 +1064,21 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
      */
     public void testDurationErrorCases() {
         // Test duplicate units (Go-compatible behavior)
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b1", "1m2m-3m"));
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b2", "1s5s-10s"));
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b3", "1h2h-3h"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b1", "1m2m-3m"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b2", "1s5s-10s"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b3", "1h2h-3h"));
 
         // Test invalid units
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b4", "2m5x-10m"));
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b5", "1y-2y")); // 'y' not supported
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b4", "2m5x-10m"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b5", "1y-2y")); // 'y' not supported
 
         // Test invalid characters without units
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b6", "2m5-10m"));
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b7", "2m5s10-3m"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b6", "2m5-10m"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b7", "2m5s10-3m"));
 
         // Test malformed input
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b8", "2m..5s-10m"));
-        assertThrows(IllegalArgumentException.class, () -> new HistogramPercentileStage.BucketInfo("b9", "2m 5s-10m")); // space not allowed
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b8", "2m..5s-10m"));
+        assertThrows(IllegalArgumentException.class, () -> new BucketParsingUtils.BucketInfo("b9", "2m 5s-10m")); // space not allowed
     }
 
     /**
@@ -1122,15 +1123,15 @@ public class HistogramPercentileStageTests extends AbstractWireSerializingTestCa
      */
     public void testValueRangeFallbackWithEnhancedParser() {
         // Test numeric value ranges (should fallback from duration parsing to value parsing)
-        HistogramPercentileStage.BucketInfo bucket1 = new HistogramPercentileStage.BucketInfo("b1", "10-20");
+        BucketParsingUtils.BucketInfo bucket1 = new BucketParsingUtils.BucketInfo("b1", "10-20");
         assertEquals(10.0, bucket1.getLowerBound(), 0.001);
         assertEquals(20.0, bucket1.getUpperBound(), 0.001);
 
-        HistogramPercentileStage.BucketInfo bucket2 = new HistogramPercentileStage.BucketInfo("b2", "0-100");
+        BucketParsingUtils.BucketInfo bucket2 = new BucketParsingUtils.BucketInfo("b2", "0-100");
         assertEquals(0.0, bucket2.getLowerBound(), 0.001);
         assertEquals(100.0, bucket2.getUpperBound(), 0.001);
 
-        HistogramPercentileStage.BucketInfo bucket3 = new HistogramPercentileStage.BucketInfo("b3", "1.5-3.7");
+        BucketParsingUtils.BucketInfo bucket3 = new BucketParsingUtils.BucketInfo("b3", "1.5-3.7");
         assertEquals(1.5, bucket3.getLowerBound(), 0.001);
         assertEquals(3.7, bucket3.getUpperBound(), 0.001);
 

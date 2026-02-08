@@ -9,8 +9,11 @@ package org.opensearch.tsdb.lang.m3.m3ql.plan.visitor;
 
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByBucketPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByDistinctTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
@@ -99,6 +102,33 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the AliasByTagsPlanNode
      */
     public T visit(AliasByTagsPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for AliasSubPlanNode.
+     * @param planNode the AliasSubPlanNode to visit
+     * @return the result of processing the AliasSubPlanNode
+     */
+    public T visit(AliasSubPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for AliasByBucketPlanNode.
+     * @param planNode the AliasByBucketPlanNode to visit
+     * @return the result of processing the AliasByBucketPlanNode
+     */
+    public T visit(AliasByBucketPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for AliasByDistinctTagsPlanNode.
+     * @param planNode the AliasByDistinctTagsPlanNode to visit
+     * @return the result of processing the AliasByDistinctTagsPlanNode
+     */
+    public T visit(AliasByDistinctTagsPlanNode planNode) {
         return process(planNode);
     }
 

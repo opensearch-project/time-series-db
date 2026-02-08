@@ -27,7 +27,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -183,7 +182,14 @@ public abstract class BaseQueryExecutor {
             TimeSeriesResult expectedResult = entry.getValue();
             TimeSeriesResult actualResult = actualMap.get(metric);
 
-            assertNotNull(String.format(Locale.ROOT, "%s: Missing metric %s", queryName, metric), actualResult);
+            if (actualResult == null) {
+                // Build list of available metrics for better error message
+                List<String> availableMetrics = actualMap.keySet().stream().map(Map::toString).sorted().collect(Collectors.toList());
+                String availableMetricsStr = availableMetrics.isEmpty()
+                    ? "No metrics found in response"
+                    : "Available metrics: " + String.join(", ", availableMetrics);
+                fail(String.format(Locale.ROOT, "%s: Missing metric %s. %s", queryName, metric, availableMetricsStr));
+            }
 
             assertEquals(
                 String.format(Locale.ROOT, "%s: Values mismatch for metric %s", queryName, metric),

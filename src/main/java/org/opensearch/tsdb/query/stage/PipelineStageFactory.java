@@ -16,8 +16,11 @@ import java.util.function.Function;
 
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.tsdb.lang.m3.stage.AbsStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasByBucketStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasByDistinctTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasByTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasSubStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
 import org.opensearch.tsdb.lang.m3.stage.AvgStage;
 import org.opensearch.tsdb.lang.m3.stage.ChangedStage;
@@ -122,8 +125,11 @@ public class PipelineStageFactory {
             // this would use classpath scanning to find all annotated classes.
             // Registering in alphabetical order for consistency
             registerStage(AbsStage.class);
+            registerStage(AliasByBucketStage.class);
+            registerStage(AliasByDistinctTagsStage.class);
             registerStage(AliasByTagsStage.class);
             registerStage(AliasStage.class);
+            registerStage(AliasSubStage.class);
             registerStage(AsPercentStage.class);
             registerStage(AvgStage.class);
             registerStage(ChangedStage.class);

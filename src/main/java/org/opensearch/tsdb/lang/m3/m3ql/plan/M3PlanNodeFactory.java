@@ -12,8 +12,11 @@ import org.opensearch.tsdb.lang.m3.common.Constants;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByBucketPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByDistinctTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
@@ -74,6 +77,13 @@ public class M3PlanNodeFactory {
                 return AliasPlanNode.of(functionNode);
             case Constants.Functions.ALIAS_BY_TAGS:
                 return AliasByTagsPlanNode.of(functionNode);
+            case Constants.Functions.ALIAS_SUB:
+                return AliasSubPlanNode.of(functionNode);
+            case Constants.Functions.ALIAS_BY_DISTINCT_TAGS:
+                return AliasByDistinctTagsPlanNode.of(functionNode);
+            case Constants.Functions.ALIAS_BY_BUCKET:
+            case Constants.Functions.ALIAS_BY_HISTOGRAM_BUCKET:
+                return AliasByBucketPlanNode.of(functionNode);
             case Constants.Functions.CHANGED:
                 return ChangedPlanNode.of(functionNode);
             case Constants.Functions.DERIVATIVE:

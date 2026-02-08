@@ -25,13 +25,19 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DivideScalarPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DividePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByBucketPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByDistinctTagsPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesBinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntersectPlanNode;
 import org.opensearch.tsdb.lang.m3.stage.AbsStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasByBucketStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasByDistinctTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasByTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasStage;
+import org.opensearch.tsdb.lang.m3.stage.AliasSubStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
 import org.opensearch.tsdb.lang.m3.stage.ChangedStage;
 import org.opensearch.tsdb.lang.m3.stage.CopyStage;
@@ -286,6 +292,30 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(AliasByTagsPlanNode planNode) {
         validateChildCountExact(planNode, 1);
         stageStack.add(new AliasByTagsStage(planNode.getTagNames()));
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(AliasSubPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new AliasSubStage(planNode.getSearchPattern(), planNode.getReplacement()));
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(AliasByBucketPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new AliasByBucketStage(planNode.getTagName()));
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(AliasByDistinctTagsPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new AliasByDistinctTagsStage(planNode.isIncludeKeys(), planNode.getTagNames()));
 
         return planNode.getChildren().getFirst().accept(this);
     }
