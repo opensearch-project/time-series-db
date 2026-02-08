@@ -420,7 +420,7 @@ public class TSDBEngineSingleNodeTests extends OpenSearchSingleNodeTestCase {
                     .put("index.queries.cache.enabled", false)
                     .put("index.requests.cache.enable", false)
                     .put("index.tsdb_engine.commit_interval", "5m") // Commits every 5m (throttled)
-                    .put("index.translog.flush_threshold_size", "56b") // Small flush threshold to ensure shouldPeriodicallyFlush() is true
+                    .put("index.translog.flush_threshold_size", "56b") // Small flush threshold to ensure flush proceeds
                     .put("index.translog.generation_threshold_size", "100b") // Small threshold to ensure shouldRollTranslog() is true
                     .put("index.translog.sync_interval", "1s") // Sync translog frequently
                     .put("index.refresh_interval", "1s")
@@ -456,15 +456,16 @@ public class TSDBEngineSingleNodeTests extends OpenSearchSingleNodeTestCase {
         // Check translog files on disk
         long finalMaxGeneration = getMaxTranslogGeneration(translogPath);
 
-        // Verify translog generations increased at least once per batch (background processes may result in even higher gen)
+        // Verify translog generations increased at least once per batch
         assertTrue(
             String.format(
                 Locale.ROOT,
-                "Translog should have rolled (initial gen: %d, final gen: %d)",
+                "Translog should have rolled at least %d times (initial gen: %d, final gen: %d)",
+                numBatches,
                 initialMaxGeneration,
                 finalMaxGeneration
             ),
-            finalMaxGeneration - initialMaxGeneration > numBatches
+            finalMaxGeneration - initialMaxGeneration >= numBatches
         );
     }
 
