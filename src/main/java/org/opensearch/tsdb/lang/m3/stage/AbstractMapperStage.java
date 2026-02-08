@@ -11,6 +11,7 @@ import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -163,6 +164,30 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
     @Override
     public boolean isCoordinatorOnly() {
         return false;
+    }
+
+    /**
+     * Estimate memory overhead for mapper stage operations.
+     * Mapper stages allocate new TimeSeries objects with new samples (same cardinality as input).
+     *
+     * <p>Delegates to {@link TimeSeries#estimateBytes()} for per-series estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        // Result ArrayList + new TimeSeries objects (delegated estimation)
+        long totalOverhead = MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
+        for (TimeSeries ts : input) {
+            totalOverhead += ts.estimateBytes();
+        }
+        return totalOverhead;
     }
 
     @Override

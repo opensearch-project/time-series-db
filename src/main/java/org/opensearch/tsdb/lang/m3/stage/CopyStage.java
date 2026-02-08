@@ -14,6 +14,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -56,6 +57,30 @@ public class CopyStage implements UnaryPipelineStage {
     @Override
     public boolean isCoordinatorOnly() {
         return true;
+    }
+
+    /**
+     * Estimate memory overhead for deep copy operations.
+     * CopyStage creates a full deep copy of all time series including labels, samples, and alias.
+     *
+     * <p>Delegates to {@link TimeSeries#estimateBytes()} for per-series estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        // Result ArrayList + deep copy of each TimeSeries
+        long totalOverhead = MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
+        for (TimeSeries ts : input) {
+            totalOverhead += ts.estimateBytes();
+        }
+        return totalOverhead;
     }
 
     /**

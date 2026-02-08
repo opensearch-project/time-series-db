@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
+import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 import org.opensearch.tsdb.query.utils.ProfileInfoMapper;
 
 /**
@@ -141,10 +142,6 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     // Circuit breaker tracking
     long circuitBreakerBytes = 0; // package-private for testing
 
-    // Estimated sizes for circuit breaker accounting
-    private static final long HASHMAP_ENTRY_OVERHEAD = 32; // Estimated overhead per HashMap entry
-    private static final long ARRAYLIST_OVERHEAD = 24; // Estimated ArrayList object overhead
-
     /**
      * Set output series count for testing purposes.
      * Package-private for testing.
@@ -162,14 +159,20 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     }
 
     /**
-     * Track memory allocation with circuit breaker.
-     * This method adds the specified bytes to the circuit breaker and tracks the total allocated.
+     * Track memory allocation/release with circuit breaker.
+     * This method adds or removes bytes from the circuit breaker and tracks the total.
+     * Positive values indicate allocation, negative values indicate release.
      * Logs warnings if allocation exceeds thresholds for observability.
      *
-     * @param bytes the number of bytes to allocate
+     * @param bytes the number of bytes to allocate (positive) or release (negative)
      */
     private void addCircuitBreakerBytes(long bytes) {
+        if (bytes == 0) {
+            return;
+        }
+
         if (bytes > 0) {
+            // Allocation
             try {
                 addRequestCircuitBreakerBytes(bytes);
                 circuitBreakerBytes += bytes;
@@ -227,6 +230,21 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Re-throw the exception to fail the query
                 throw e;
+            }
+        } else {
+            // Release (negative bytes) - release temporary overhead
+            // AggregatorBase.addRequestCircuitBreakerBytes uses addWithoutBreaking() for negative values
+            long bytesToRelease = -bytes;
+            addRequestCircuitBreakerBytes(bytes);
+            circuitBreakerBytes -= bytesToRelease;
+
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "Circuit breaker release: -{} bytes, total={} bytes, aggregator={}",
+                    bytesToRelease,
+                    circuitBreakerBytes,
+                    name()
+                );
             }
         }
     }
@@ -394,7 +412,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             List<Sample> alignedSamples = new ArrayList<>(allSamples.size());
 
             // Accumulate circuit breaker bytes for aligned samples list
-            bytesForThisDoc += ARRAYLIST_OVERHEAD + (allSamples.size() * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            bytesForThisDoc += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (allSamples.size() * TimeSeries.ESTIMATED_SAMPLE_SIZE);
 
             long lastAlignedTimestamp = Long.MIN_VALUE;
             for (Sample sample : allSamples) {
@@ -429,7 +447,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Accumulate circuit breaker bytes for new bucket (if this is the first time series in this bucket)
             if (isNewBucket) {
-                bytesForThisDoc += ARRAYLIST_OVERHEAD + HASHMAP_ENTRY_OVERHEAD;
+                bytesForThisDoc += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD;
             }
 
             // Find existing time series with same labels, or create new one
@@ -502,6 +520,12 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
      * This method handles both normal stages and grouping stages appropriately.
      * It can be called with an empty list to handle cases where no data was collected.
      *
+     * <p>Circuit breaker tracking is performed at two levels:
+     * <ul>
+     *   <li>Stage-internal overhead: tracked via the circuit breaker bytes consumer passed to the executor</li>
+     *   <li>Output delta: tracked after each stage completes to account for output size changes</li>
+     * </ul>
+     *
      * @param timeSeries the input time series list (can be empty)
      * @return the processed time series list after applying all stages
      */
@@ -511,10 +535,15 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         if (stages != null && !stages.isEmpty()) {
             for (int i = 0; i < stages.size(); i++) {
                 UnaryPipelineStage stage = stages.get(i);
+
+                // Execute stage with circuit breaker tracking for internal allocations
+                // The executor will track stage-internal overhead (grouping maps, buffers, etc.)
+                // and output delta (if output is larger than input)
                 processedTimeSeries = PipelineStageExecutor.executeUnaryStage(
                     stage,
                     processedTimeSeries,
-                    false // shard-level execution
+                    false, // shard-level execution
+                    this::addCircuitBreakerBytes // pass circuit breaker consumer for stage overhead tracking
                 );
             }
         }
@@ -545,7 +574,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Track circuit breaker for processed time series storage
                 // Estimate the size of the processed time series list
-                long processedBytes = HASHMAP_ENTRY_OVERHEAD + ARRAYLIST_OVERHEAD;
+                long processedBytes = MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD + MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
                 for (TimeSeries ts : processedTimeSeries) {
                     processedBytes += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getLabels().estimateBytes();
                     processedBytes += ts.getSamples().size() * TimeSeries.ESTIMATED_SAMPLE_SIZE;
@@ -555,6 +584,13 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 // Store the processed time series
                 processedTimeSeriesByBucket.put(bucketOrd, processedTimeSeries);
             }
+
+            // Clear input map to allow GC of input data
+            // Note: The bytes tracked during collection phase remain tracked until aggregator closes.
+            // This is intentional - we're being conservative by not releasing until we're certain
+            // the data is no longer referenced. The aggregator's close() handles final cleanup.
+            timeSeriesByBucket.clear();
+
             super.postCollection();
         } finally {
             // End postCollect timing

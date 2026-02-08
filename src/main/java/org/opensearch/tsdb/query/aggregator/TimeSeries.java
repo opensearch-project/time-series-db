@@ -102,6 +102,9 @@ public class TimeSeries {
     private final long maxTimestamp; // Maximum timestamp boundary (inclusive) - defines the end of time range
     private final long step; // Step size between samples
 
+    // Pre-computed memory estimate (excludes alias which is mutable)
+    private final long baseEstimatedBytes;
+
     /**
      * Constructor for creating a TimeSeries with all parameters.
      *
@@ -123,6 +126,7 @@ public class TimeSeries {
         this.maxTimestamp = maxTimestamp;
         this.step = step;
         this.alias = alias;
+        this.baseEstimatedBytes = computeBaseEstimatedBytes();
     }
 
     /**
@@ -135,6 +139,22 @@ public class TimeSeries {
         this.maxTimestamp = maxTimestamp;
         this.step = step;
         this.alias = alias;
+        this.baseEstimatedBytes = computeBaseEstimatedBytes();
+    }
+
+    /**
+     * Compute the base estimated bytes (excluding alias which is mutable).
+     * Called once at construction time.
+     */
+    private long computeBaseEstimatedBytes() {
+        long bytes = ESTIMATED_MEMORY_OVERHEAD;
+        if (labels != null) {
+            bytes += labels.estimateBytes();
+        }
+        if (samples != null) {
+            bytes += samples.estimateBytes();
+        }
+        return bytes;
     }
 
     /**
@@ -286,6 +306,24 @@ public class TimeSeries {
             newSamples.add(sample.deepCopy());
         }
         return new TimeSeries(newSamples, labels.deepCopy(), minTimestamp, maxTimestamp, step, alias);
+    }
+
+    /**
+     * Estimate the total memory usage of this TimeSeries in bytes.
+     * Aggregates the memory of all components: object overhead, labels, samples, and alias.
+     *
+     * <p>The base estimate (overhead + labels + samples) is pre-computed at construction time
+     * for O(1) access. Only the alias component (which is mutable) is computed on-demand.</p>
+     *
+     * @return estimated memory usage in bytes
+     */
+    public long estimateBytes() {
+        // Base is pre-computed; only alias needs on-demand calculation (it's mutable)
+        if (alias != null) {
+            // String object: ~24 bytes base + 2 bytes per char (UTF-16)
+            return baseEstimatedBytes + 24 + alias.length() * 2L;
+        }
+        return baseEstimatedBytes;
     }
 
     /**
