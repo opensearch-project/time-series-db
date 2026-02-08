@@ -1,0 +1,19 @@
+# OpenSearch configuration for TSDB with OpenTelemetry
+
+# Write thread pool configuration
+# Default size = number of processors, queue_size = 10000
+thread_pool.write.size: 3
+thread_pool.write.queue_size: 10000
+
+# Enable telemetry feature flag (required for metrics)
+opensearch.experimental.feature.telemetry.enabled: true
+
+# Enable metrics feature in telemetry (required!)
+telemetry.feature.metrics.enabled: true
+
+# Metrics publish interval (default is 60s, setting to 10s)
+telemetry.otel.metrics.publish.interval: 10s
+
+# Telemetry settings - OpenTelemetry metrics export
+telemetry.otel.metrics.exporter.class: io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter
+telemetry.otel.tracer.span.exporter.class: io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter
