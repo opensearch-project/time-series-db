@@ -508,9 +508,16 @@ public class ByteLabels implements Labels {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof ByteLabels)) return false;
-        ByteLabels other = (ByteLabels) o;
-        return Arrays.equals(this.data, other.data);
+        if (o instanceof ByteLabels other) {
+            return Arrays.equals(this.data, other.data);
+        }
+        if (o instanceof IndexedByteLabels other) {
+            // IndexedByteLabels uses a different encoding (delimiter-based, with header).
+            // getDataBytes() converts it to ByteLabels-compatible length-prefix format
+            // so we can compare byte-for-byte.
+            return Arrays.equals(this.data, other.getDataBytes());
+        }
+        return false;
     }
 
     @Override
