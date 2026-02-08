@@ -33,6 +33,7 @@ import org.opensearch.index.engine.EngineFactory;
 import org.opensearch.index.engine.TSDBEngineFactory;
 import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.store.Store;
+import org.opensearch.action.support.ActionFilter;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.plugins.IndexStorePlugin;
@@ -50,7 +51,9 @@ import org.opensearch.telemetry.tracing.Tracer;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.tsdb.action.TSDBIngestionLagActionFilter;
 import org.opensearch.tsdb.lang.m3.M3QLMetrics;
+import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.query.fetch.LabelsFetchBuilder;
 import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
@@ -108,6 +111,10 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     // Singleton cache for remote index settings
     private volatile RemoteIndexSettingsCache remoteIndexSettingsCache;
+
+    // Ingestion lag metrics
+    private TSDBIngestionLagMetrics ingestionLagMetrics;
+    private TSDBIngestionLagActionFilter ingestionLagActionFilter;
 
     /**
      * This setting identifies if the tsdb engine is enabled for the index.
@@ -606,6 +613,11 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             // Register PromQL REST action metrics
             metricInitializers.add(RestPromQLAction.getMetricsInitializer());
             TSDBMetrics.initialize(metricsRegistry, metricInitializers.toArray(new TSDBMetrics.MetricsInitializer[0]));
+
+            // Initialize ingestion lag metrics
+            ingestionLagMetrics = new TSDBIngestionLagMetrics();
+            ingestionLagMetrics.initialize(metricsRegistry);
+            ingestionLagActionFilter = new TSDBIngestionLagActionFilter(threadPool.getThreadContext(), ingestionLagMetrics);
         } else {
             logger.warn("MetricsRegistry is null; TSDB metrics not initialized");
         }
@@ -783,6 +795,14 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
         ) throws IOException {
             return new TSDBStore(shardId, indexSettings, directory, shardLock, onClose, shardPath, directoryFactory);
         }
+    }
+
+    @Override
+    public List<ActionFilter> getActionFilters() {
+        if (ingestionLagActionFilter != null) {
+            return List.of(ingestionLagActionFilter);
+        }
+        return Collections.emptyList();
     }
 
     @Override
