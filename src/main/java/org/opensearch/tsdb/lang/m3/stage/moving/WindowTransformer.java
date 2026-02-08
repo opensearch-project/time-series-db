@@ -56,11 +56,24 @@ public interface WindowTransformer {
     void add(double value);
 
     /**
+     * Remove an expired value from the window
+     * @param value the actual measured value (can be NaN, which is treated as a regular value)
+     */
+    void remove(double value);
+
+    /**
      * Add a null/missing data point to the window.
      * This represents a timestamp where no measurement exists in the samples list.
      * Each implementation handles nulls according to its aggregation semantics.
      */
     void addNull();
+
+    /**
+     * Remove a null/missing data point to the window.
+     * This represents a timestamp where no measurement exists in the samples list.
+     * Each implementation handles nulls according to its aggregation semantics.
+     */
+    void removeNull();
 
     /**
      * Get the current aggregated value from the window.
