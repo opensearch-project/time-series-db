@@ -226,4 +226,42 @@ public class SampleMerger {
         }
     }
 
+    /**
+     * Aligns sample timestamps to query boundaries with deduplication.
+     *
+     * <p>Aligns timestamps to step boundaries relative to minTimestamp and deduplicates
+     * samples that fall into the same aligned bucket. When multiple samples align to the
+     * same timestamp, the latest sample is kept (ANY_WINS policy).</p>
+     *
+     * <p><strong>Input Requirements:</strong> Input samples MUST be sorted by timestamp; step must be positive.</p>
+     *
+     * @param samples input samples (must be sorted by timestamp)
+     * @param minTimestamp reference time for alignment (typically query start time)
+     * @param step step size for alignment
+     * @return new list with aligned and deduplicated samples
+     */
+    public static List<Sample> alignAndDeduplicate(List<Sample> samples, long minTimestamp, long step) {
+        if (samples.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (step <= 0) {
+            throw new IllegalArgumentException("Step must be positive, got: " + step);
+        }
+
+        List<Sample> alignedSamples = new ArrayList<>(samples.size());
+        long lastAlignedTimestamp = Long.MIN_VALUE;
+
+        for (Sample sample : samples) {
+            long alignedTimestamp = minTimestamp + ((sample.getTimestamp() - minTimestamp) / step) * step;
+            if (alignedTimestamp != lastAlignedTimestamp) {
+                alignedSamples.add(new FloatSample(alignedTimestamp, sample.getValue()));
+                lastAlignedTimestamp = alignedTimestamp;
+            } else {
+                alignedSamples.set(alignedSamples.size() - 1, new FloatSample(alignedTimestamp, sample.getValue()));
+            }
+        }
+
+        return alignedSamples;
+    }
+
 }
