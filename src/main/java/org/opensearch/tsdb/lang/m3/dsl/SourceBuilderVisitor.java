@@ -11,6 +11,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.search.aggregations.PipelineAggregationBuilder;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 import org.opensearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.telemetry.metrics.Counter;
@@ -73,6 +74,8 @@ import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
 import org.opensearch.tsdb.lang.m3.stage.UnionStage;
+import org.opensearch.tsdb.query.aggregator.StreamingAggregationType;
+import org.opensearch.tsdb.query.aggregator.TimeSeriesStreamingAggregationBuilder;
 import org.opensearch.tsdb.lang.m3.stage.summarize.BucketMapper;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
@@ -192,12 +195,20 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         private Long truncateStartTime; // null means not yet set, use query start time
         private final Map<CacheableUnfoldAggregation, String> cacheableUnfoldReferences;
 
+        // Streaming aggregator support
+        private boolean eligibleForStreaming;
+        private StreamingAggregationType streamingAggregationType;
+        private List<String> streamingGroupByTags;
+
         private Context(long timeBuffer, long timeShift, boolean timeBufferAdjusted, Long truncateStartTime) {
             this.timeBuffer = timeBuffer;
             this.timeShift = timeShift;
             this.timeBufferAdjusted = timeBufferAdjusted;
             this.truncateStartTime = truncateStartTime;
             this.cacheableUnfoldReferences = new HashMap<>();
+            this.eligibleForStreaming = false;
+            this.streamingAggregationType = null;
+            this.streamingGroupByTags = null;
         }
 
         private static Context newContext() {
@@ -237,6 +248,31 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         private Long getTruncateStartTime() {
             return truncateStartTime;
         }
+
+        // Streaming aggregator methods
+        private void setStreamingEligible(StreamingAggregationType aggregationType, List<String> groupByTags) {
+            this.eligibleForStreaming = true;
+            this.streamingAggregationType = aggregationType;
+            this.streamingGroupByTags = groupByTags;
+        }
+
+        private void clearStreamingEligibility() {
+            this.eligibleForStreaming = false;
+            this.streamingAggregationType = null;
+            this.streamingGroupByTags = null;
+        }
+
+        private boolean isEligibleForStreaming() {
+            return eligibleForStreaming;
+        }
+
+        private StreamingAggregationType getStreamingAggregationType() {
+            return streamingAggregationType;
+        }
+
+        private List<String> getStreamingGroupByTags() {
+            return streamingGroupByTags;
+        }
     }
 
     @Override
@@ -257,19 +293,30 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(AggregationPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        UnaryPipelineStage stage = switch (planNode.getAggregationType()) {
-            case AggregationType.SUM -> new SumStage(planNode.getTags());
-            case AggregationType.AVG -> new AvgStage(planNode.getTags());
-            case AggregationType.MIN -> new MinStage(planNode.getTags());
-            case AggregationType.MAX -> new MaxStage(planNode.getTags());
-            case AggregationType.MULTIPLY -> new MultiplyStage(planNode.getTags());
-            case AggregationType.COUNT -> new CountStage(planNode.getTags());
-            case AggregationType.RANGE -> new RangeStage(planNode.getTags());
-        };
+        // Check if this aggregation is eligible for streaming optimization
+        if (isEligibleForStreamingAggregation(planNode)) {
+            // Mark for streaming instead of adding to stage stack
+            StreamingAggregationType streamingType = mapToStreamingAggregationType(planNode.getAggregationType());
+            context.setStreamingEligible(streamingType, planNode.getTags());
 
-        stageStack.add(stage);
+            // Continue to child (fetch node) without adding stages
+            return planNode.getChildren().getFirst().accept(this);
+        } else {
+            // Use traditional pipeline stage approach
+            UnaryPipelineStage stage = switch (planNode.getAggregationType()) {
+                case AggregationType.SUM -> new SumStage(planNode.getTags());
+                case AggregationType.AVG -> new AvgStage(planNode.getTags());
+                case AggregationType.MIN -> new MinStage(planNode.getTags());
+                case AggregationType.MAX -> new MaxStage(planNode.getTags());
+                case AggregationType.MULTIPLY -> new MultiplyStage(planNode.getTags());
+                case AggregationType.COUNT -> new CountStage(planNode.getTags());
+                case AggregationType.RANGE -> new RangeStage(planNode.getTags());
+            };
 
-        return planNode.getChildren().getFirst().accept(this);
+            stageStack.add(stage);
+
+            return planNode.getChildren().getFirst().accept(this);
+        }
     }
 
     @Override
@@ -363,16 +410,36 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             // we need to copy the cached result, as later there could be some in place modification of the time series
             stageStack.push(new CopyStage());
         } else {
-            TimeSeriesUnfoldAggregationBuilder unfoldPipelineAggregationBuilder = new TimeSeriesUnfoldAggregationBuilder(
-                unfoldName,
-                unfoldStages,
-                fetchTimeRange.start(),
-                fetchTimeRange.end(),
-                params.step()
-            );
+            // Check if eligible for streaming aggregation optimization
+            if (context.isEligibleForStreaming() && unfoldStages.isEmpty()) {
+                // Create streaming aggregation builder instead of unfold aggregation builder
+                TimeSeriesStreamingAggregationBuilder streamingAggregationBuilder = new TimeSeriesStreamingAggregationBuilder(
+                    unfoldName,
+                    context.getStreamingAggregationType(),
+                    context.getStreamingGroupByTags(),
+                    fetchTimeRange.start(),
+                    fetchTimeRange.end(),
+                    params.step()
+                );
 
-            // Set the unfold aggregation builder for the FetchPlanNode
-            holder.setUnfoldAggregationBuilder(unfoldPipelineAggregationBuilder);
+                // Set the streaming aggregation builder for the FetchPlanNode
+                holder.setUnfoldAggregationBuilder(streamingAggregationBuilder);
+
+                // Clear streaming state after use
+                context.clearStreamingEligibility();
+            } else {
+                // Use traditional unfold aggregation builder
+                TimeSeriesUnfoldAggregationBuilder unfoldPipelineAggregationBuilder = new TimeSeriesUnfoldAggregationBuilder(
+                    unfoldName,
+                    unfoldStages,
+                    fetchTimeRange.start(),
+                    fetchTimeRange.end(),
+                    params.step()
+                );
+
+                // Set the unfold aggregation builder for the FetchPlanNode
+                holder.setUnfoldAggregationBuilder(unfoldPipelineAggregationBuilder);
+            }
             // the reference name here should be the name after lifting
             // since if there's any chance this cache is useful, then this unfold will be eventually lifted to a filter aggregator
             // and whoever refer to this will need a fully qualified name, e.g. '0>0_unfold'
@@ -738,6 +805,46 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         return planNode.getChildren().getFirst().accept(this);
     }
 
+    /**
+     * Check if an aggregation plan node is eligible for streaming optimization.
+     *
+     * @param planNode The aggregation plan node to check
+     * @return true if eligible for streaming, false otherwise
+     */
+    private boolean isEligibleForStreamingAggregation(AggregationPlanNode planNode) {
+        // TODO: Temporarily disabled until proper index setting check is implemented
+        // The streaming aggregator setting check needs to be done at query build time
+        // when we have access to QueryShardContext and index settings
+        return false;
+
+        // Only eligible if no previous stages (direct after fetch)
+        // if (!stageStack.isEmpty()) {
+        // return false;
+        // }
+
+        // Only support specific aggregation types
+        // return switch (planNode.getAggregationType()) {
+        // case AggregationType.SUM, AggregationType.AVG, AggregationType.MIN, AggregationType.MAX -> true;
+        // default -> false;
+        // };
+    }
+
+    /**
+     * Map M3QL aggregation type to streaming aggregation type.
+     *
+     * @param aggregationType The M3QL aggregation type
+     * @return The corresponding streaming aggregation type
+     */
+    private StreamingAggregationType mapToStreamingAggregationType(AggregationType aggregationType) {
+        return switch (aggregationType) {
+            case AggregationType.SUM -> StreamingAggregationType.SUM;
+            case AggregationType.AVG -> StreamingAggregationType.AVG;
+            case AggregationType.MIN -> StreamingAggregationType.MIN;
+            case AggregationType.MAX -> StreamingAggregationType.MAX;
+            default -> throw new IllegalArgumentException("Unsupported aggregation type for streaming: " + aggregationType);
+        };
+    }
+
     private static void validateChildCountExact(M3PlanNode node, int expected) {
         if (node.getChildren().size() != expected) {
             throw new IllegalStateException(
@@ -983,7 +1090,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         private final List<FilterAggregationBuilder> filterAggregationBuilders;
         private final List<TimeSeriesCoordinatorAggregationBuilder> pipelineAggregationBuilders;
         private final Set<QueryBuilder> dnfQueries; // disjunctive normal form of fetch queries
-        private TimeSeriesUnfoldAggregationBuilder unfoldAggregationBuilder;
+        private AbstractAggregationBuilder<?> unfoldAggregationBuilder;
 
         public ComponentHolder(int id) {
             this.id = id;
@@ -1088,11 +1195,11 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             return pipelineAggregationBuilders;
         }
 
-        private TimeSeriesUnfoldAggregationBuilder getUnfoldAggregationBuilder() {
+        private AbstractAggregationBuilder<?> getUnfoldAggregationBuilder() {
             return unfoldAggregationBuilder;
         }
 
-        private void setUnfoldAggregationBuilder(TimeSeriesUnfoldAggregationBuilder unfoldAggregationBuilder) {
+        private void setUnfoldAggregationBuilder(AbstractAggregationBuilder<?> unfoldAggregationBuilder) {
             this.unfoldAggregationBuilder = unfoldAggregationBuilder;
         }
 
