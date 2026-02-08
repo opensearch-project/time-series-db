@@ -1,0 +1,201 @@
+# TSDB REST Integration Test - Compressed Mode Correctness
+#
+# This test validates the correctness of compressed mode optimization, where
+# XOR-compressed chunks are sent over the network without decoding on data nodes,
+# with decompression deferred until the coordinator node.
+#
+# COMPRESSION MODE SETUP:
+# The Java test class (CompressedModeRestIT.java) enables the cluster setting:
+#   tsdb_engine.query.enable_internal_agg_chunk_compression = true
+#
+# This setting allows the TimeSeriesUnfoldAggregator to use compressed mode when:
+# - allowCompressedMode = true (via cluster setting above)
+# - useCompressedMode = allowCompressedMode && (no pipeline stages to execute)
+#
+# TESTING STRATEGY:
+# The tests cover two types of scenarios:
+# 1. Queries with no stages - compression mode is enabled and validates the correctness of the compressed mode.
+# 2. A Query with stage(s) is run TWICE - once with pushdown enabled (disable_pushdown: false)
+# and once with pushdown disabled (disable_pushdown: true). Both should return
+# IDENTICAL results, proving that compressed mode produces correct outputs.
+#
+# WHAT THIS VALIDATES:
+# - For type 2 scenarios, both modes produce identical results (correctness)
+# - Compressed chunks are correctly extracted, serialized, and decoded
+# - End-to-end flow works with compression
+#
+# HOW TO VERIFY COMPRESSION IS WORKING:
+# 1. Check logs for TimeSeriesUnfoldAggregator with DEBUG level:
+#    - Should see: "allowCompressedMode=true, useCompressedMode=true" for no-stage queries
+#    - Should see: "allowCompressedMode=true, useCompressedMode=false" for queries with stages
+#
+# 2. Check metrics:
+#    - tsdb.aggregation.series_sent_total{compressed="true"} - increases for compressed queries
+#    - tsdb.aggregation.compressed_bytes_total - serialized bytes sent over network in compressed format
+#
+# 3. Query cluster settings:
+#    GET /_cluster/settings?include_defaults=false&flat_settings=true
+#    Should show: "tsdb_engine.query.enable_internal_agg_chunk_compression": "true"
+
+test_setup:
+  name: "Compressed Mode Correctness Tests"
+  description: "Validates compressed chunk transport optimization for no-pushdown scenarios"
+
+  index_configs:
+    - name: "compressed_mode_test"
+      shards: 2
+      replicas: 0
+
+test_case:
+  name: "Compressed Mode Correctness Test"
+
+  # Input data: Time series data for testing compressed vs decompressed paths
+  input_data_list:
+    - index_name: "compressed_mode_test"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      regular_metrics:
+        # Series A: API metrics - us-west region
+        - labels: "__name__:http_requests_total,service:api,region:us-west,status:200"
+          values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+
+        # Series B: API metrics - us-east region
+        - labels: "__name__:http_requests_total,service:api,region:us-east,status:200"
+          values: [15, 25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125]
+
+        # Series C: Web metrics - us-west region
+        - labels: "__name__:http_requests_total,service:web,region:us-west,status:200"
+          values: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200]
+
+        # Series D: Mixed values with nulls
+        - labels: "__name__:http_requests_total,service:db,region:us-west,status:200"
+          values: [5, null, 15, 20, null, 30, 35, 40, null, 50, 55, 60]
+
+  # Test queries
+  queries:
+    # Test 1: Basic fetch with compressed mode enabled
+    - name: "fetch_api_service_compressed_mode_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch service:api"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-west", status: "200"}
+            values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-east", status: "200"}
+            values: [15, 25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125]
+
+    # Test 2: Fetch with filtering and compressed mode enabled
+    - name: "fetch_us_west_region_compressed_mode_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch region:us-west"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-west", status: "200"}
+            values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+          - metric: {__name__: "http_requests_total", service: "web", region: "us-west", status: "200"}
+            values: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200]
+          - metric: {__name__: "http_requests_total", service: "db", region: "us-west", status: "200"}
+            values: [5, null, 15, 20, null, 30, 35, 40, null, 50, 55, 60]
+
+    # Test 3: Series with null values with compressed mode enabled
+    - name: "fetch_series_with_nulls_compressed_mode_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch service:db"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "db", region: "us-west", status: "200"}
+            values: [5, null, 15, 20, null, 30, 35, 40, null, 50, 55, 60]
+
+    # Test 4: Fetch all series with compressed mode enabled
+    - name: "fetch_all_series_compressed_mode_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch __name__:http_requests_total"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-west", status: "200"}
+            values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-east", status: "200"}
+            values: [15, 25, 35, 45, 55, 65, 75, 85, 95, 105, 115, 125]
+          - metric: {__name__: "http_requests_total", service: "web", region: "us-west", status: "200"}
+            values: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200]
+          - metric: {__name__: "http_requests_total", service: "db", region: "us-west", status: "200"}
+            values: [5, null, 15, 20, null, 30, 35, 40, null, 50, 55, 60]
+
+    # Test 5: Single timestamp query with compressed mode enabled
+    - name: "fetch_single_timestamp_compressed_mode_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch service:api region:us-east"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:30:00Z"
+        max_timestamp: "2025-01-15T10:35:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-east", status: "200"}
+            values: [75]
+
+    # Test 6a: Moving sum with pushdown enabled (traditional mode)
+    - name: "fetch_with_movingsum_pushdown_enabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch service:api region:us-west | moving 10m sum"
+      disable_pushdown: false
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-west", status: "200"}
+            values: [null, 10, 30, 50, 70, 90, 110, 130, 150, 170, 190, 210]
+
+    # Test 6b: Moving sum with pushdown disabled (compressed mode)
+    - name: "fetch_with_movingsum_pushdown_disabled"
+      type: "m3ql"
+      indices: "compressed_mode_test"
+      query: "fetch service:api region:us-west | moving 10m sum"
+      disable_pushdown: true
+      time_config:
+        min_timestamp: "2025-01-15T10:00:00Z"
+        max_timestamp: "2025-01-15T11:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__name__: "http_requests_total", service: "api", region: "us-west", status: "200"}
+            values: [null, 10, 30, 50, 70, 90, 110, 130, 150, 170, 190, 210]

@@ -133,6 +133,15 @@ public final class TSDBMetricsConstants {
     /** Histogram: Latency per pipeline stage execution */
     public static final String AGGREGATION_PIPELINE_STAGE_LATENCY = "tsdb.aggregation.pipeline_stage.latency";
 
+    /** Histogram: Serialized bytes sent over the network in compressed (XOR) mode */
+    public static final String AGGREGATION_COMPRESSED_BYTES_TOTAL = "tsdb.aggregation.compressed_bytes.total";
+
+    /** Histogram: Serialized bytes sent over the network in decoded (NONE) mode */
+    public static final String AGGREGATION_DECODED_BYTES_TOTAL = "tsdb.aggregation.decoded_bytes.total";
+
+    /** Counter: Number of series sent from data node to coordinator (tagged with compressed: true/false) */
+    public static final String AGGREGATION_SERIES_SENT_TOTAL = "tsdb.aggregation.series_sent.total";
+
     // ============================================
     // Query Execution Metrics (REST Action Level)
     // ============================================
@@ -286,6 +295,12 @@ public final class TSDBMetricsConstants {
         "Circuit breaker MiB tracked per aggregation request (measures memory usage)";
     public static final String AGGREGATION_CIRCUIT_BREAKER_TRIPS_TOTAL_DESC = "Total circuit breaker trips when memory limit exceeded";
     public static final String AGGREGATION_PIPELINE_STAGE_LATENCY_DESC = "Latency per pipeline stage execution";
+    public static final String AGGREGATION_COMPRESSED_BYTES_TOTAL_DESC =
+        "Serialized bytes of InternalTimeSeries (XOR/compressed) sent over the network (data node to coordinator, includes CSS merge)";
+    public static final String AGGREGATION_DECODED_BYTES_TOTAL_DESC =
+        "Serialized bytes of InternalTimeSeries (decoded) sent over the network (data node to coordinator, includes CSS merge)";
+    public static final String AGGREGATION_SERIES_SENT_TOTAL_DESC =
+        "Number of time series sent from data node to coordinator node (tagged with compressed: true/false)";
 
     // Query Execution Metrics
     public static final String ACTION_REST_QUERIES_EXECUTION_LATENCY_DESC =
@@ -362,6 +377,15 @@ public final class TSDBMetricsConstants {
 
     /** Tag value for coordinator-level execution */
     public static final String TAG_LOCATION_COORDINATOR = "coordinator";
+
+    /** Tag name for compression mode */
+    public static final String TAG_COMPRESSED = "compressed";
+
+    /** Tag value for compressed series */
+    public static final String TAG_COMPRESSED_TRUE = "true";
+
+    /** Tag value for non-compressed (decoded) series */
+    public static final String TAG_COMPRESSED_FALSE = "false";
 
     // ============================================
     // Conversion Constants

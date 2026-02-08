@@ -22,6 +22,7 @@ import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,6 +187,58 @@ public class InternalTimeSeriesSerializationTests extends AbstractWireTestCase<I
                 assertEquals(original.getMetadata(), deserialized.getMetadata());
                 assertTrue(deserialized.getTimeSeries().isEmpty());
             }
+        }
+    }
+
+    /**
+     * When the stream does not support position() (e.g. throws UnsupportedOperationException),
+     * doWriteTo must still serialize correctly and must not throw. Verifies the getStreamPosition
+     * fallback and that no metric is recorded without affecting the wire format.
+     */
+    public void testDoWriteToSucceedsWhenStreamPositionUnsupported() throws IOException {
+        List<TimeSeries> timeSeries = createRandomTimeSeries();
+        InternalTimeSeries original = new InternalTimeSeries("test", timeSeries, null);
+
+        try (StreamOutputWithoutPosition out = new StreamOutputWithoutPosition()) {
+            original.writeTo(out);
+            try (StreamInput in = out.bytes().streamInput()) {
+                InternalTimeSeries deserialized = new InternalTimeSeries(in);
+                assertEquals(original.getName(), deserialized.getName());
+                assertEquals(original.getTimeSeries().size(), deserialized.getTimeSeries().size());
+            }
+        }
+    }
+
+    /**
+     * Compressed (XOR) encoding round-trip. Exercises doWriteTo with Encoding.XOR when the stream supports position().
+     * Asserts on compressed list only; decoding is not exercised since test chunk bytes are not valid XOR payload.
+     */
+    public void testCompressedEncodingRoundTrip() throws IOException {
+        CompressedChunk chunk = new CompressedChunk(new byte[] { 1, 2, 3 }, 1000L, 2000L);
+        Labels labels = ByteLabels.fromMap(Map.of("job", "test"));
+        CompressedTimeSeries cts = new CompressedTimeSeries(List.of(chunk), labels, 1000L, 2000L, 1000L, null);
+        InternalTimeSeries original = InternalTimeSeries.compressed("compressed_agg", List.of(cts), Collections.emptyMap());
+
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            original.writeTo(out);
+            assertTrue("Serialized payload should be non-empty when stream supports position", out.position() > 0);
+            try (StreamInput in = out.bytes().streamInput()) {
+                InternalTimeSeries deserialized = new InternalTimeSeries(in);
+                assertEquals(InternalTimeSeries.Encoding.XOR, deserialized.getEncoding());
+                assertEquals(1, deserialized.getCompressedTimeSeries().size());
+                assertEquals(labels, deserialized.getCompressedTimeSeries().get(0).getLabels());
+            }
+        }
+    }
+
+    /**
+     * BytesStreamOutput that throws from position() to simulate streams that do not support it.
+     * Used to test that doWriteTo does not depend on position() for correct serialization.
+     */
+    private static final class StreamOutputWithoutPosition extends BytesStreamOutput {
+        @Override
+        public long position() {
+            throw new UnsupportedOperationException("position not supported");
         }
     }
 

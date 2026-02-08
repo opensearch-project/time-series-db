@@ -22,6 +22,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermVectors;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
@@ -31,6 +32,7 @@ import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.aggregations.AggregatorFactories;
 import org.opensearch.search.aggregations.CardinalityUpperBound;
+import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
@@ -339,6 +341,38 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
+     * Compressed mode is disabled by default (cluster setting false).
+     */
+    public void testCompressedModeDisabledByDefault() throws IOException {
+        TimeSeriesUnfoldAggregator.initialize(null, Settings.EMPTY);
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(1000L, 5000L, 100L);
+        try {
+            assertFalse(aggregator.isUseCompressedMode());
+        } finally {
+            aggregator.close();
+        }
+    }
+
+    /**
+     * When tsdb_engine.query.enable_internal_agg_chunk_compression is true and stages are empty, compressed mode is enabled.
+     */
+    public void testCompressedModeEnabledWhenSettingTrueAndNoStages() throws IOException {
+        TimeSeriesUnfoldAggregator.initialize(
+            null,
+            Settings.builder().put("tsdb_engine.query.enable_internal_agg_chunk_compression", true).build()
+        );
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(1000L, 5000L, 100L);
+        try {
+            assertTrue(aggregator.isUseCompressedMode());
+            InternalAggregation empty = aggregator.buildEmptyAggregation();
+            assertTrue(empty instanceof InternalTimeSeries);
+            assertEquals(InternalTimeSeries.Encoding.XOR, ((InternalTimeSeries) empty).getEncoding());
+        } finally {
+            aggregator.close();
+        }
+    }
+
+    /**
      * Tests that recordMetrics correctly records circuit breaker MiB histogram when circuitBreakerBytes > 0.
      */
     public void testRecordMetricsWithCircuitBreakerBytes() throws IOException {
@@ -432,6 +466,12 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
             @Override
             public List<ChunkIterator> chunksForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+                return List.of();
+            }
+
+            @Override
+            public List<org.opensearch.tsdb.query.aggregator.CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues)
+                throws IOException {
                 return List.of();
             }
 
