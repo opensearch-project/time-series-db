@@ -53,8 +53,9 @@
             "sortOrder" : "asc"
           },
           {
-            "type" : "head",
-            "limit" : 5
+            "type" : "slice",
+            "limit" : 5,
+            "mode" : "head"
           }
         ],
         "references" : {
