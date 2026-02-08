@@ -9,10 +9,16 @@ package org.opensearch.tsdb.core.chunk;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.opensearch.telemetry.metrics.Histogram;
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.head.MemSeriesReader;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
+import java.io.Closeable;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,8 +57,63 @@ public class MMappedChunksManager {
     private final Map<Long, ChunkMetadataMap> seriesRefToChunkVersionMap = new ConcurrentHashMap<>();
     private final MemSeriesReader memSeriesReader;
 
+    // Static metrics shared across all instances
+    private static final Metrics METRICS = new Metrics();
+
+    // Closeable handles for this instance's gauges
+    private Closeable totalChunksGauge;
+
     public MMappedChunksManager(MemSeriesReader memSeriesReader) {
         this.memSeriesReader = memSeriesReader;
+        registerInstanceGauges();
+    }
+
+    /**
+     * Get the metrics initializer for registration in TSDBPlugin.
+     * @return the metrics initializer instance
+     */
+    public static TSDBMetrics.MetricsInitializer getMetricsInitializer() {
+        return METRICS;
+    }
+
+    /**
+     * Register gauge metrics for this specific instance.
+     * Each MMappedChunksManager instance tracks its own chunk count.
+     */
+    private void registerInstanceGauges() {
+        MetricsRegistry registry = TSDBMetrics.getRegistry();
+        if (registry == null) {
+            return;
+        }
+
+        totalChunksGauge = registry.createGauge(
+            Metrics.TOTAL_CHUNKS,
+            "total number of memory-mapped chunks tracked across all series",
+            TSDBMetricsConstants.UNIT_COUNT,
+            () -> {
+                int totalCount = 0;
+                for (ChunkMetadataMap chunkMetadataMap : seriesRefToChunkVersionMap.values()) {
+                    totalCount += chunkMetadataMap.chunkMetadataMap.size();
+                }
+                return (double) totalCount;
+            },
+            Tags.EMPTY
+        );
+    }
+
+    /**
+     * Close gauge handles to unregister callbacks.
+     * Should be called when closing the MMappedChunksManager.
+     */
+    public void close() {
+        if (totalChunksGauge != null) {
+            try {
+                totalChunksGauge.close();
+            } catch (Exception e) {
+                logger.debug("Failed to close totalChunksGauge", e);
+            }
+            totalChunksGauge = null;
+        }
     }
 
     // Inner class representing the TSDBReader version and refCount for chunks within a MemSeries
@@ -210,6 +271,27 @@ public class MMappedChunksManager {
     }
 
     /**
+     * Helper method to record histogram metrics for per-series chunk counts.
+     * Note: totalChunks is tracked via a pull-based Gauge and doesn't need explicit recording.
+     */
+    private void recordMetrics() {
+        if (!TSDBMetrics.isInitialized()) {
+            return;
+        }
+
+        try {
+            // Record per-series chunk count distribution
+            for (ChunkMetadataMap chunkMetadataMap : seriesRefToChunkVersionMap.values()) {
+                int seriesChunkCount = chunkMetadataMap.chunkMetadataMap.size();
+                TSDBMetrics.recordHistogram(METRICS.chunksPerSeries, seriesChunkCount);
+            }
+        } catch (Exception e) {
+            // Swallow exceptions in metrics recording to avoid impacting actual operation
+            logger.debug("Failed to record metrics", e);
+        }
+    }
+
+    /**
      * called after each flush() operation in TSDBEngine to add newly memory-mapped chunks to the manager
      * @param mMappedChunks map of MemSeries to their corresponding sets of newly memory-mapped MemChunks
      */
@@ -231,6 +313,8 @@ public class MMappedChunksManager {
         } finally {
             lock.writeLock().unlock();
         }
+        // Record metrics after adding chunks
+        recordMetrics();
     }
 
     /**
@@ -313,6 +397,39 @@ public class MMappedChunksManager {
             seriesRefToChunkVersionMap.entrySet().removeIf(entry -> entry.getValue().isEmpty());
         } finally {
             lock.writeLock().unlock();
+        }
+        // Record metrics after removing chunks
+        recordMetrics();
+    }
+
+    /**
+     * Metrics container for MMappedChunksManager.
+     * Note: Gauges are registered per-instance in registerInstanceGauges()
+     */
+    static class Metrics implements TSDBMetrics.MetricsInitializer {
+
+        // Metric names
+        static final String TOTAL_CHUNKS = "tsdb.mmapped_chunks_manager.total_chunks"; // Gauge (per-instance)
+        static final String CHUNKS_PER_SERIES = "tsdb.mmapped_chunks_manager.chunks_per_series"; // Histogram
+
+        Histogram chunksPerSeries;
+
+        @Override
+        public void register(MetricsRegistry registry) {
+            // Register histogram for per-series chunk count distribution
+            chunksPerSeries = registry.createHistogram(
+                CHUNKS_PER_SERIES,
+                "distribution of chunk counts per series",
+                TSDBMetricsConstants.UNIT_COUNT
+            );
+
+            // Note: totalChunks gauge is registered per-instance in registerInstanceGauges()
+            // because each MMappedChunksManager instance tracks its own chunks
+        }
+
+        @Override
+        public synchronized void cleanup() {
+            chunksPerSeries = null;
         }
     }
 
