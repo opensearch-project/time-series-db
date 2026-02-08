@@ -15,8 +15,10 @@ import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.tsdb.core.model.ByteLabels;
+import org.opensearch.tsdb.core.model.IndexedByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.BinaryLabelsStorage;
+import org.opensearch.tsdb.core.reader.IndexedBinaryLabelsStorage;
 import org.opensearch.tsdb.core.reader.LabelsStorage;
 import org.opensearch.tsdb.core.reader.SortedSetLabelsStorage;
 
@@ -50,10 +52,15 @@ public enum LabelStorageType {
         @Override
         public void addLabelsToDocument(Document doc, Labels labels, BytesRef[] cachedLabelRefs) {
             // BINARY storage doesn't use the cached refs - it uses the raw bytes directly
-            if (!(labels instanceof ByteLabels byteLabels)) {
-                throw new IllegalArgumentException("BINARY storage requires ByteLabels implementation");
+            byte[] rawBytes;
+            if (labels instanceof ByteLabels byteLabels) {
+                rawBytes = byteLabels.getRawBytes();
+            } else if (labels instanceof IndexedByteLabels indexedByteLabels) {
+                rawBytes = indexedByteLabels.getRawBytes();
+            } else {
+                throw new IllegalArgumentException("BINARY storage requires ByteLabels or IndexedByteLabels implementation");
             }
-            BytesRef serializedLabels = new BytesRef(byteLabels.getRawBytes());
+            BytesRef serializedLabels = new BytesRef(rawBytes);
             doc.add(new BinaryDocValuesField(Constants.IndexSchema.LABELS, serializedLabels));
         }
 
@@ -111,6 +118,53 @@ public enum LabelStorageType {
             }
             return new SortedSetLabelsStorage(docValues);
         }
+    },
+
+    /**
+     * Binary indexed storage: Labels are serialized as BinaryDocValues using IndexedByteLabels format.
+     * The byte array contains an embedded offset header that enables O(log n) binary search
+     * on label lookups with zero initialization cost at query time.
+     *
+     * <p>On-disk format is NOT compatible with BINARY (ByteLabels). This is a per-index setting.</p>
+     */
+    BINARY_INDEXED_BYTESLABEL("binary_indexed_byteslabel") {
+        @Override
+        public void addLabelsToDocument(Document doc, Labels labels, BytesRef[] cachedLabelRefs) {
+            byte[] rawBytes;
+            if (labels instanceof IndexedByteLabels indexedByteLabels) {
+                rawBytes = indexedByteLabels.getRawBytes();
+            } else if (labels instanceof ByteLabels byteLabels) {
+                // Convert ByteLabels to IndexedByteLabels format for storage
+                rawBytes = IndexedByteLabels.fromMap(byteLabels.toMapView()).getRawBytes();
+            } else {
+                throw new IllegalArgumentException(
+                    "BINARY_INDEXED_BYTESLABEL storage requires ByteLabels or IndexedByteLabels implementation"
+                );
+            }
+            BytesRef serializedLabels = new BytesRef(rawBytes);
+            doc.add(new BinaryDocValuesField(Constants.IndexSchema.LABELS, serializedLabels));
+        }
+
+        @Override
+        public LabelsStorage getLabelsStorage(LeafReader leafReader) throws IOException {
+            BinaryDocValues docValues = leafReader.getBinaryDocValues(Constants.IndexSchema.LABELS);
+            return new IndexedBinaryLabelsStorage(docValues);
+        }
+
+        @Override
+        public LabelsStorage getLabelsStorageOrThrow(LeafReader leafReader, String contextMessage) throws IOException {
+            BinaryDocValues docValues = leafReader.getBinaryDocValues(Constants.IndexSchema.LABELS);
+            if (docValues == null) {
+                throw new IOException(
+                    "Labels field '"
+                        + Constants.IndexSchema.LABELS
+                        + "' not found"
+                        + (contextMessage != null ? " " + contextMessage : "")
+                        + "."
+                );
+            }
+            return new IndexedBinaryLabelsStorage(docValues);
+        }
     };
 
     private final String value;
@@ -142,7 +196,9 @@ public enum LabelStorageType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Invalid label storage type: " + value + ". Valid values are: binary, sorted_set");
+        throw new IllegalArgumentException(
+            "Invalid label storage type: " + value + ". Valid values are: binary, sorted_set, binary_indexed_byteslabel"
+        );
     }
 
     @Override

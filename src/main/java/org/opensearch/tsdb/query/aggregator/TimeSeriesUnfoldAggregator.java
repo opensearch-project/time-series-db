@@ -26,6 +26,7 @@ import org.opensearch.tsdb.core.chunk.DedupIterator;
 import org.opensearch.tsdb.core.chunk.MergeIterator;
 import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
 import org.opensearch.tsdb.core.model.ByteLabels;
+import org.opensearch.tsdb.core.model.IndexedByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
@@ -417,10 +418,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Use unified API to get labels for this document
             Labels labels = tsdbLeafReader.labelsForDoc(doc, tsdbDocValues);
-            // NOTE: Currently, labels is expected to be an instance of ByteLabels. If a new Labels implementation
-            // is introduced, ensure that its equals() method is correctly implemented for label comparison below,
-            // as aggregator relies on accurate equality checks.
-            assert labels instanceof ByteLabels : "labels must support correct equals() behavior";
+            // NOTE: Labels is expected to be an instance of ByteLabels or IndexedByteLabels.
+            // Both implementations have correct equals() methods for cross-type label comparison.
+            assert labels instanceof ByteLabels || labels instanceof IndexedByteLabels : "labels must support correct equals() behavior";
 
             // Use the Labels equals() method for consistent label comparison across different Labels implementations.
             // The Labels class ensures that equals() returns consistent results regardless of the underlying implementation.
