@@ -111,4 +111,43 @@ public class RegexReplacementUtilTests extends OpenSearchTestCase {
         String result = RegexReplacementUtil.replaceAll("us-east-1-host123", matcher, "\\1");
         assertEquals("us-east-1", result);
     }
+
+    public void testDollarStyleBackreference() {
+        Pattern pattern = Pattern.compile("^(\\w+)-(\\w+)$");
+        Matcher matcher = pattern.matcher("us-east");
+        String result = RegexReplacementUtil.replaceAll("us-east", matcher, "$2-$1");
+        assertEquals("east-us", result);
+    }
+
+    public void testEscapedDollarWithDoubleDollar() {
+        // $$ in replacement should become literal $
+        Pattern pattern = Pattern.compile("price");
+        Matcher matcher = pattern.matcher("price100");
+        String result = RegexReplacementUtil.replaceAll("price100", matcher, "$$");
+        assertEquals("$100", result);
+    }
+
+    public void testEscapedDollarWithBackslashDollar() {
+        // \$ in replacement should become literal $
+        Pattern pattern = Pattern.compile("price");
+        Matcher matcher = pattern.matcher("price100");
+        String result = RegexReplacementUtil.replaceAll("price100", matcher, "\\$");
+        assertEquals("$100", result);
+    }
+
+    public void testEscapedDollarInMiddleOfReplacement() {
+        // $$ in the middle of replacement should become literal $
+        Pattern pattern = Pattern.compile("price");
+        Matcher matcher = pattern.matcher("price");
+        String result = RegexReplacementUtil.replaceAll("price", matcher, "cost:$$");
+        assertEquals("cost:$", result);
+    }
+
+    public void testMixedEscapedDollarAndBackreference() {
+        // \$ should become literal $, and $1 should be a backreference
+        Pattern pattern = Pattern.compile("(\\w+)");
+        Matcher matcher = pattern.matcher("value");
+        String result = RegexReplacementUtil.replaceAll("value", matcher, "\\$$1");
+        assertEquals("$value", result);
+    }
 }

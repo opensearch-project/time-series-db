@@ -57,9 +57,11 @@ public class AliasByDistinctTagsStageTests extends AbstractWireSerializingTestCa
             new TimeSeries(List.of(new FloatSample(10L, 2.0)), ByteLabels.fromStrings("env", "prod", "dc", "us2"), 10L, 10L, 10L, null)
         );
 
+        // Varying tags (sorted): dc, env. Then append specified: dc.
+        // So alias = "<dc> <env> <dc>"
         List<TimeSeries> result = stage.process(input);
-        assertEquals("us1", result.get(0).getAlias());
-        assertEquals("us2", result.get(1).getAlias());
+        assertEquals("us1 staging us1", result.get(0).getAlias());
+        assertEquals("us2 prod us2", result.get(1).getAlias());
     }
 
     public void testSingleSeries() {

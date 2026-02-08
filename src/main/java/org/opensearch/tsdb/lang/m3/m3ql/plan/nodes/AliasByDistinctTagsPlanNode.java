@@ -16,7 +16,6 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * AliasByDistinctTagsPlanNode represents a node in the M3QL plan that renames series based on tag values
@@ -78,7 +77,7 @@ public class AliasByDistinctTagsPlanNode extends M3PlanNode {
     /**
      * Factory method to create an AliasByDistinctTagsPlanNode from a FunctionNode.
      * Expects the function node to have:
-     * - First argument (optional): boolean value for includeKeys (default false)
+     * - First argument (optional): boolean value for includeKeys (supports both true/false and "true"/"false")
      * - Remaining arguments (optional): tag names to consider
      *
      * @param functionNode the function node to convert
@@ -93,10 +92,9 @@ public class AliasByDistinctTagsPlanNode extends M3PlanNode {
             // First argument can be a boolean for includeKeys
             M3ASTNode firstChild = childNodes.getFirst();
             if (firstChild instanceof ValueNode firstValue) {
-                String firstValueStr = Utils.stripDoubleQuotes(firstValue.getValue()).toLowerCase(Locale.ROOT);
-                if ("true".equals(firstValueStr) || "false".equals(firstValueStr)) {
+                if (isBooleanValue(firstValue)) {
                     // First argument is boolean for includeKeys
-                    includeKeys = "true".equals(firstValueStr);
+                    includeKeys = parseBooleanValue(firstValue);
 
                     // Remaining arguments are tag names
                     if (childNodes.size() > 1) {
@@ -127,5 +125,60 @@ public class AliasByDistinctTagsPlanNode extends M3PlanNode {
         }
 
         return new AliasByDistinctTagsPlanNode(M3PlannerContext.generateId(), includeKeys, tagNames);
+    }
+
+    /**
+     * Checks if a ValueNode represents a boolean value.
+     * Supports both boolean literals (true/false) and string literals ("true"/"false").
+     *
+     * @param valueNode the value node to check
+     * @return true if the value represents a boolean
+     */
+    private static boolean isBooleanValue(ValueNode valueNode) {
+        String value = valueNode.getValue();
+        if (value == null) {
+            return false;
+        }
+
+        // Check for boolean literals: true, false
+        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+            return true;
+        }
+
+        // Check for string literals: "true", "false"
+        String stripped = Utils.stripDoubleQuotes(value);
+        return "true".equalsIgnoreCase(stripped) || "false".equalsIgnoreCase(stripped);
+    }
+
+    /**
+     * Parses a boolean value from a ValueNode.
+     * Supports both boolean literals (true/false) and string literals ("true"/"false").
+     *
+     * @param valueNode the value node to parse
+     * @return the boolean value
+     */
+    private static boolean parseBooleanValue(ValueNode valueNode) {
+        String value = valueNode.getValue();
+        if (value == null) {
+            return false;
+        }
+
+        // Handle boolean literals: true, false
+        if ("true".equalsIgnoreCase(value)) {
+            return true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            return false;
+        }
+
+        // Handle string literals: "true", "false"
+        String stripped = Utils.stripDoubleQuotes(value);
+        if ("true".equalsIgnoreCase(stripped)) {
+            return true;
+        } else if ("false".equalsIgnoreCase(stripped)) {
+            return false;
+        }
+
+        // Should not reach here if isBooleanValue was called first
+        throw new IllegalArgumentException("Invalid boolean value: " + value);
     }
 }

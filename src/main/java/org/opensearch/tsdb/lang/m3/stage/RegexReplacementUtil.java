@@ -16,7 +16,12 @@ import com.google.re2j.Pattern;
  */
 public final class RegexReplacementUtil {
 
-    private static final Pattern BACK_REFERENCE_PATTERN = Pattern.compile("\\\\(\\d+)");
+    // Regex: \\(\d+) — matches \1, \2, etc. (backslash-style backreferences)
+    private static final Pattern BACKSLASH_BACK_REF_PATTERN = Pattern.compile("\\\\(\\d+)");
+    // Regex: \$(\d+) — matches $1, $2, etc. (dollar-style backreferences)
+    private static final Pattern DOLLAR_BACK_REF_PATTERN = Pattern.compile("\\$(\\d+)");
+    // Regex: \$\$|\\\$ — matches $$ or \$ (escaped dollar signs, both become literal $)
+    private static final Pattern ESCAPED_DOLLAR_PATTERN = Pattern.compile("\\$\\$|\\\\\\$");
 
     private RegexReplacementUtil() {
         // Utility class, no instantiation
@@ -24,11 +29,12 @@ public final class RegexReplacementUtil {
 
     /**
      * Performs regex replacement with backreference support.
-     * Supports backreferences in the replacement string using \1, \2, etc.
+     * Supports backreferences in the replacement string using \1, \2, etc. or $1, $2, etc.
+     * Also supports escaped dollar signs: $$ and \$ both become literal $.
      *
      * @param originalValue the original string to perform replacement on
      * @param matcher the matcher with the compiled pattern
-     * @param replacement the replacement string (supports backreferences like \1, \2)
+     * @param replacement the replacement string (supports backreferences like \1, \2 or $1, $2)
      * @return the string after replacement, or the original value if no match found
      * @throws IllegalArgumentException if an invalid group reference is used
      */
@@ -44,26 +50,79 @@ public final class RegexReplacementUtil {
             groups[i] = matcher.group(i);
         }
 
-        // First, convert \1 style back-references to actual values in the replacement string
-        Matcher backRefMatcher = BACK_REFERENCE_PATTERN.matcher(replacement);
-        StringBuffer processedReplacement = new StringBuffer();
+        // Process replacement string to handle backreferences
+        // First handle dollar-style backreferences ($1, $2) and escaped dollars ($$, \$)
+        String processedReplacement = processDollarBackReferences(replacement, groups);
 
-        while (backRefMatcher.find()) {
-            int groupIndex = Integer.parseInt(backRefMatcher.group(1));
-
-            if (groupIndex >= groups.length) {
-                throw new IllegalArgumentException("Invalid group reference in " + replacement + ": \\" + groupIndex);
-            }
-
-            String replacementValue = groups[groupIndex] != null ? groups[groupIndex] : "";
-            backRefMatcher.appendReplacement(processedReplacement, Matcher.quoteReplacement(replacementValue));
-        }
-        backRefMatcher.appendTail(processedReplacement);
+        // Then handle backslash-style backreferences (\1, \2)
+        processedReplacement = processBackslashBackReferences(processedReplacement, groups);
 
         // Reset matcher and do final replacement with processed replacement string
         matcher.reset();
-        String result = matcher.replaceAll(processedReplacement.toString());
+        String result = matcher.replaceAll(processedReplacement);
 
         return result;
+    }
+
+    /**
+     * Processes dollar-style backreferences ($1, $2) and escaped dollars ($$, \$).
+     * First replaces escaped dollars ($$ and \$) with a placeholder, then processes $1, $2, etc.,
+     * then replaces the placeholder back with literal $.
+     *
+     * @param replacement the replacement string
+     * @param groups the captured groups from the regex match
+     * @return the processed replacement string
+     */
+    private static String processDollarBackReferences(String replacement, String[] groups) {
+        // First, replace escaped dollars ($$ and \$) with a temporary placeholder
+        // Use a placeholder that's unlikely to appear in the replacement string
+        final String DOLLAR_PLACEHOLDER = "\u0001DOLLAR_PLACEHOLDER\u0001";
+        Matcher escapedDollarMatcher = ESCAPED_DOLLAR_PATTERN.matcher(replacement);
+        String withPlaceholders = escapedDollarMatcher.replaceAll(DOLLAR_PLACEHOLDER);
+
+        // Now process $1, $2, etc. backreferences
+        Matcher dollarMatcher = DOLLAR_BACK_REF_PATTERN.matcher(withPlaceholders);
+        StringBuffer result = new StringBuffer();
+
+        while (dollarMatcher.find()) {
+            int groupIndex = Integer.parseInt(dollarMatcher.group(1));
+
+            if (groupIndex >= groups.length) {
+                throw new IllegalArgumentException("Invalid group reference in replacement: $" + groupIndex);
+            }
+
+            String replacementValue = groups[groupIndex] != null ? groups[groupIndex] : "";
+            dollarMatcher.appendReplacement(result, Matcher.quoteReplacement(replacementValue));
+        }
+        dollarMatcher.appendTail(result);
+
+        // Finally, replace the placeholder back with literal $
+        return result.toString().replace(DOLLAR_PLACEHOLDER, "$");
+    }
+
+    /**
+     * Processes backslash-style backreferences (\1, \2).
+     *
+     * @param replacement the replacement string (already processed for dollar-style)
+     * @param groups the captured groups from the regex match
+     * @return the processed replacement string
+     */
+    private static String processBackslashBackReferences(String replacement, String[] groups) {
+        Matcher backslashMatcher = BACKSLASH_BACK_REF_PATTERN.matcher(replacement);
+        StringBuffer result = new StringBuffer();
+
+        while (backslashMatcher.find()) {
+            int groupIndex = Integer.parseInt(backslashMatcher.group(1));
+
+            if (groupIndex >= groups.length) {
+                throw new IllegalArgumentException("Invalid group reference in replacement: \\" + groupIndex);
+            }
+
+            String replacementValue = groups[groupIndex] != null ? groups[groupIndex] : "";
+            backslashMatcher.appendReplacement(result, Matcher.quoteReplacement(replacementValue));
+        }
+        backslashMatcher.appendTail(result);
+
+        return result.toString();
     }
 }

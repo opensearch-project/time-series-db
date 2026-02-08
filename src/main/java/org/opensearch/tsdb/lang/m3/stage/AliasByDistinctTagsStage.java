@@ -80,18 +80,25 @@ public class AliasByDistinctTagsStage implements UnaryPipelineStage {
             return input;
         }
 
-        // Step 1: Analyze all series to find varying tags
+        // Step 1: Find varying tags (auto-detect)
         Set<String> varyingTags = findVaryingTags(input);
 
-        // Step 2: Filter to specified tags if provided
+        // Step 2: Build list of tags to use for aliases
+        // Start with varying tags, then append explicitly provided tags (allowing duplicates)
+        List<String> tagsToUse = new ArrayList<>();
+        if (!varyingTags.isEmpty()) {
+            List<String> sortedVaryingTags = new ArrayList<>(varyingTags);
+            sortedVaryingTags.sort(String::compareTo);
+            tagsToUse.addAll(sortedVaryingTags);
+        }
         if (tagNames != null && !tagNames.isEmpty()) {
-            varyingTags.retainAll(tagNames);
+            tagsToUse.addAll(tagNames);
         }
 
-        // Step 3: Build aliases for each series based on varying tags
+        // Build aliases for each series based on selected tags
         List<TimeSeries> result = new ArrayList<>(input.size());
         for (TimeSeries ts : input) {
-            String alias = buildAliasFromVaryingTags(ts.getLabels(), varyingTags);
+            String alias = buildAliasFromTags(ts.getLabels(), tagsToUse);
 
             // Create new TimeSeries with distinct tags alias
             TimeSeries newTs = new TimeSeries(
@@ -175,25 +182,23 @@ public class AliasByDistinctTagsStage implements UnaryPipelineStage {
     }
 
     /**
-     * Build alias from varying tag values.
+     * Build alias from tag values.
+     * Preserves the order of tags in the list, allowing duplicates.
      *
      * @param labels the labels for this series
-     * @param varyingTags set of tag names that vary across the series set
+     * @param tagsToUse list of tag names to use for building the alias (may contain duplicates)
      * @return the constructed alias string
      */
-    private String buildAliasFromVaryingTags(Labels labels, Set<String> varyingTags) {
-        if (varyingTags.isEmpty() || labels == null) {
+    private String buildAliasFromTags(Labels labels, List<String> tagsToUse) {
+        if (tagsToUse.isEmpty() || labels == null) {
             return null;
         }
 
         List<String> aliasParts = new ArrayList<>();
         Map<String, String> labelsMap = labels.toMapView();
 
-        // Process tags in sorted order for consistent output
-        List<String> sortedTags = new ArrayList<>(varyingTags);
-        sortedTags.sort(String::compareTo);
-
-        for (String tagName : sortedTags) {
+        // Process tags in the order they appear in the list (preserving duplicates)
+        for (String tagName : tagsToUse) {
             String tagValue = labelsMap.get(tagName);
             if (tagValue != null && !tagValue.isEmpty()) {
                 if (includeKeys) {
