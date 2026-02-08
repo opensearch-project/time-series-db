@@ -350,19 +350,19 @@ dependencies {
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     testImplementation 'com.fasterxml.jackson.core:jackson-annotations:2.20'
     testImplementation 'com.fasterxml.jackson.core:jackson-core:2.20.1'
-    testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1'
+    testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.0'
 
     // javaRestTest dependencies
     javaRestTestImplementation 'com.fasterxml.jackson.core:jackson-core:2.20.1'
     javaRestTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     javaRestTestImplementation 'com.fasterxml.jackson.core:jackson-annotations:2.20'
-    javaRestTestImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1'
+    javaRestTestImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.0'
 
     // internalClusterTest dependencies
     internalClusterTestImplementation 'com.fasterxml.jackson.core:jackson-core:2.20.1'
     internalClusterTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     internalClusterTestImplementation 'com.fasterxml.jackson.core:jackson-annotations:2.20'
-    internalClusterTestImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1'
+    internalClusterTestImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.0'
 
 }
 
