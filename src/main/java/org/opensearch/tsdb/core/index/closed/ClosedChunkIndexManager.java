@@ -715,6 +715,112 @@ public class ClosedChunkIndexManager implements Closeable {
     }
 
     /**
+     * Reloads a block that already exists in the blocks directory (no copy).
+     * Block dir name format: block_minTs_maxTs_uuid.
+     *
+     * @return true if loaded, false if already loaded or not found
+     */
+    public boolean reloadLocalBlock(String blockDirName) throws IOException {
+        ensureOpen();
+
+        if (blockDirName == null || !blockDirName.startsWith(BLOCK_PREFIX + "_")) {
+            throw new IllegalArgumentException(
+                "Invalid block directory name: " + blockDirName + ". Must start with '" + BLOCK_PREFIX + "_'"
+            );
+        }
+
+        String[] parts = blockDirName.split("_");
+        if (parts.length < 4) {
+            throw new IllegalArgumentException(
+                "Invalid block directory name format: " + blockDirName + ". Expected format: block_<minTimestamp>_<maxTimestamp>_<uuid>"
+            );
+        }
+
+        long minTimestamp;
+        long maxTimestamp;
+        try {
+            minTimestamp = Long.parseLong(parts[1]);
+            maxTimestamp = Long.parseLong(parts[2]);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid timestamp in block directory name: " + blockDirName, e);
+        }
+
+        Path blockPath = dir.resolve(blockDirName);
+
+        if (!Files.exists(blockPath)) {
+            log.warn("Block directory does not exist: {}", blockPath);
+            return false;
+        }
+
+        if (!Files.isDirectory(blockPath)) {
+            throw new IllegalArgumentException("Block path is not a directory: " + blockPath);
+        }
+
+        lock.lock();
+        try {
+            if (closedChunkIndexMap.containsKey(maxTimestamp)) {
+                log.warn("Block with maxTimestamp {} already loaded, skipping", maxTimestamp);
+                return false;
+            }
+
+            ClosedChunkIndex.Metadata metadata = new ClosedChunkIndex.Metadata(blockDirName, minTimestamp, maxTimestamp);
+            log.info("Loading local block: {} from {}", blockDirName, blockPath);
+            ClosedChunkIndex newIndex = new ClosedChunkIndex(blockPath, metadata, resolution, indexSettings);
+            closedChunkIndexMap.put(maxTimestamp, newIndex);
+
+            List<String> indexMetadata = new ArrayList<>();
+            for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
+                indexMetadata.add(index.getMetadata().marshal());
+            }
+
+            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
+                builder.startObject();
+                builder.array(INDEX_METADATA_KEY, indexMetadata.toArray(new String[0]));
+                builder.endObject();
+                metadataStore.store(METADATA_STORE_KEY, builder.toString());
+            }
+
+            log.info("Successfully loaded local block: {}, range: [{}, {}]", blockDirName, minTimestamp, maxTimestamp);
+            TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.indexCreatedTotal, 1);
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Scans blocks directory and loads any unregistered blocks (e.g. manually placed for testing). */
+    public List<String> reloadAllLocalBlocks() throws IOException {
+        ensureOpen();
+
+        List<String> loadedBlocks = new ArrayList<>();
+
+        if (!Files.exists(dir)) {
+            log.warn("Blocks directory does not exist: {}", dir);
+            return loadedBlocks;
+        }
+
+        try (var blockDirs = Files.list(dir)) {
+            List<Path> blockPaths = blockDirs.filter(Files::isDirectory)
+                .filter(p -> p.getFileName().toString().startsWith(BLOCK_PREFIX + "_"))
+                .toList();
+
+            for (Path blockPath : blockPaths) {
+                String blockDirName = blockPath.getFileName().toString();
+                try {
+                    if (reloadLocalBlock(blockDirName)) {
+                        loadedBlocks.add(blockDirName);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to reload local block {}: {}", blockDirName, e.getMessage(), e);
+                }
+            }
+        }
+
+        log.info("Reloaded {} local blocks from {}", loadedBlocks.size(), dir);
+        return loadedBlocks;
+    }
+
+    /**
      * Snapshot all closed chunk indexes.
      *
      * @return a SnapshotResult containing the list of IndexCommits and release actions

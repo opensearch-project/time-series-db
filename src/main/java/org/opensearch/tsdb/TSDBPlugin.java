@@ -59,9 +59,16 @@ import org.opensearch.tsdb.query.search.TimeRangePruningQueryBuilder;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
+import org.opensearch.action.ActionRequest;
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.plugins.ActionPlugin;
+import org.opensearch.plugins.ActionPlugin.ActionHandler;
+import org.opensearch.tsdb.action.ReloadBlockAction;
+import org.opensearch.tsdb.action.TransportReloadBlockAction;
 import org.opensearch.tsdb.query.rest.RemoteIndexSettingsCache;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
+import org.opensearch.tsdb.admin.rest.RestReloadBlockAction;
 import org.opensearch.watcher.ResourceWatcherService;
 
 import java.io.IOException;
@@ -737,8 +744,14 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     ) {
         return List.of(
             new RestM3QLAction(clusterSettings, clusterService, indexNameExpressionResolver, remoteIndexSettingsCache),
-            new RestPromQLAction(clusterSettings)
+            new RestPromQLAction(clusterSettings),
+            new RestReloadBlockAction()
         );
+    }
+
+    @Override
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        return List.of(new ActionHandler<>(ReloadBlockAction.INSTANCE, TransportReloadBlockAction.class));
     }
 
     @Override

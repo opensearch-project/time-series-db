@@ -31,8 +31,12 @@ import org.opensearch.tsdb.core.retention.NOOPRetention;
 import org.opensearch.tsdb.core.retention.TimeBasedRetention;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -806,5 +810,139 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         assertTrue("At least one index should have been force merged", singleSegmentCount > 0);
 
         manager.close();
+    }
+
+    /**
+     * Tests reloading a block from disk that was placed in the blocks directory (e.g. for testing).
+     * Uses a small pre-built block from test resources and verifies it is loaded and queryable.
+     */
+    public void testReloadLocalBlockFromResources() throws IOException, URISyntaxException {
+        Path tempDir = createTempDir("testReloadLocalBlock");
+        Path blocksDir = tempDir.resolve("blocks");
+        Files.createDirectories(blocksDir);
+
+        String blockName = "block_1736988453796_1736995653796_test";
+        Path sourceBlock = Path.of(getClass().getResource("reload_block/" + blockName).toURI());
+        Path destBlock = blocksDir.resolve(blockName);
+        copyDirectory(sourceBlock, destBlock);
+
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        assertEquals("No blocks before reload", 0, manager.getNumBlocks());
+
+        boolean loaded = manager.reloadLocalBlock(blockName);
+        assertTrue("reloadLocalBlock should return true", loaded);
+        assertEquals("One block after reload", 1, manager.getNumBlocks());
+
+        List<ReaderManagerWithMetadata> readerManagers = manager.getReaderManagersWithMetadata();
+        assertEquals("One reader manager after reload", 1, readerManagers.size());
+        assertNotNull(readerManagers.get(0).readerMananger());
+
+        // Reloading the same block again should return false (already loaded)
+        boolean loadedAgain = manager.reloadLocalBlock(blockName);
+        assertFalse("reloadLocalBlock again should return false", loadedAgain);
+        assertEquals("Still one block", 1, manager.getNumBlocks());
+
+        manager.close();
+    }
+
+    /**
+     * Tests reloadAllLocalBlocks discovers and loads blocks placed in the blocks directory.
+     */
+    public void testReloadAllLocalBlocks() throws IOException, URISyntaxException {
+        Path tempDir = createTempDir("testReloadAllLocalBlocks");
+        Path blocksDir = tempDir.resolve("blocks");
+        Files.createDirectories(blocksDir);
+
+        String blockName = "block_1736988453796_1736995653796_test";
+        Path sourceBlock = Path.of(getClass().getResource("reload_block/" + blockName).toURI());
+        copyDirectory(sourceBlock, blocksDir.resolve(blockName));
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        assertEquals("No blocks before reloadAll", 0, manager.getNumBlocks());
+
+        List<String> loaded = manager.reloadAllLocalBlocks();
+        assertEquals("One block loaded", 1, loaded.size());
+        assertEquals(blockName, loaded.get(0));
+        assertEquals("One block after reloadAll", 1, manager.getNumBlocks());
+
+        manager.close();
+    }
+
+    public void testReloadLocalBlockInvalidNameThrows() throws IOException {
+        Path tempDir = createTempDir("testReloadLocalBlockInvalid");
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+        try {
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> manager.reloadLocalBlock("invalid_no_prefix"));
+            assertTrue(e.getMessage().contains("Invalid block directory name"));
+        } finally {
+            manager.close();
+        }
+    }
+
+    public void testReloadLocalBlockNonExistentReturnsFalse() throws IOException {
+        Path tempDir = createTempDir("testReloadLocalBlockNonExistent");
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+        try {
+            boolean loaded = manager.reloadLocalBlock("block_1_2_nonexistent");
+            assertFalse(loaded);
+        } finally {
+            manager.close();
+        }
+    }
+
+    private static void copyDirectory(Path source, Path target) throws IOException {
+        Path sourceNormalized = source.normalize();
+        Files.walkFileTree(source, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path rel = sourceNormalized.relativize(dir.normalize());
+                Path dest = rel.toString().isEmpty() ? target : target.resolve(rel.toString());
+                Files.createDirectories(dest);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path rel = sourceNormalized.relativize(file.normalize());
+                Path dest = target.resolve(rel.toString());
+                Files.copy(file, dest);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 }

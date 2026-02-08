@@ -402,10 +402,11 @@ tasks.named("dependencyLicenses").configure {
     ignoreSha('store-subdirectory')
 }
 
-// Exclude generated files from forbidden APIs check
+// Exclude generated files and TransportReloadBlockAction (uses reflection for IndexShard.getEngineOrNull) from forbidden APIs
 forbiddenApisMain {
     exclude 'org/opensearch/tsdb/lang/m3/m3ql/parser/generated/**'
     exclude 'org/opensearch/tsdb/lang/prom/promql/parser/generated/**'
+    exclude 'org/opensearch/tsdb/action/TransportReloadBlockAction.class'
 }
 
 forbiddenApisTest {
@@ -426,4 +427,5 @@ forbiddenApisInternalClusterTest {
 forbiddenPatterns {
     exclude 'org/opensearch/tsdb/lang/m3/m3ql/parser/generated/**'
     exclude 'org/opensearch/tsdb/lang/prom/promql/parser/generated/**'
+    exclude '**/reload_block/**'
 }

@@ -339,9 +339,14 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         );
 
         assertNotNull("REST handlers list should not be null", restHandlers);
-        assertThat("Should have 2 REST handler", restHandlers, hasSize(2));
+        assertThat("Should have 3 REST handlers", restHandlers, hasSize(3));
         assertThat("REST handler should be RestM3QLAction", restHandlers.get(0), instanceOf(RestM3QLAction.class));
-        assertThat("REST handler should be RestM3QLAction", restHandlers.get(1), instanceOf(RestPromQLAction.class));
+        assertThat("REST handler should be RestPromQLAction", restHandlers.get(1), instanceOf(RestPromQLAction.class));
+        assertThat(
+            "REST handler should be RestReloadBlockAction",
+            restHandlers.get(2),
+            instanceOf(org.opensearch.tsdb.admin.rest.RestReloadBlockAction.class)
+        );
     }
 
     public void testRestM3QLActionRegistered() {
