@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -117,7 +118,7 @@ public class SustainStage implements UnaryPipelineStage {
         // Calculate required number of samples (floor division)
         long requiredSamples = duration / step;
 
-        List<Sample> filteredSamples = new ArrayList<>();
+        FloatSampleList.Builder filteredSamples = new FloatSampleList.Builder();
         int consecutiveNonNull = 0;
 
         for (Sample sample : samples) {
@@ -127,7 +128,7 @@ public class SustainStage implements UnaryPipelineStage {
 
                 // Keep sample only if it has a sustained prefix
                 if (consecutiveNonNull >= requiredSamples) {
-                    filteredSamples.add(sample);
+                    filteredSamples.add(sample.getTimestamp(), sample.getValue());
                 }
             } else {
                 // Null or NaN breaks the prefix - reset counter
@@ -136,7 +137,7 @@ public class SustainStage implements UnaryPipelineStage {
         }
 
         return new TimeSeries(
-            filteredSamples,
+            filteredSamples.build(),
             series.getLabels(),
             series.getMinTimestamp(),
             series.getMaxTimestamp(),

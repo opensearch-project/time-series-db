@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -48,12 +49,6 @@ public interface SampleList extends Iterable<Sample> {
     long getTimestamp(int index);
 
     /**
-     * Get the {@link Sample} representation at specific index
-     * TODO: This API exists purely for compatibility, should be removed in the next/future PR
-     */
-    Sample getSample(int index);
-
-    /**
      * Get the sample type for this list, by default we assume the whole list is of the same type
      */
     SampleType getSampleType();
@@ -65,10 +60,22 @@ public interface SampleList extends Iterable<Sample> {
     SampleList subList(int fromIndex, int toIndex);
 
     /**
-     * Binary search performed on timestamp array, the contract should be the same as
-     * {@link Collections#binarySearch(List, Object)} and {@link java.util.Arrays#binarySearch(int[], int)}
+     * Search performed on timestamp array, if the array is not sorted, then the result is undefined,
+     * the contract should be the same as {@link Collections#binarySearch(List, Object)} and
+     * {@link java.util.Arrays#binarySearch(int[], int)}
+     * <br>
+     * In most implementation speed should be at least the same as binary search
+     *
+     * @return index of the search key, if it is contained in the array;
+     *         otherwise, <code>(-(<i>insertion point</i>) - 1)</code>.  The
+     *         <i>insertion point</i> is defined as the point at which the
+     *         key would be inserted into the array: the index of the first
+     *         element greater than the key, or {@code a.length} if all
+     *         elements in the array are less than the specified key.  Note
+     *         that this guarantees that the return value will be &gt;= 0 if
+     *         and only if the key is found.
      */
-    int binarySearch(long timestamp);
+    int search(long timestamp);
 
     /**
      * The implementation of this method should be as efficient as possible, and should avoid creating a new
@@ -81,11 +88,35 @@ public interface SampleList extends Iterable<Sample> {
     Iterator<Sample> iterator();
 
     /**
+     * A default equals implementation which compares the size and sample type with the other one,
+     * and then make sure at each position the timestamp and value are the same.
+     * Note that this does not guarantee two unequal SampleList are semantically different, due to
+     * the existence of NaN value
+     */
+    default boolean equals(SampleList other) {
+        if (getSampleType() != other.getSampleType() || size() != other.size()) {
+            return false;
+        }
+        for (int i = 0; i < size(); i++) {
+            if (getTimestamp(i) != other.getTimestamp(i) || getValue(i) != other.getValue(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Get a java List of Samples from this list
      * WARN: This method exists only for test-use, please refrain from using it in prod code unless you are
      *       clear about the cost
      */
-    List<Sample> toList();
+    default List<Sample> toList() {
+        List<Sample> samples = new ArrayList<>(size());
+        for (int i = 0; i < size(); i++) {
+            samples.add(new FloatSample(getTimestamp(i), getValue(i)));
+        }
+        return samples;
+    }
 
     /**
      * Wrap a java List to {@link SampleList}, it's helpful when some stage need to create an instantiated sample,
@@ -118,11 +149,6 @@ public interface SampleList extends Iterable<Sample> {
         }
 
         @Override
-        public Sample getSample(int index) {
-            return inner.get(index);
-        }
-
-        @Override
         public SampleType getSampleType() {
             if (isEmpty()) {
                 return SampleType.FLOAT_SAMPLE; // best guess if this list is empty
@@ -136,7 +162,7 @@ public interface SampleList extends Iterable<Sample> {
         }
 
         @Override
-        public int binarySearch(long timestamp) {
+        public int search(long timestamp) {
             return Collections.binarySearch(inner, new FloatSample(timestamp, 0), Comparator.comparingLong(Sample::getTimestamp));
         }
 
@@ -160,6 +186,9 @@ public interface SampleList extends Iterable<Sample> {
             if (obj instanceof ListWrapper anotherWrapper) {
                 return inner.equals(anotherWrapper.inner);
             }
+            if (obj instanceof SampleList anotherList) {
+                return SampleList.super.equals(anotherList);
+            }
             return false;
         }
 
@@ -168,4 +197,5 @@ public interface SampleList extends Iterable<Sample> {
             return inner.toString();
         }
     }
+
 }

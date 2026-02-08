@@ -108,8 +108,8 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     public static SumCountSample fromSample(Sample sample) {
         if (sample instanceof SumCountSample) {
             return (SumCountSample) sample;
-        } else if (sample instanceof FloatSample) {
-            return fromValue(sample.getTimestamp(), ((FloatSample) sample).getValue());
+        } else if (sample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return fromValue(sample.getTimestamp(), sample.getValue());
         } else {
             throw new IllegalArgumentException("Unsupported sample type [" + sample.getClass() + "]");
         }

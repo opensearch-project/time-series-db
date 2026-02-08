@@ -11,6 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.lang.m3.common.ValueFilterType;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -82,17 +83,17 @@ public class ValueFilterStage implements UnaryPipelineStage {
         }
         List<TimeSeries> result = new ArrayList<>();
         for (TimeSeries series : input) {
-            List<Sample> filteredSamples = new ArrayList<>();
+            FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder();
             for (Sample sample : series.getSamples()) {
                 if (sample != null && !Double.isNaN(sample.getValue())) {
                     if (matchesCondition(sample.getValue())) {
-                        filteredSamples.add(sample);
+                        resultBuilder.add(sample.getTimestamp(), sample.getValue());
                     }
                 }
             }
             result.add(
                 new TimeSeries(
-                    filteredSamples,
+                    resultBuilder.build(),
                     series.getLabels(),
                     series.getMinTimestamp(),
                     series.getMaxTimestamp(),

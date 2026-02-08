@@ -78,7 +78,7 @@ public class SumCountSampleTests extends OpenSearchTestCase {
 
             @Override
             public SampleType getSampleType() {
-                return SampleType.FLOAT_SAMPLE;
+                return SampleType.SORTED_VALUES_SAMPLE;
             }
 
             @Override

@@ -48,7 +48,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "min")
-public class MinStage extends AbstractGroupingSampleStage {
+public class MinStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "min";
 
@@ -76,14 +76,16 @@ public class MinStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for min
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return Math.min(bucket, newSample.getValue());
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double min = Math.min(existing.getValue(), newSample.getValue());
-        return new FloatSample(existing.getTimestamp(), min);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override

@@ -117,7 +117,7 @@ public class TruncateStage implements UnaryPipelineStage {
      * @return the start index
      */
     private int findStartIndex(SampleList samples, long truncateStart) {
-        int index = samples.binarySearch(truncateStart);
+        int index = samples.search(truncateStart);
 
         if (index >= 0) {
             // Exact match found, return this index
@@ -138,7 +138,7 @@ public class TruncateStage implements UnaryPipelineStage {
      * @return the end index
      */
     private int findEndIndex(SampleList samples, long truncateEnd) {
-        int index = samples.binarySearch(truncateEnd);
+        int index = samples.search(truncateEnd);
 
         if (index >= 0) {
             // Exact match found, but truncateEnd is exclusive, so return index - 1

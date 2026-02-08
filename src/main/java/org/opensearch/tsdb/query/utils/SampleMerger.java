@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.query.utils;
 
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.model.SampleType;
@@ -139,24 +140,25 @@ public class SampleMerger {
      * @return Merged and sorted list of samples
      */
     private SampleList mergeSorted(SampleList samples1, SampleList samples2) {
-        List<Sample> result = new ArrayList<>(samples1.size() + samples2.size());
+        FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder(samples1.size() + samples2.size());
 
         int i = 0, j = 0;
 
         while (i < samples1.size() && j < samples2.size()) {
-            Sample s1 = samples1.getSample(i);
-            Sample s2 = samples2.getSample(j);
+            long ts1 = samples1.getTimestamp(i);
+            long ts2 = samples2.getTimestamp(j);
+            double v1 = samples1.getValue(i);
+            double v2 = samples2.getValue(j);
 
-            if (s1.getTimestamp() < s2.getTimestamp()) {
-                result.add(s1);
+            if (ts1 < ts2) {
+                resultBuilder.add(ts1, v1);
                 i++;
-            } else if (s1.getTimestamp() > s2.getTimestamp()) {
-                result.add(s2);
+            } else if (ts1 > ts2) {
+                resultBuilder.add(ts2, v2);
                 j++;
             } else {
                 // Duplicate timestamps - handle according to policy
-                Sample merged = mergeDuplicateSamples(s1, s2);
-                result.add(merged);
+                resultBuilder.add(ts1, mergeDuplicateSamples(v1, v2, samples1.getSampleType(), samples2.getSampleType()));
                 i++;
                 j++;
             }
@@ -164,15 +166,15 @@ public class SampleMerger {
 
         // Add remaining samples
         while (i < samples1.size()) {
-            result.add(samples1.getSample(i));
+            resultBuilder.add(samples1.getTimestamp(i), samples1.getValue(i));
             i++;
         }
         while (j < samples2.size()) {
-            result.add(samples2.getSample(j));
+            resultBuilder.add(samples2.getTimestamp(j), samples2.getValue(j));
             j++;
         }
 
-        return SampleList.fromList(result);
+        return resultBuilder.build();
     }
 
     /**
@@ -187,42 +189,50 @@ public class SampleMerger {
      * @return Merged and sorted list of samples
      */
     private SampleList mergeUnsorted(SampleList samples1, SampleList samples2) {
-        Map<Long, Sample> timestampToSample = new HashMap<>(Math.max(samples1.size(), samples2.size()));
+        Map<Long, Double> timestampToValue = new HashMap<>(Math.max(samples1.size(), samples2.size()));
 
         // Add samples from first list
         for (Sample sample : samples1) {
-            timestampToSample.merge(sample.getTimestamp(), sample, this::mergeDuplicateSamples);
+            timestampToValue.merge(
+                sample.getTimestamp(),
+                sample.getValue(),
+                (v1, v2) -> mergeDuplicateSamples(v1, v2, samples1.getSampleType(), samples1.getSampleType())
+            );
         }
 
         // Add samples from second list
         for (Sample sample : samples2) {
-            timestampToSample.merge(sample.getTimestamp(), sample, this::mergeDuplicateSamples);
+            timestampToValue.merge(
+                sample.getTimestamp(),
+                sample.getValue(),
+                (v1, v2) -> mergeDuplicateSamples(v1, v2, samples1.getSampleType(), samples2.getSampleType())
+            );
         }
 
-        List<Sample> result = new ArrayList<>(timestampToSample.values());
+        List<Sample> result = new ArrayList<>(
+            timestampToValue.entrySet().stream().map(entry -> new FloatSample(entry.getKey(), entry.getValue())).toList()
+        );
         result.sort(Comparator.comparingLong(Sample::getTimestamp));
         return SampleList.fromList(result);
     }
 
     /**
-     * Merge two samples with the same timestamp according to the deduplicate policy.
+     * Calculate the merged value of two samples with the same timestamp according to the deduplicate policy.
+     * For now, regardless of the input SampleType, output type will always assume to be a FloatSample
      *
-     * @param existing The existing sample
-     * @param newSample The new sample to merge
      * @return The merged sample
      */
-    private Sample mergeDuplicateSamples(Sample existing, Sample newSample) {
+    private double mergeDuplicateSamples(double val1, double val2, SampleType type1, SampleType type2) {
         switch (deduplicatePolicy) {
             case SUM_VALUES:
-                if (existing.getSampleType() == SampleType.FLOAT_SAMPLE && newSample.getSampleType() == SampleType.FLOAT_SAMPLE) {
-                    double sum = existing.getValue() + newSample.getValue();
-                    return new FloatSample(existing.getTimestamp(), sum);
+                if (type1 == SampleType.FLOAT_SAMPLE && type2 == SampleType.FLOAT_SAMPLE) {
+                    return val1 + val2;
                 } else {
                     // Fallback to ANY_WINS for non-float samples
-                    return newSample;
+                    return val2;
                 }
             default: // ANY_WINS
-                return newSample;  // Any write wins - keep the sample that comes later in function execution order
+                return val2;  // Any write wins - keep the sample that comes later in function execution order
         }
     }
 
