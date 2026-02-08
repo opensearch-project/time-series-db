@@ -162,9 +162,11 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: { __name__: "status:200 method:POST", name: http_requests_seriesC, method: POST, status: "200" }
+          - metric: { name: http_requests_seriesC, method: POST, status: "200" }
+            alias: "status:200 method:POST"
             values: [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10]
-          - metric: { __name__: "status:500 method:POST", name: http_requests_seriesD, method: POST, status: "500" }
+          - metric: { name: http_requests_seriesD, method: POST, status: "500" }
+            alias: "status:500 method:POST"
             values: [26, 28, 31, 16, 12, 6, -2, 12, null, 2]
     - name: "pipeline - changed function with linear series"
       type: "m3ql"

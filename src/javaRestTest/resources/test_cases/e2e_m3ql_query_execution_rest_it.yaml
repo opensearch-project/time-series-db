@@ -463,3 +463,25 @@ test_case:
         data:
           - metric: { __percentile: "80" }
             values: [10.0, 100.0, 70.58823529411765, 100.0, 76.92307692307693, 66.66666666666666, 66.66666666666666, 100.0, 100.0, 71.42857142857143, 100.0, 83.33333333333334]
+
+    # AliasByTags test: Demonstrate alias creation from tag values with POST method series
+    - name: "aliasByTags - create aliases from method and status tags"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch method:POST | aliasByTags method status"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_C", method: "POST", status: "200" }
+            alias: "POST 200"
+            values: [20,18,17,14,13,12,10.5,9.5,6,5,3,2]
+          - metric: { name: "http_requests_total_D", method: "POST", status: "200" }
+            alias: "POST 200"
+            values: [-2.5,5,12,-6,7.5,4,-3,9.5,12,5,12,2]
+          - metric: { name: "http_requests_total_E", method: "POST", status: "200" }
+            alias: "POST 200"
+            values: [-2.5,null,12,null,7.5,4,-3,9.5,null,5,12,2]
