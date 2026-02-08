@@ -19,8 +19,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DivideScalarPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
@@ -29,6 +31,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -82,6 +85,12 @@ public class M3PlanNodeFactory {
                 return ExcludeByTagPlanNode.of(functionNode);
             case Constants.Functions.TAG_SUB:
                 return TagSubPlanNode.of(functionNode);
+            case Constants.Functions.TAG_COMPARE:
+                return TagComparePlanNode.of(functionNode);
+            case Constants.Functions.WHERE:
+                return WherePlanNode.of(functionNode);
+            case Constants.Functions.MAP_KEY:
+                return MapKeyPlanNode.of(functionNode);
             case Constants.Functions.SHOW_TAGS:
                 return ShowTagsPlanNode.of(functionNode);
             case Constants.Functions.FALLBACK_SERIES:

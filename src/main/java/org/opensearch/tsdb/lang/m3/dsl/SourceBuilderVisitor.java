@@ -47,6 +47,7 @@ import org.opensearch.tsdb.lang.m3.stage.HistogramPercentileStage;
 import org.opensearch.tsdb.lang.m3.stage.IntersectStage;
 import org.opensearch.tsdb.lang.m3.stage.KeepLastValueStage;
 import org.opensearch.tsdb.lang.m3.stage.LogarithmStage;
+import org.opensearch.tsdb.lang.m3.stage.MapKeyStage;
 import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
 import org.opensearch.tsdb.lang.m3.stage.OffsetStage;
@@ -67,6 +68,7 @@ import org.opensearch.tsdb.lang.m3.stage.SortStage;
 import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
 import org.opensearch.tsdb.lang.m3.stage.SustainStage;
 import org.opensearch.tsdb.lang.m3.stage.SubtractStage;
+import org.opensearch.tsdb.lang.m3.stage.TagCompareStage;
 import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
 import org.opensearch.tsdb.lang.m3.stage.TopKStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
@@ -75,6 +77,7 @@ import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
 import org.opensearch.tsdb.lang.m3.stage.UnionStage;
+import org.opensearch.tsdb.lang.m3.stage.WhereStage;
 import org.opensearch.tsdb.lang.m3.stage.summarize.BucketMapper;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
@@ -89,6 +92,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -103,11 +107,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -315,6 +321,27 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(TagSubPlanNode planNode) {
         validateChildCountExact(planNode, 1);
         stageStack.add(new TagSubStage(planNode.getTagName(), planNode.getSearchPattern(), planNode.getReplacement()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(TagComparePlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new TagCompareStage(planNode.getOperator(), planNode.getTagKey(), planNode.getCompareValue()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(WherePlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new WhereStage(planNode.getOperator(), planNode.getTagKey1(), planNode.getTagKey2()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(MapKeyPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new MapKeyStage(planNode.getOldKey(), planNode.getNewKey()));
         return planNode.getChildren().getFirst().accept(this);
     }
 
