@@ -57,11 +57,13 @@ import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.tsdb.query.search.CachedWildcardQueryBuilder;
 import org.opensearch.tsdb.query.search.TimeRangePruningQueryBuilder;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
+import org.opensearch.tsdb.query.aggregator.InternalTSDBStats;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RemoteIndexSettingsCache;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
+import org.opensearch.tsdb.query.rest.RestTSDBStatsAction;
 import org.opensearch.watcher.ResourceWatcherService;
 
 import java.io.IOException;
@@ -93,6 +95,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     // Search plugin constants
     private static final String TIME_SERIES_NAMED_WRITEABLE_NAME = "time_series";
+    private static final String TSDB_STATS_NAMED_WRITEABLE_NAME = "tsdb_stats";
 
     // Store plugin constants
     private static final String TSDB_STORE_FACTORY_NAME = "tsdb_store";
@@ -737,14 +740,16 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     ) {
         return List.of(
             new RestM3QLAction(clusterSettings, clusterService, indexNameExpressionResolver, remoteIndexSettingsCache),
-            new RestPromQLAction(clusterSettings)
+            new RestPromQLAction(clusterSettings),
+            new RestTSDBStatsAction(clusterSettings)
         );
     }
 
     @Override
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
         return List.of(
-            new NamedWriteableRegistry.Entry(InternalAggregation.class, TIME_SERIES_NAMED_WRITEABLE_NAME, InternalTimeSeries::new)
+            new NamedWriteableRegistry.Entry(InternalAggregation.class, TIME_SERIES_NAMED_WRITEABLE_NAME, InternalTimeSeries::new),
+            new NamedWriteableRegistry.Entry(InternalAggregation.class, TSDB_STATS_NAMED_WRITEABLE_NAME, InternalTSDBStats::new)
         );
     }
 
