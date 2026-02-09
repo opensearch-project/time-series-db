@@ -133,8 +133,8 @@ public interface SampleList extends Iterable<Sample>, Accountable {
 
         private ListWrapper(List<Sample> inner) {
             this.inner = inner;
-            this.estimatedBytes = SHALLOW_SIZE + ARRAYLIST_OVERHEAD + ARRAY_HEADER_SIZE
-                + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
+            this.estimatedBytes = SHALLOW_SIZE + ARRAYLIST_OVERHEAD + ARRAY_HEADER_SIZE + (inner.size() * (REFERENCE_SIZE
+                + ESTIMATED_SAMPLE_SIZE));
         }
 
         @Override

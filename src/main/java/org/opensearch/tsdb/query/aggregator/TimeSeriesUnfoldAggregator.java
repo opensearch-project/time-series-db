@@ -218,7 +218,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 flushPendingCircuitBreakerBytes();
             }
         } else {
-            // Release - flush pending first, then release immediately
+            // Release: flush pending allocations first to ensure accurate high-water mark tracking,
+            // then release immediately. Without this, pending +4MB and release -1MB would incorrectly
+            // net to +3MB, missing the actual peak allocation.
             flushPendingCircuitBreakerBytes();
             doAddCircuitBreakerBytes(bytes);
         }
@@ -391,8 +393,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
         @Override
         public void collect(int doc, long bucket) throws IOException {
-            // Accumulate all circuit breaker bytes for this document
-            // Single call at the end for better performance (avoid multiple atomic operations)
+            // Accumulate circuit breaker bytes for this document, then add to pending batch
             long bytesForThisDoc = 0;
 
             // Track document processing - determine if from live or closed index
@@ -567,7 +568,6 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 bucketSeries.add(newSeries);
             }
 
-            // Track circuit breaker - single call per document for better performance
             if (bytesForThisDoc > 0) {
                 addCircuitBreakerBytes(bytesForThisDoc);
             }
@@ -615,7 +615,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
     @Override
     public void postCollection() throws IOException {
-        // Flush any pending circuit breaker bytes before post-processing
+        // Flush pending bytes from collection phase before starting post-processing.
+        // This ensures accurate tracking before stage execution begins.
         flushPendingCircuitBreakerBytes();
 
         // End collect phase timing and start postCollect timing
@@ -657,6 +658,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             // This is intentional - we're being conservative by not releasing until we're certain
             // the data is no longer referenced. The aggregator's close() handles final cleanup.
             timeSeriesByBucket.clear();
+
+            // Flush any pending bytes from post-processing before completing
+            flushPendingCircuitBreakerBytes();
 
             super.postCollection();
         } finally {

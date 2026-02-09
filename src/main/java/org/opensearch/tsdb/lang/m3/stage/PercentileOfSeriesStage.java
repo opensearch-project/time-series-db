@@ -273,13 +273,13 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
     }
 
     /**
-     * Override the process method to handle percentile expansion when materialization is needed.
-     * For non-distributed queries, this is where the expansion to multiple percentile series happens.
+     * Process input series with percentile expansion on the coordinator.
+     * Groups series by labels first, then expands each group into multiple series (one per percentile).
      */
     @Override
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord) {
+    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord, java.util.function.LongConsumer circuitBreakerConsumer) {
         // First, use the parent's grouping logic to aggregate values (without materialization)
-        List<TimeSeries> groupedSeries = super.process(input, false);
+        List<TimeSeries> groupedSeries = super.process(input, false, circuitBreakerConsumer);
 
         // If materialization is requested, expand each grouped series into multiple percentile series
         if (isCoord) {

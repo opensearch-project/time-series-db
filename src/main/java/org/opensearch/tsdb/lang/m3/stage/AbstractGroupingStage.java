@@ -71,19 +71,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (input == null) {
             throw new NullPointerException(getName() + " stage received null input");
         }
-        return process(input, true);
-    }
-
-    /**
-     * Process a list of time series with coordination control.
-     * This method allows controlling normalization and materialization for coordination aggregator.
-     *
-     * @param input The input time series to process
-     * @param isCoord Whether this is called from coordination aggregator (enables normalization and materialization)
-     * @return The processed time series
-     */
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord) {
-        return process(input, isCoord, null);
+        return process(input, true, null);
     }
 
     /**

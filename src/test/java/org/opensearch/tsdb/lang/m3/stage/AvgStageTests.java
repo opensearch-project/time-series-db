@@ -274,7 +274,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
     public void testProcessWithoutMaterialization() {
         // Test process() with materialization=false to get SumCountSample results
         List<TimeSeries> input = TEST_TIME_SERIES;
-        List<TimeSeries> result = avgStage.process(input, false);
+        List<TimeSeries> result = avgStage.process(input, false, null);
 
         assertEquals(1, result.size());
         TimeSeries averaged = result.get(0);
