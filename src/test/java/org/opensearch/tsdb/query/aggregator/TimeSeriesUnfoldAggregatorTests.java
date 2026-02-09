@@ -738,6 +738,62 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
+     * Tests that circuit breaker bytes are automatically flushed when the batch threshold (5MB) is exceeded.
+     * This covers the code path: if (pendingCircuitBreakerBytes >= CIRCUIT_BREAKER_BATCH_THRESHOLD)
+     */
+    public void testCircuitBreakerAutoFlushOnThresholdExceeded() throws IOException {
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long step = 100L;
+
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+        // The threshold is 5MB (5 * 1024 * 1024 = 5,242,880 bytes)
+        long thresholdBytes = 5 * 1024 * 1024;
+
+        // Add bytes just under the threshold - should NOT auto-flush
+        aggregator.addCircuitBreakerBytesForTesting(thresholdBytes - 1);
+        assertEquals("Bytes under threshold should be pending (not flushed)", 0L, aggregator.circuitBreakerBytes);
+
+        // Add 1 more byte to reach threshold - should trigger auto-flush
+        aggregator.addCircuitBreakerBytesForTesting(1);
+        assertEquals("Bytes at threshold should trigger auto-flush", thresholdBytes, aggregator.circuitBreakerBytes);
+
+        // Add more bytes exceeding threshold - should also auto-flush
+        aggregator.addCircuitBreakerBytesForTesting(thresholdBytes + 1000);
+        assertEquals(
+            "Bytes exceeding threshold should trigger auto-flush",
+            thresholdBytes + thresholdBytes + 1000,
+            aggregator.circuitBreakerBytes
+        );
+
+        aggregator.close();
+    }
+
+    /**
+     * Tests that zero bytes allocation is a no-op (no flush, no tracking).
+     * This covers the early return: if (bytes == 0) return;
+     */
+    public void testCircuitBreakerZeroBytesIsNoOp() throws IOException {
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long step = 100L;
+
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
+
+        // Add some bytes first
+        aggregator.addCircuitBreakerBytesForTesting(1000);
+        aggregator.flushPendingCircuitBreakerBytesForTesting();
+        assertEquals(1000L, aggregator.circuitBreakerBytes);
+
+        // Adding 0 should be a complete no-op
+        aggregator.addCircuitBreakerBytesForTesting(0);
+        assertEquals("Zero bytes should not change anything", 1000L, aggregator.circuitBreakerBytes);
+
+        aggregator.close();
+    }
+
+    /**
      * Helper class: Circuit breaker that only trips after a specified number of calls.
      * This allows the aggregator to be constructed successfully before tripping.
      */

@@ -460,4 +460,62 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         MovingStage stage = new MovingStage(30L, WindowAggregationType.SUM);
         assertNullInputThrowsException(stage, "moving");
     }
+
+    /**
+     * Test estimateMemoryOverhead returns reasonable values.
+     */
+    public void testEstimateMemoryOverhead() {
+        MovingStage stage = new MovingStage(30L, WindowAggregationType.SUM);
+
+        // Null and empty input should return 0
+        assertEquals(0L, stage.estimateMemoryOverhead(null));
+        assertEquals(0L, stage.estimateMemoryOverhead(List.of()));
+
+        // Create test series with samples
+        List<Sample> samples = List.of(new FloatSample(0L, 1.0), new FloatSample(10L, 2.0), new FloatSample(20L, 3.0));
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        TimeSeries ts = new TimeSeries(samples, labels, 0L, 20L, 10L, null);
+
+        // Single series should return positive overhead
+        long overhead = stage.estimateMemoryOverhead(List.of(ts));
+        assertTrue("Overhead should be positive for non-empty input", overhead > 0);
+
+        // Multiple series should scale
+        long doubleOverhead = stage.estimateMemoryOverhead(List.of(ts, ts));
+        assertTrue("Overhead should scale with number of series", doubleOverhead > overhead);
+    }
+
+    /**
+     * Test estimateMemoryOverhead for MEDIAN includes TreeMap overhead.
+     */
+    public void testEstimateMemoryOverheadWithMedian() {
+        MovingStage sumStage = new MovingStage(30L, WindowAggregationType.SUM);
+        MovingStage medianStage = new MovingStage(30L, WindowAggregationType.MEDIAN);
+
+        List<Sample> samples = List.of(new FloatSample(0L, 1.0), new FloatSample(10L, 2.0), new FloatSample(20L, 3.0));
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        TimeSeries ts = new TimeSeries(samples, labels, 0L, 20L, 10L, null);
+        List<TimeSeries> input = List.of(ts);
+
+        long sumOverhead = sumStage.estimateMemoryOverhead(input);
+        long medianOverhead = medianStage.estimateMemoryOverhead(input);
+
+        // MEDIAN uses TreeMap, so should have higher overhead
+        assertTrue("MEDIAN should have higher overhead due to TreeMap", medianOverhead > sumOverhead);
+    }
+
+    /**
+     * Test estimateMemoryOverhead handles zero step gracefully.
+     */
+    public void testEstimateMemoryOverheadWithZeroStep() {
+        MovingStage stage = new MovingStage(30L, WindowAggregationType.SUM);
+
+        List<Sample> samples = List.of(new FloatSample(0L, 1.0));
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        // Step of 0 should use default window size estimation
+        TimeSeries ts = new TimeSeries(samples, labels, 0L, 0L, 0L, null);
+
+        long overhead = stage.estimateMemoryOverhead(List.of(ts));
+        assertTrue("Should handle zero step gracefully", overhead > 0);
+    }
 }

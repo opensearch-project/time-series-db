@@ -12,6 +12,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.model.SumCountSample;
 
 import java.util.Arrays;
@@ -456,5 +457,40 @@ public class TimeSeriesTests extends OpenSearchTestCase {
             "TimeSeries with more samples should have larger estimate. Small: " + smallEstimate + ", Large: " + largeEstimate,
             largeEstimate > smallEstimate
         );
+    }
+
+    /**
+     * Tests that getChildResources() returns the samples as a child resource.
+     */
+    public void testGetChildResourcesReturnsSamples() {
+        // Arrange: Create a TimeSeries with samples
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0));
+        TimeSeries ts = new TimeSeries(samples, null, 1000L, 2000L, 1000L, null);
+
+        // Act
+        var children = ts.getChildResources();
+
+        // Assert: Should contain exactly one child (the samples)
+        assertNotNull("getChildResources should not return null", children);
+        assertEquals("Should have exactly 1 child resource (samples)", 1, children.size());
+
+        // The child should be the SampleList
+        var child = children.iterator().next();
+        assertEquals("Child should be the samples", ts.getSamples(), child);
+    }
+
+    /**
+     * Tests that getChildResources() returns empty collection when samples is null.
+     */
+    public void testGetChildResourcesWithNullSamples() {
+        // Arrange: Create a TimeSeries with null samples (using SampleList directly)
+        TimeSeries ts = new TimeSeries((SampleList) null, null, 1000L, 2000L, 1000L, null);
+
+        // Act
+        var children = ts.getChildResources();
+
+        // Assert: Should return empty collection
+        assertNotNull("getChildResources should not return null even with null samples", children);
+        assertTrue("Should have no child resources when samples is null", children.isEmpty());
     }
 }

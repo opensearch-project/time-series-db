@@ -393,4 +393,25 @@ public class TransformNullStageTests extends AbstractWireSerializingTestCase<Tra
         assertEquals("Stage names should match", original.getName(), deserialized.getName());
         assertEquals("Stages should be equal after round-trip", original, deserialized);
     }
+
+    public void testEstimateMemoryOverhead() {
+        TransformNullStage stage = new TransformNullStage(0.0);
+
+        // Null and empty input should return 0
+        assertEquals(0L, stage.estimateMemoryOverhead(null));
+        assertEquals(0L, stage.estimateMemoryOverhead(List.of()));
+
+        // Create test series with samples
+        ByteLabels labels = ByteLabels.fromStrings("name", "test");
+        List<Sample> samples = List.of(new FloatSample(1000L, 10.0), new FloatSample(2000L, 20.0), new FloatSample(3000L, 30.0));
+        TimeSeries ts = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, null);
+
+        // Single series should return positive overhead
+        long overhead = stage.estimateMemoryOverhead(List.of(ts));
+        assertTrue("Overhead should be positive for non-empty input", overhead > 0);
+
+        // Multiple series should scale
+        long doubleOverhead = stage.estimateMemoryOverhead(List.of(ts, ts));
+        assertTrue("Overhead should scale with number of series", doubleOverhead > overhead);
+    }
 }

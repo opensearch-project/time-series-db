@@ -117,16 +117,6 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
     }
 
     /**
-    * Process time series with label grouping.
-    * @param input List of time series to process
-    * @param isCoord Whether this is called from coordination aggregator (enables normalization per group)
-    * @return List of aggregated time series grouped by labels
-    */
-    protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord) {
-        return processWithLabelGrouping(input, isCoord, null);
-    }
-
-    /**
     * Process time series with label grouping and circuit breaker tracking.
     * @param input List of time series to process
     * @param isCoord Whether this is called from coordination aggregator (enables normalization per group)

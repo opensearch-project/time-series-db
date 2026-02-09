@@ -568,9 +568,10 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 bucketSeries.add(newSeries);
             }
 
-            if (bytesForThisDoc > 0) {
-                addCircuitBreakerBytes(bytesForThisDoc);
-            }
+            // Track circuit breaker bytes for this document
+            // Note: bytesForThisDoc is always > 0 here because we return early if allSamples is empty,
+            // and line 476 always adds positive bytes when allSamples is non-empty
+            addCircuitBreakerBytes(bytesForThisDoc);
 
             // TODO: maybe we need to move this
             collectBucket(subCollector, doc, bucket);
