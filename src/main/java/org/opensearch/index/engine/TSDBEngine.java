@@ -76,6 +76,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -92,6 +93,19 @@ public class TSDBEngine extends Engine {
     private static final String METRICS_STORE_DIR = "metrics";
     // TODO: Instead of checking refresh source, modify OS core to use engineConfig to supply shard state
     private static final String POST_RECOVERY_REFRESH_SOURCE = "post_recovery";
+
+    // Static registry for looking up TSDBEngine instances by shard ID
+    private static final ConcurrentHashMap<org.opensearch.core.index.shard.ShardId, TSDBEngine> ENGINE_REGISTRY = new ConcurrentHashMap<>();
+
+    /**
+     * Returns the TSDBEngine instance for the given shard ID, or null if not found.
+     *
+     * @param shardId the shard ID to look up
+     * @return the TSDBEngine instance, or null if not registered
+     */
+    public static TSDBEngine getEngine(org.opensearch.core.index.shard.ShardId shardId) {
+        return ENGINE_REGISTRY.get(shardId);
+    }
 
     // Engine state management
     private final AtomicLong maxSeqNoOfUpdatesOrDeletes = new AtomicLong(0);
@@ -247,6 +261,16 @@ public class TSDBEngine extends Engine {
             this.mappedChunksManager = new MMappedChunksManager(head.getMemSeriesReader());
             this.tsdbReaderManager = getTSDBReaderManager();
 
+            for (ReferenceManager.RefreshListener listener : engineConfig.getExternalRefreshListener()) {
+                tsdbReaderManager.addListener(listener);
+            }
+            for (ReferenceManager.RefreshListener listener : engineConfig.getInternalRefreshListener()) {
+                tsdbReaderManager.addListener(listener);
+            }
+
+            // Register this engine in the static registry for external access
+            ENGINE_REGISTRY.put(engineConfig.getShardId(), this);
+
             success = true;
         } finally {
             if (success == false) {
@@ -261,12 +285,25 @@ public class TSDBEngine extends Engine {
     }
 
     /**
+     * Registers a refresh listener to be notified when the reader manager refreshes.
+     * This allows external components to react to refresh events.
+     *
+     * @param listener the refresh listener to register
+     */
+    public void addRefreshListener(ReferenceManager.RefreshListener listener) {
+        tsdbReaderManager.addListener(listener);
+    }
+
+    /**
      * Closes the TSDBEngine and releases all resources.
      *
      * @throws IOException if an I/O error occurs during closure
      */
     @Override
     public void close() throws IOException {
+        // Deregister from static registry
+        ENGINE_REGISTRY.remove(shardId);
+
         metricsStorePath = null;
         if (tsdbReaderManager != null) {
             tsdbReaderManager.closeReaderCapacityGauges();

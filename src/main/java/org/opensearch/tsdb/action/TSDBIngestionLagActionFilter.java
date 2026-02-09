@@ -1,0 +1,130 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+package org.opensearch.tsdb.action;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.opensearch.action.ActionRequest;
+import org.opensearch.action.bulk.BulkAction;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.index.IndexRequest;
+import org.opensearch.action.support.ActionFilter;
+import org.opensearch.action.support.ActionFilterChain;
+import org.opensearch.action.support.ActionRequestMetadata;
+import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.action.ActionResponse;
+import org.opensearch.tasks.Task;
+import org.opensearch.telemetry.metrics.tags.Tags;
+import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
+
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * Captures ingestion lag metrics from client-provided HTTP headers on bulk requests.
+ */
+public class TSDBIngestionLagActionFilter implements ActionFilter {
+    private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
+
+    // HTTP headers (copied to ThreadContext by RestController)
+    private static final String HTTP_HEADER_FLUSH_TIMESTAMP = "X-Flush-Timestamp-Ms";
+    private static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
+
+    // Internal headers forwarded to data nodes
+    private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
+    private static final String HEADER_ARRIVAL_TIME = "tsdb.arrival_time_ms";
+    private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
+
+    private final ThreadContext threadContext;
+    private final TSDBIngestionLagMetrics metrics;
+    private final Supplier<Boolean> enabledSupplier;
+
+    public TSDBIngestionLagActionFilter(ThreadContext threadContext, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
+        this.threadContext = threadContext;
+        this.metrics = metrics;
+        this.enabledSupplier = enabledSupplier;
+    }
+
+    @Override
+    public <Request extends ActionRequest, Response extends ActionResponse> void apply(
+        Task task,
+        String action,
+        Request request,
+        ActionRequestMetadata<Request, Response> actionRequestMetadata,
+        ActionListener<Response> listener,
+        ActionFilterChain<Request, Response> chain
+    ) {
+        if (!enabledSupplier.get()) {
+            chain.proceed(task, action, request, listener);
+            return;
+        }
+
+        if (!BulkAction.NAME.equals(action) || !(request instanceof BulkRequest)) {
+            chain.proceed(task, action, request, listener);
+            return;
+        }
+
+        BulkRequest bulkRequest = (BulkRequest) request;
+
+        try {
+            // Read timestamps from HTTP headers (already copied to ThreadContext by RestController)
+            String flushTimestampStr = threadContext.getHeader(HTTP_HEADER_FLUSH_TIMESTAMP);
+            String minSampleTimestampStr = threadContext.getHeader(HTTP_HEADER_MIN_SAMPLE_TIMESTAMP);
+
+            if (flushTimestampStr != null && minSampleTimestampStr != null) {
+                long flushTimestamp = Long.parseLong(flushTimestampStr);
+                long minSampleTimestamp = Long.parseLong(minSampleTimestampStr);
+                long arrivalTime = System.currentTimeMillis();
+
+                String indexName = getPrimaryIndex(bulkRequest);
+                Tags tags = Tags.create().addTag("index", indexName);
+
+                // Metric 1: Network latency (client flush → coordinator arrival)
+                long networkLatencyMs = arrivalTime - flushTimestamp;
+                TSDBMetrics.recordHistogram(metrics.networkLatency, networkLatencyMs, tags);
+
+                // Metric 2: Coordinator lag (min sample timestamp → coordinator arrival)
+                long coordinatorLagMs = arrivalTime - minSampleTimestamp;
+                TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
+
+                // Forward headers to data nodes for searchable lag and indexing latency metrics
+                String bulkRequestId = UUID.randomUUID().toString();
+                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
+                threadContext.putHeader(HEADER_ARRIVAL_TIME, String.valueOf(arrivalTime));
+                threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
+
+                logger.debug(
+                    "Ingestion lag metrics - index: {}, networkLatency: {}ms, coordinatorLag: {}ms",
+                    indexName,
+                    networkLatencyMs,
+                    coordinatorLagMs
+                );
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to process ingestion lag metrics from HTTP headers", e);
+        }
+
+        chain.proceed(task, action, request, listener);
+    }
+
+    @Override
+    public int order() {
+        return Integer.MIN_VALUE;
+    }
+
+    private String getPrimaryIndex(BulkRequest bulkRequest) {
+        return bulkRequest.requests()
+            .stream()
+            .filter(req -> req instanceof IndexRequest)
+            .map(req -> ((IndexRequest) req).index())
+            .findFirst()
+            .orElse("unknown");
+    }
+}

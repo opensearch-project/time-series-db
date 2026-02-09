@@ -160,6 +160,22 @@ public final class TSDBMetricsConstants {
     public static final String ACTION_REST_QUERIES_SHARD_LATENCY_MAX = "tsdb.action.rest.queries.shard.latency.max";
 
     // ============================================
+    // Ingestion Lag Metrics (Data Freshness)
+    // ============================================
+
+    /** Histogram: Network latency from client flush to coordinator arrival */
+    public static final String INGESTION_NETWORK_LATENCY = "tsdb.ingestion.network.latency";
+
+    /** Histogram: Latency from minimum sample timestamp to coordinator arrival (includes client batching + network) */
+    public static final String INGESTION_COORDINATOR_LAG = "tsdb.ingestion.coordinator.lag";
+
+    /** Histogram: Latency from minimum sample timestamp to when data becomes searchable (end-to-end lag) */
+    public static final String INGESTION_SEARCHABLE_LAG = "tsdb.ingestion.searchable.lag";
+
+    /** Histogram: Indexing latency from coordinator arrival to searchable (time spent in OpenSearch) */
+    public static final String INGESTION_INDEXING_LATENCY = "tsdb.ingestion.indexing.latency";
+
+    // ============================================
     // Search Metrics (Query Cache)
     // ============================================
 
@@ -328,6 +344,16 @@ public final class TSDBMetricsConstants {
     public static final String COMPACTION_FAILURE_TOTAL_DESC = "Total number of failed compactions";
     public static final String COMPACTION_LATENCY_DESC = "Latency (ms) of compaction operations";
     public static final String COMPACTION_DELETED_TOTAL_DESC = "Total number of indexes deleted by compaction";
+
+    // Ingestion Lag Metrics (Data Freshness)
+    public static final String INGESTION_NETWORK_LATENCY_DESC =
+        "Network latency from client flush to coordinator arrival (measures network transit time)";
+    public static final String INGESTION_COORDINATOR_LAG_DESC =
+        "Coordinator lag: time from minimum sample timestamp to coordinator arrival (includes client batching + network)";
+    public static final String INGESTION_SEARCHABLE_LAG_DESC =
+        "Searchable lag: end-to-end time from minimum sample timestamp to when data becomes searchable";
+    public static final String INGESTION_INDEXING_LATENCY_DESC =
+        "Indexing latency: time from coordinator arrival to searchable (time spent in OpenSearch indexing + refresh)";
 
     // ============================================
     // Metric Tags
