@@ -27,13 +27,13 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
+import org.apache.lucene.util.RamUsageEstimator;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
-import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 
 /**
  * UnaryPipelineStage that implements M3QL's keepLastValue function.
@@ -286,7 +286,7 @@ public class KeepLastValueStage implements UnaryPipelineStage {
 
                 // Only track expansion (new samples beyond current)
                 int expansion = Math.max(0, potentialSamples - currentSamples);
-                totalOverhead += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (expansion * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+                totalOverhead += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class) + (expansion * TimeSeries.ESTIMATED_SAMPLE_SIZE);
             }
         }
 

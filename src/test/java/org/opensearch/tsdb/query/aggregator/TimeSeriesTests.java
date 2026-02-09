@@ -381,11 +381,11 @@ public class TimeSeriesTests extends OpenSearchTestCase {
     }
 
     /**
-     * Tests that estimateBytes() returns a reasonable estimate for a TimeSeries.
-     * This validates the delegation pattern where TimeSeries.estimateBytes() aggregates
+     * Tests that ramBytesUsed() returns a reasonable estimate for a TimeSeries.
+     * This validates the delegation pattern where TimeSeries.ramBytesUsed() aggregates
      * its components' memory estimates.
      */
-    public void testEstimateBytesReturnsReasonableValue() {
+    public void testRamBytesUsedReturnsReasonableValue() {
         // Arrange: Create a TimeSeries with known components
         Labels labels = ByteLabels.fromMap(Map.of("region", "us-east", "service", "api"));
         List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0));
@@ -393,47 +393,47 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries ts = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, alias);
 
         // Act
-        long estimatedBytes = ts.estimateBytes();
+        long ramBytes = ts.ramBytesUsed();
 
         // Assert
         // Should be at least the object overhead
-        assertTrue("estimateBytes should be at least ESTIMATED_MEMORY_OVERHEAD", estimatedBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD);
+        assertTrue("ramBytesUsed should be at least ESTIMATED_MEMORY_OVERHEAD", ramBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD);
 
         // Should include samples contribution
         assertTrue(
-            "estimateBytes should be greater than object overhead alone (should include samples)",
-            estimatedBytes > TimeSeries.ESTIMATED_MEMORY_OVERHEAD
+            "ramBytesUsed should be greater than object overhead alone (should include samples)",
+            ramBytes > TimeSeries.ESTIMATED_MEMORY_OVERHEAD
         );
 
         // Sanity check: should be reasonable (not absurdly large)
         // A TimeSeries with 3 samples, labels, and alias should be under 1KB
-        assertTrue("estimateBytes should be under 1KB for small TimeSeries", estimatedBytes < 1024);
+        assertTrue("ramBytesUsed should be under 1KB for small TimeSeries", ramBytes < 1024);
 
-        logger.info("TimeSeries.estimateBytes() returned {} bytes for 3-sample series with labels and alias", estimatedBytes);
+        logger.info("TimeSeries.ramBytesUsed() returned {} bytes for 3-sample series with labels and alias", ramBytes);
     }
 
     /**
-     * Tests that estimateBytes() correctly handles null labels and alias.
+     * Tests that ramBytesUsed() correctly handles null labels and alias.
      */
-    public void testEstimateBytesWithNullComponents() {
+    public void testRamBytesUsedWithNullComponents() {
         // Arrange: Create a minimal TimeSeries with null labels and alias
         List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0));
         TimeSeries ts = new TimeSeries(samples, null, 1000L, 1000L, 1000L, null);
 
         // Act
-        long estimatedBytes = ts.estimateBytes();
+        long ramBytes = ts.ramBytesUsed();
 
         // Assert: Should be at least object overhead + samples
         assertTrue(
-            "estimateBytes should be at least ESTIMATED_MEMORY_OVERHEAD with null labels/alias",
-            estimatedBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD
+            "ramBytesUsed should be at least ESTIMATED_MEMORY_OVERHEAD with null labels/alias",
+            ramBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD
         );
     }
 
     /**
-     * Tests that estimateBytes() scales with the number of samples.
+     * Tests that ramBytesUsed() scales with the number of samples.
      */
-    public void testEstimateBytesScalesWithSamples() {
+    public void testRamBytesUsedScalesWithSamples() {
         // Arrange: Create two TimeSeries with different sample counts
         List<Sample> smallSamples = Arrays.asList(new FloatSample(1000L, 1.0));
         List<Sample> largeSamples = Arrays.asList(
@@ -448,8 +448,8 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         TimeSeries largeTs = new TimeSeries(largeSamples, null, 1000L, 5000L, 1000L, null);
 
         // Act
-        long smallEstimate = smallTs.estimateBytes();
-        long largeEstimate = largeTs.estimateBytes();
+        long smallEstimate = smallTs.ramBytesUsed();
+        long largeEstimate = largeTs.ramBytesUsed();
 
         // Assert: Larger sample count should result in larger estimate
         assertTrue(

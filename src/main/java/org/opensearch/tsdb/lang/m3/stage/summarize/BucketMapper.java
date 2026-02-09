@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.lang.m3.stage.summarize;
 
+import org.apache.lucene.util.RamUsageEstimator;
+
 /**
  * Maps timestamps to bucket start timestamps for summarization.
  *
@@ -18,6 +20,9 @@ package org.opensearch.tsdb.lang.m3.stage.summarize;
  * are calculated as offsets from the reference time using the specified interval.</p>
  */
 public class BucketMapper {
+    /** Shallow size of a BucketMapper instance in bytes. */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(BucketMapper.class);
+
     private final long interval;
     private final long referenceTime;
 

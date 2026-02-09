@@ -7,11 +7,15 @@
  */
 package org.opensearch.tsdb.query.aggregator;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,29 +62,12 @@ import java.util.Objects;
  * compared and merged frequently. The Labels-based identification provides efficient
  * comparison while maintaining semantic correctness.</p>
  *
+ * <p>Implements {@link Accountable} to provide memory usage tracking compatible with OpenSearch/Lucene patterns.</p>
+ *
  */
-public class TimeSeries {
-    /**
-     * Estimated memory overhead for a TimeSeries object in bytes.
-     * This includes the object header, references to samples/labels/alias, and primitive fields.
-     * <strong>IMPORTANT:</strong> Update this constant when adding/removing fields from TimeSeries.
-     *
-     * <p>Memory breakdown (with compressed oops enabled):
-     * <ul>
-     *   <li>Object header: 12 bytes (mark word 8 + class pointer 4)</li>
-     *   <li>Field: List&lt;Sample&gt; samples reference: 4 bytes (compressed)</li>
-     *   <li>Field: Labels labels reference: 4 bytes (compressed)</li>
-     *   <li>Field: String alias reference: 4 bytes (compressed)</li>
-     *   <li>Field: long minTimestamp: 8 bytes</li>
-     *   <li>Field: long maxTimestamp: 8 bytes</li>
-     *   <li>Field: long step: 8 bytes</li>
-     * </ul>
-     * <p>Total: 48 bytes (with compressed oops)</p>
-     *
-     * <p>Note: Without compressed oops (-XX:-UseCompressedOops), this would be ~64 bytes.
-     * The constant reflects the typical production JVM configuration with compressed oops enabled.</p>
-     */
-    public static final long ESTIMATED_MEMORY_OVERHEAD = 48;
+public class TimeSeries implements Accountable {
+    /** Shallow size of a TimeSeries instance (object header + fields). */
+    public static final long ESTIMATED_MEMORY_OVERHEAD = RamUsageEstimator.shallowSizeOfInstance(TimeSeries.class);
 
     /**
      * Estimated memory size per Sample object in bytes.
@@ -149,10 +136,10 @@ public class TimeSeries {
     private long computeBaseEstimatedBytes() {
         long bytes = ESTIMATED_MEMORY_OVERHEAD;
         if (labels != null) {
-            bytes += labels.estimateBytes();
+            bytes += labels.ramBytesUsed();
         }
         if (samples != null) {
-            bytes += samples.estimateBytes();
+            bytes += samples.ramBytesUsed();
         }
         return bytes;
     }
@@ -309,38 +296,43 @@ public class TimeSeries {
     }
 
     /**
-     * Estimate the total memory usage of this TimeSeries in bytes.
-     * Aggregates the memory of all components: object overhead, labels, samples, and alias.
-     *
-     * <p>The base estimate (overhead + labels + samples) is pre-computed at construction time
-     * for O(1) access. Only the alias component (which is mutable) is computed on-demand.</p>
-     *
-     * @return estimated memory usage in bytes
+     * Estimate the memory usage of this TimeSeries in bytes.
+     * @return memory usage in bytes
      */
-    public long estimateBytes() {
+    @Override
+    public long ramBytesUsed() {
         // Base is pre-computed; only alias needs on-demand calculation (it's mutable)
         if (alias != null) {
-            // String object: ~24 bytes base + 2 bytes per char (UTF-16)
-            return baseEstimatedBytes + 24 + alias.length() * 2L;
+            return baseEstimatedBytes + RamUsageEstimator.sizeOf(alias);
         }
         return baseEstimatedBytes;
     }
 
     /**
-     * Get the estimated memory overhead constant for testing.
-     * Package-private for test validation.
+     * Returns nested resources of this TimeSeries.
+     * The samples implement Accountable and are returned as a child resource.
      *
-     * @return the ESTIMATED_MEMORY_OVERHEAD constant
+     * @return collection of child Accountable resources
+     */
+    @Override
+    public Collection<Accountable> getChildResources() {
+        if (samples != null) {
+            return Collections.singleton(samples);
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * Get the estimated memory overhead for testing.
+     * @return estimated bytes for TimeSeries object overhead
      */
     static long getEstimatedMemoryOverhead() {
         return ESTIMATED_MEMORY_OVERHEAD;
     }
 
     /**
-     * Get the estimated sample size constant for testing.
-     * Package-private for test validation.
-     *
-     * @return the ESTIMATED_SAMPLE_SIZE constant
+     * Get the estimated sample size for testing.
+     * @return estimated bytes per sample
      */
     static long getEstimatedSampleSize() {
         return ESTIMATED_SAMPLE_SIZE;

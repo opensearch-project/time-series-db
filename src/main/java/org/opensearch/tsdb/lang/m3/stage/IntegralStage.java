@@ -210,7 +210,7 @@ public class IntegralStage implements UnaryPipelineStage {
      * Estimate temporary memory overhead for integral (cumulative sum) calculations.
      * IntegralStage creates new TimeSeries with new sample lists (reusing labels).
      *
-     * <p>Delegates to {@link SampleList#estimateBytes()} for sample estimation, ensuring
+     * <p>Delegates to {@link SampleList#ramBytesUsed()} for sample estimation, ensuring
      * the calculation stays accurate as underlying implementations change.</p>
      *
      * @param input The input time series
@@ -225,7 +225,7 @@ public class IntegralStage implements UnaryPipelineStage {
         long totalOverhead = 0;
         for (TimeSeries ts : input) {
             // New TimeSeries object + new sample list (labels are reused by reference)
-            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().estimateBytes();
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().ramBytesUsed();
         }
         return totalOverhead;
     }

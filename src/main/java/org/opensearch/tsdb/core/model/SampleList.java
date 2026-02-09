@@ -7,6 +7,9 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
+
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -14,24 +17,20 @@ import java.util.List;
 
 /**
  * Customized list representation of samples, this interface tries to promote usage of raw values and timestamps
- * instead of a {@link Sample} object due to Java's object overhead
+ * instead of a {@link Sample} object due to Java's object overhead.
+ *
+ * <p>Extends {@link Accountable} to provide memory usage tracking compatible with OpenSearch/Lucene patterns.</p>
  */
-public interface SampleList extends Iterable<Sample> {
+public interface SampleList extends Iterable<Sample>, Accountable {
 
-    // Memory estimation constants for SampleList implementations
-    // These are used by estimateBytes() implementations
+    /** Bytes per object reference (4 with compressed OOPs, 8 without). */
+    int REFERENCE_SIZE = RamUsageEstimator.NUM_BYTES_OBJECT_REF;
 
-    /**
-     * Estimated overhead for ArrayList wrapper in bytes.
-     * Object header (12) + elementData ref (4) + size (4) + modCount (4) = 24 bytes
-     */
-    long ARRAYLIST_OVERHEAD = 24;
+    /** Bytes for array header including alignment. */
+    int ARRAY_HEADER_SIZE = RamUsageEstimator.NUM_BYTES_ARRAY_HEADER;
 
-    /**
-     * Estimated overhead for array header in bytes.
-     * Object header (12) + length field (4) = 16 bytes, often 12 with alignment
-     */
-    long ARRAY_HEADER_OVERHEAD = 12;
+    /** Shallow size of an ArrayList instance. */
+    long ARRAYLIST_OVERHEAD = RamUsageEstimator.shallowSizeOfInstance(java.util.ArrayList.class);
 
     /**
      * Estimated size per Sample object in bytes.
@@ -40,11 +39,6 @@ public interface SampleList extends Iterable<Sample> {
      * Conservative estimate assuming scalar replacement.
      */
     long ESTIMATED_SAMPLE_SIZE = 16;
-
-    /**
-     * Size of an object reference with compressed OOPs enabled (typical production JVM).
-     */
-    long REFERENCE_SIZE = 4;
 
     /**
      * Get the size of this list, should be a fast operation unless specifically noticed
@@ -117,14 +111,10 @@ public interface SampleList extends Iterable<Sample> {
 
     /**
      * Estimate the memory usage of this sample list in bytes.
-     * Each implementation knows its internal structure best and should provide an accurate estimate.
-     *
-     * <p>Implementations are encouraged to pre-compute this value during construction for O(1) access,
-     * rather than calculating on each call.</p>
-     *
-     * @return estimated memory usage in bytes
+     * @return memory usage in bytes
      */
-    long estimateBytes();
+    @Override
+    long ramBytesUsed();
 
     /**
      * Wrap a java List to {@link SampleList}, it's helpful when some stage need to create an instantiated sample,
@@ -135,13 +125,16 @@ public interface SampleList extends Iterable<Sample> {
     }
 
     final class ListWrapper implements SampleList {
+        /** Shallow size of a ListWrapper instance. */
+        private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ListWrapper.class);
+
         private final List<Sample> inner;
         private final long estimatedBytes;
 
         private ListWrapper(List<Sample> inner) {
             this.inner = inner;
-            // Pre-compute at construction for O(1) access
-            this.estimatedBytes = ARRAYLIST_OVERHEAD + ARRAY_HEADER_OVERHEAD + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
+            this.estimatedBytes = SHALLOW_SIZE + ARRAYLIST_OVERHEAD + ARRAY_HEADER_SIZE
+                + (inner.size() * (REFERENCE_SIZE + ESTIMATED_SAMPLE_SIZE));
         }
 
         @Override
@@ -211,7 +204,7 @@ public interface SampleList extends Iterable<Sample> {
         }
 
         @Override
-        public long estimateBytes() {
+        public long ramBytesUsed() {
             return estimatedBytes;  // O(1) - pre-computed at construction
         }
     }

@@ -421,7 +421,7 @@ public class PipelineStageExecutorTests extends OpenSearchTestCase {
             total += 48; // TimeSeries overhead
             total += ts.getSamples().size() * 16L; // Sample size
             if (ts.getLabels() != null) {
-                total += ts.getLabels().estimateBytes();
+                total += ts.getLabels().ramBytesUsed();
             }
         }
         return total;

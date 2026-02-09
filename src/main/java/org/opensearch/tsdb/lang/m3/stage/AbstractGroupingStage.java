@@ -21,6 +21,8 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
+import org.apache.lucene.util.RamUsageEstimator;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,8 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
-
-import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 
 /**
  * Abstract base class for pipeline stages that support label grouping.
@@ -142,16 +142,13 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
     * Process time series with label grouping and circuit breaker tracking.
     * @param input List of time series to process
     * @param isCoord Whether this is called from coordination aggregator (enables normalization per group)
-    * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created
+    * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created.
+    *        Batching is handled centrally by TimeSeriesUnfoldAggregator.
     * @return List of aggregated time series grouped by labels
     */
     protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord, LongConsumer circuitBreakerConsumer) {
         // Group by ByteLabels for proper equality and hashing
         Map<ByteLabels, List<TimeSeries>> labelGroupToSeries = new HashMap<>();
-
-        // Batched circuit breaker tracking: accumulate bytes locally and flush when threshold exceeded.
-        // This reduces overhead while still catching cardinality explosion.
-        long pendingBytes = 0;
 
         for (TimeSeries series : input) {
             // Extract the grouped labels, dropping series with missing labels
@@ -169,23 +166,12 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             // Add this series to the appropriate group using ByteLabels as key
             labelGroupToSeries.computeIfAbsent(groupLabels, k -> new ArrayList<>()).add(series);
 
-            // Accumulate memory overhead for new groups
+            // Report memory overhead for new groups (batching handled by aggregator)
             if (isNewGroup && circuitBreakerConsumer != null) {
-                long groupOverhead = MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD + groupLabels.estimateBytes()
-                    + MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
-                pendingBytes += groupOverhead;
-
-                // Flush to circuit breaker when batch threshold exceeded
-                if (pendingBytes >= MemoryEstimationConstants.CIRCUIT_BREAKER_BATCH_THRESHOLD) {
-                    circuitBreakerConsumer.accept(pendingBytes);
-                    pendingBytes = 0;
-                }
+                long groupOverhead = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + groupLabels.ramBytesUsed() + RamUsageEstimator
+                    .shallowSizeOfInstance(ArrayList.class);
+                circuitBreakerConsumer.accept(groupOverhead);
             }
-        }
-
-        // Flush any remaining pending bytes
-        if (circuitBreakerConsumer != null && pendingBytes > 0) {
-            circuitBreakerConsumer.accept(pendingBytes);
         }
 
         // Process each group and combine results

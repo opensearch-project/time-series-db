@@ -9,6 +9,7 @@ package org.opensearch.tsdb.query.aggregator;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
@@ -47,7 +48,6 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
-import org.opensearch.tsdb.query.utils.MemoryEstimationConstants;
 import org.opensearch.tsdb.query.utils.ProfileInfoMapper;
 
 /**
@@ -142,6 +142,17 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     // Circuit breaker tracking
     long circuitBreakerBytes = 0; // package-private for testing
 
+    // Batched circuit breaker bytes - accumulated locally before flushing to actual circuit breaker.
+    // This reduces the overhead of frequent circuit breaker calls during tight loops (e.g., group creation).
+    private long pendingCircuitBreakerBytes = 0;
+
+    /**
+     * Circuit breaker batch threshold in bytes (5 MB).
+     * When tracking memory in tight loops (e.g., group creation), bytes are accumulated locally
+     * and only flushed to the circuit breaker when this threshold is exceeded.
+     */
+    private static final long CIRCUIT_BREAKER_BATCH_THRESHOLD = 5 * 1024 * 1024;
+
     /**
      * Set output series count for testing purposes.
      * Package-private for testing.
@@ -159,10 +170,37 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     }
 
     /**
+     * Flush pending circuit breaker bytes for testing purposes.
+     * Package-private for testing.
+     */
+    void flushPendingCircuitBreakerBytesForTesting() {
+        flushPendingCircuitBreakerBytes();
+    }
+
+    /**
+     * Flush any pending circuit breaker bytes to the actual circuit breaker.
+     * Called automatically when threshold exceeded, and should be called explicitly
+     * at key checkpoints (end of collection, close, etc.).
+     */
+    private void flushPendingCircuitBreakerBytes() {
+        if (pendingCircuitBreakerBytes > 0) {
+            long bytesToFlush = pendingCircuitBreakerBytes;
+            pendingCircuitBreakerBytes = 0; // Reset before call to avoid double-flush on exception
+            doAddCircuitBreakerBytes(bytesToFlush);
+        }
+    }
+
+    /**
      * Track memory allocation/release with circuit breaker.
-     * This method adds or removes bytes from the circuit breaker and tracks the total.
-     * Positive values indicate allocation, negative values indicate release.
-     * Logs warnings if allocation exceeds thresholds for observability.
+     * This method uses batching for efficiency: small allocations are accumulated locally
+     * and only flushed to the circuit breaker when a threshold is exceeded.
+     *
+     * <p>For positive values (allocations): Bytes are accumulated in {@code pendingCircuitBreakerBytes}
+     * and flushed when the batch threshold ({@link #CIRCUIT_BREAKER_BATCH_THRESHOLD})
+     * is exceeded. This reduces overhead during tight loops like group creation.</p>
+     *
+     * <p>For negative values (releases): Any pending bytes are flushed first, then the release
+     * is processed immediately to ensure proper accounting.</p>
      *
      * @param bytes the number of bytes to allocate (positive) or release (negative)
      */
@@ -171,6 +209,28 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             return;
         }
 
+        if (bytes > 0) {
+            // Allocation - batch for efficiency
+            pendingCircuitBreakerBytes += bytes;
+
+            // Flush when threshold exceeded
+            if (pendingCircuitBreakerBytes >= CIRCUIT_BREAKER_BATCH_THRESHOLD) {
+                flushPendingCircuitBreakerBytes();
+            }
+        } else {
+            // Release - flush pending first, then release immediately
+            flushPendingCircuitBreakerBytes();
+            doAddCircuitBreakerBytes(bytes);
+        }
+    }
+
+    /**
+     * Internal method to actually add bytes to the circuit breaker (no batching).
+     * Handles both allocations and releases.
+     *
+     * @param bytes the number of bytes to allocate (positive) or release (negative)
+     */
+    private void doAddCircuitBreakerBytes(long bytes) {
         if (bytes > 0) {
             // Allocation
             try {
@@ -412,7 +472,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             List<Sample> alignedSamples = new ArrayList<>(allSamples.size());
 
             // Accumulate circuit breaker bytes for aligned samples list
-            bytesForThisDoc += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + (allSamples.size() * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            bytesForThisDoc += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class) + (allSamples.size()
+                * TimeSeries.ESTIMATED_SAMPLE_SIZE);
 
             long lastAlignedTimestamp = Long.MIN_VALUE;
             for (Sample sample : allSamples) {
@@ -447,7 +508,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Accumulate circuit breaker bytes for new bucket (if this is the first time series in this bucket)
             if (isNewBucket) {
-                bytesForThisDoc += MemoryEstimationConstants.ARRAYLIST_OVERHEAD + MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD;
+                bytesForThisDoc += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class)
+                    + RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY;
             }
 
             // Find existing time series with same labels, or create new one
@@ -499,7 +561,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 TimeSeries newSeries = new TimeSeries(alignedSamples, labels, minTimestamp, theoreticalMaxTimestamp, step, null);
 
                 // Accumulate circuit breaker bytes for new time series
-                bytesForThisDoc += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + labels.estimateBytes();
+                bytesForThisDoc += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + labels.ramBytesUsed();
                 // Note: alignedSamples bytes already accumulated above
 
                 bucketSeries.add(newSeries);
@@ -553,6 +615,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
     @Override
     public void postCollection() throws IOException {
+        // Flush any pending circuit breaker bytes before post-processing
+        flushPendingCircuitBreakerBytes();
+
         // End collect phase timing and start postCollect timing
         if (collectStartNanos > 0) {
             collectDurationNanos = System.nanoTime() - collectStartNanos;
@@ -574,9 +639,11 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Track circuit breaker for processed time series storage
                 // Estimate the size of the processed time series list
-                long processedBytes = MemoryEstimationConstants.HASHMAP_ENTRY_OVERHEAD + MemoryEstimationConstants.ARRAYLIST_OVERHEAD;
+                long processedBytes = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + RamUsageEstimator.shallowSizeOfInstance(
+                    ArrayList.class
+                );
                 for (TimeSeries ts : processedTimeSeries) {
-                    processedBytes += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getLabels().estimateBytes();
+                    processedBytes += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getLabels().ramBytesUsed();
                     processedBytes += ts.getSamples().size() * TimeSeries.ESTIMATED_SAMPLE_SIZE;
                 }
                 addCircuitBreakerBytes(processedBytes);
@@ -653,13 +720,15 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
     @Override
     public void doClose() {
+        // Flush any remaining pending circuit breaker bytes
+        flushPendingCircuitBreakerBytes();
+
         // Log circuit breaker summary before cleanup
         if (logger.isDebugEnabled()) {
             logger.debug(
-                "Closing aggregator '{}': total circuit breaker bytes tracked={} ({} KB)",
+                "Closing aggregator '{}': total circuit breaker bytes tracked={}",
                 name(),
-                circuitBreakerBytes,
-                circuitBreakerBytes / 1024
+                RamUsageEstimator.humanReadableUnits(circuitBreakerBytes)
             );
         }
 

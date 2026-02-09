@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.Set;
 /**
  * Labels is a set of name/value pairs.
  */
-public interface Labels {
+public interface Labels extends Accountable {
 
     /**
      * Convert to key:value string format
@@ -101,17 +102,10 @@ public interface Labels {
 
     /**
      * Estimate the memory footprint of this Labels instance in bytes.
-     *
-     * <p>The estimate includes:
-     * <ul>
-     *   <li>Object overhead for the Labels implementation</li>
-     *   <li>Internal data structures (byte arrays, strings, etc.)</li>
-     *   <li>Label names and values</li>
-     * </ul>
-     *
-     * @return estimated size in bytes
+     * @return memory usage in bytes
      */
-    long estimateBytes();
+    @Override
+    long ramBytesUsed();
 
     /**
      * Extract sorted names (label names) from this Labels instance.
