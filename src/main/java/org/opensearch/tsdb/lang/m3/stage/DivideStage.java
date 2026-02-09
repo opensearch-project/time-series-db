@@ -116,7 +116,7 @@ public class DivideStage extends AbstractBinaryProjectionStage {
     }
 
     /**
-     * Process samples to calculate division. Both values are expected to be available.
+     * Process sample values to calculate division. Both values are expected to be available.
      *
      * <p>If either the numerator (left) or denominator (right) is NaN, returns NaN.
      * If the denominator is zero, returns NaN.
@@ -126,7 +126,7 @@ public class DivideStage extends AbstractBinaryProjectionStage {
      * @return the division result, or NaN if either value is NaN or denominator is zero
      */
     @Override
-    protected Double processSamples(Double leftValue, Double rightValue) {
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // Divide only keep sample if left and right timestamp both exist
         if (leftValue == null || rightValue == null) {
             return null;

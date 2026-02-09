@@ -118,7 +118,7 @@ public class SubtractStage extends AbstractBinaryProjectionStage {
     }
 
     @Override
-    protected Double processSamples(Double leftValue, Double rightValue) {
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // Treat NaN samples as null at the very beginning
         if (leftValue != null && Double.isNaN(leftValue)) {
             leftValue = null;

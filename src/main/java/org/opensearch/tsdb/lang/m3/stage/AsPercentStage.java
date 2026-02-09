@@ -90,14 +90,14 @@ public class AsPercentStage extends AbstractBinaryProjectionStage {
     }
 
     /**
-     * Process samples to calculate percentage. Both values are guaranteed to be non-null.
+     * Process sample values to calculate percentage. Both values are guaranteed to be non-null.
      *
      * @param leftValue The left value (non-null)
      * @param rightValue The right value (non-null)
      * @return percentage value, or NaN if right value is 0
      */
     @Override
-    protected Double processSamples(Double leftValue, Double rightValue) {
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // If right value is 0, return NaN
         if (rightValue == 0.0) {
             return Double.NaN;
