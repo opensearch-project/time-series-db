@@ -33,8 +33,10 @@ import org.opensearch.tsdb.core.retention.TimeBasedRetention;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -370,7 +372,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
     public void testOptimizationCycle() throws IOException {
         Path tempDir = createTempDir("testOptimizationCycle");
         MetadataStore metadataStore = new InMemoryMetadataStore();
-        var retention = new TimeBasedRetention(Duration.ofHours(2).toMillis() * 3, 300_000);
+        var fixedClock = Clock.fixed(Instant.parse("1970-01-01T08:00:00Z"), ZoneId.systemDefault());
+        var retention = new TimeBasedRetention(Duration.ofHours(2).toMillis() * 3, 300_000, fixedClock);
         var resolution = TimeUnit.valueOf(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.get(defaultSettings));
         var compaction = new SizeTieredCompaction(
             IntStream.of(2, 6, 18, 54).mapToObj(Duration::ofHours).toArray(Duration[]::new),

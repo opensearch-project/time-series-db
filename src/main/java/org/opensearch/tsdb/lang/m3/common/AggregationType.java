@@ -39,7 +39,12 @@ public enum AggregationType {
     /**
      * Count aggregation type.
      */
-    COUNT;
+    COUNT,
+
+    /**
+     * Range aggregation type (max - min).
+     */
+    RANGE;
 
     /**
      * Converts a string representation of an aggregation type to the corresponding enum value.
@@ -62,6 +67,8 @@ public enum AggregationType {
                 return MULTIPLY;
             case Constants.Functions.Aggregation.SUM, Constants.Functions.Aggregation.SUM_SERIES:
                 return SUM;
+            case Constants.Functions.Aggregation.RANGE, Constants.Functions.Aggregation.RANGE_OF_SERIES:
+                return RANGE;
             default:
                 throw new IllegalArgumentException("Invalid aggregation type: " + aggType);
         }

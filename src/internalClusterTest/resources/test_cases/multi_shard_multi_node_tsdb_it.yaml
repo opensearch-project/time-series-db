@@ -30,43 +30,43 @@ test_case:
 
       regular_metrics:
       # Series 1: API requests for service A
-      - labels: "__name__:api_requests_total,service:service_a,endpoint:/users,status:200"
+      - labels: "name:api_requests_total,service:service_a,endpoint:/users,status:200"
         values: [100, 120, 110, 95, 105]
 
       # Series 2: API requests for service A with 404
-      - labels: "__name__:api_requests_total,service:service_a,endpoint:/users,status:404"
+      - labels: "name:api_requests_total,service:service_a,endpoint:/users,status:404"
         values: [5, 8, 6, 4, 7]
 
       # Series 3: API requests for service B
-      - labels: "__name__:api_requests_total,service:service_b,endpoint:/products,status:200"
+      - labels: "name:api_requests_total,service:service_b,endpoint:/products,status:200"
         values: [200, 210, 205, 215, 220]
 
       # Series 4: API requests for service B with 500
-      - labels: "__name__:api_requests_total,service:service_b,endpoint:/products,status:500"
+      - labels: "name:api_requests_total,service:service_b,endpoint:/products,status:500"
         values: [2, 1, 3, 2, 1]
 
       # Series 5: API requests for service C
-      - labels: "__name__:api_requests_total,service:service_c,endpoint:/orders,status:200"
+      - labels: "name:api_requests_total,service:service_c,endpoint:/orders,status:200"
         values: [150, 160, 155, 165, 170]
 
       # Series 6: API requests for service C with 404
-      - labels: "__name__:api_requests_total,service:service_c,endpoint:/orders,status:404"
+      - labels: "name:api_requests_total,service:service_c,endpoint:/orders,status:404"
         values: [8, 10, 9, 11, 12]
 
       # Series 7: Database queries for service A
-      - labels: "__name__:db_queries_total,service:service_a,operation:select,status:success"
+      - labels: "name:db_queries_total,service:service_a,operation:select,status:success"
         values: [500, 520, 510, 490, 505]
 
       # Series 8: Database queries for service B
-      - labels: "__name__:db_queries_total,service:service_b,operation:select,status:success"
+      - labels: "name:db_queries_total,service:service_b,operation:select,status:success"
         values: [800, 820, 810, 830, 840]
 
       # Series 9: Cache hits for service A
-      - labels: "__name__:cache_hits_total,service:service_a,cache_type:redis"
+      - labels: "name:cache_hits_total,service:service_a,cache_type:redis"
         values: [1000, 1050, 1020, 980, 1010]
 
       # Series 10: Cache hits for service B
-      - labels: "__name__:cache_hits_total,service:service_b,cache_type:redis"
+      - labels: "name:cache_hits_total,service:service_b,cache_type:redis"
         values: [1500, 1550, 1520, 1580, 1600]
 
   # Queries that aggregate data across multiple shards
@@ -75,7 +75,7 @@ test_case:
     - name: "api_requests_by_service"
       type: "m3ql"
       indices: "multi_shard_metrics"
-      query: "fetch __name__:api_requests_total | sumSeries service"
+      query: "fetch name:api_requests_total | sumSeries service"
       time_config:
         min_timestamp: "now-50m"
         max_timestamp: "now"
@@ -94,7 +94,7 @@ test_case:
     - name: "total_db_queries"
       type: "m3ql"
       indices: "multi_shard_metrics"
-      query: "fetch __name__:db_queries_total | sumSeries"
+      query: "fetch name:db_queries_total | sumSeries"
       time_config:
         min_timestamp: "now-50m"
         max_timestamp: "now"
@@ -109,7 +109,7 @@ test_case:
     - name: "api_requests_by_status"
       type: "m3ql"
       indices: "multi_shard_metrics"
-      query: "fetch __name__:api_requests_total | sumSeries status"
+      query: "fetch name:api_requests_total | sumSeries status"
       time_config:
         min_timestamp: "now-50m"
         max_timestamp: "now"
@@ -128,7 +128,7 @@ test_case:
     - name: "service_b_products_endpoint"
       type: "m3ql"
       indices: "multi_shard_metrics"
-      query: "fetch __name__:api_requests_total service:service_b endpoint:/products | transformNull 6"
+      query: "fetch name:api_requests_total service:service_b endpoint:/products | transformNull 6"
       time_config:
         min_timestamp: "now-80m"
         max_timestamp: "now"
@@ -136,7 +136,7 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "api_requests_total", service: "service_b", endpoint: "/products", status: "200"}
+          - metric: {name: "api_requests_total", service: "service_b", endpoint: "/products", status: "200"}
             values: [6, 6, 6, 200, 210, 205, 215, 220]
-          - metric: {__name__: "api_requests_total", service: "service_b", endpoint: "/products", status: "500"}
+          - metric: {name: "api_requests_total", service: "service_b", endpoint: "/products", status: "500"}
             values: [6, 6, 6, 2, 1, 3, 2, 1]

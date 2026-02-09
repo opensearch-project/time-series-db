@@ -15,6 +15,9 @@ import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.core.utils.Constants;
 
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,12 +28,15 @@ public class TimeBasedRetentionTests extends OpenSearchTestCase {
     private ClosedChunkIndexManager closedChunkIndexManager;
     private Path metricsDirectory;
     private TimeBasedRetention retention;
+    private Instant start;
 
     @Override
     public void setUp() throws Exception {
         super.setUp();
         metricsDirectory = createTempDir();
-        retention = new TimeBasedRetention(TEST_BLOCK_DURATION, 0);
+        start = Instant.parse("2026-01-01T12:00:00Z");
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-01-01T21:00:00Z"), ZoneId.systemDefault());
+        retention = new TimeBasedRetention(TEST_BLOCK_DURATION, 0, fixedClock);
     }
 
     public void testPlanWithEmptyResults() {
@@ -40,16 +46,32 @@ public class TimeBasedRetentionTests extends OpenSearchTestCase {
 
     public void testDropWithMultipleIndexesSuccess() throws Exception {
         // Create 4 indexes: 3 old (to be removed) and 1 recent (to serve as reference for TTL)
-        Path indexPath1 = metricsDirectory.resolve("block_100");
-        Path indexPath2 = metricsDirectory.resolve("block_200");
-        Path indexPath3 = metricsDirectory.resolve("block_300");
-        Path indexPath4 = metricsDirectory.resolve("block_400");
+        Path indexPath1 = metricsDirectory.resolve("block_1");
+        Path indexPath2 = metricsDirectory.resolve("block_2");
+        Path indexPath3 = metricsDirectory.resolve("block_3");
+        Path indexPath4 = metricsDirectory.resolve("block_4");
 
         // With TTL=DEFAULT_BLOCK_DURATION , first 3 should be removed
-        ClosedChunkIndex.Metadata metadata1 = new ClosedChunkIndex.Metadata("block_100", 0L, TEST_BLOCK_DURATION);
-        ClosedChunkIndex.Metadata metadata2 = new ClosedChunkIndex.Metadata("block_200", TEST_BLOCK_DURATION, TEST_BLOCK_DURATION * 2);
-        ClosedChunkIndex.Metadata metadata3 = new ClosedChunkIndex.Metadata("block_300", TEST_BLOCK_DURATION * 2, TEST_BLOCK_DURATION * 3);
-        ClosedChunkIndex.Metadata metadata4 = new ClosedChunkIndex.Metadata("block_400", TEST_BLOCK_DURATION * 4, TEST_BLOCK_DURATION * 5);
+        ClosedChunkIndex.Metadata metadata1 = new ClosedChunkIndex.Metadata(
+            "block_1",
+            start.toEpochMilli(),
+            start.toEpochMilli() + TEST_BLOCK_DURATION
+        );
+        ClosedChunkIndex.Metadata metadata2 = new ClosedChunkIndex.Metadata(
+            "block_2",
+            metadata1.maxTimestamp(),
+            metadata1.maxTimestamp() + TEST_BLOCK_DURATION
+        );
+        ClosedChunkIndex.Metadata metadata3 = new ClosedChunkIndex.Metadata(
+            "block_3",
+            metadata2.maxTimestamp(),
+            metadata2.maxTimestamp() + TEST_BLOCK_DURATION
+        );
+        ClosedChunkIndex.Metadata metadata4 = new ClosedChunkIndex.Metadata(
+            "block_4",
+            metadata3.maxTimestamp(),
+            metadata3.maxTimestamp() + TEST_BLOCK_DURATION
+        );
 
         ClosedChunkIndex realIndex1 = new ClosedChunkIndex(indexPath1, metadata1, Constants.Time.DEFAULT_TIME_UNIT, Settings.EMPTY);
         ClosedChunkIndex realIndex2 = new ClosedChunkIndex(indexPath2, metadata2, Constants.Time.DEFAULT_TIME_UNIT, Settings.EMPTY);

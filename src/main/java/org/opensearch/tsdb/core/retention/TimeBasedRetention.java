@@ -9,6 +9,8 @@ package org.opensearch.tsdb.core.retention;
 
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +25,7 @@ import java.util.List;
 public class TimeBasedRetention implements Retention {
     private volatile long duration;
     private volatile long interval;
+    private final Clock clock;
 
     /**
      * Constructs a new time-based retention policy.
@@ -31,8 +34,20 @@ public class TimeBasedRetention implements Retention {
      * @param interval the interval in milliseconds denoting how frequent retention cycle should run.
      */
     public TimeBasedRetention(long duration, long interval) {
+        this(duration, interval, Clock.systemDefaultZone());
+    }
+
+    /**
+     * Constructs a new time-based retention policy.
+     *
+     * @param duration the duration in milliseconds; indexes older than this will be removed
+     * @param interval the interval in milliseconds denoting how frequent retention cycle should run.
+     * @param clock    the clock to use
+     */
+    public TimeBasedRetention(long duration, long interval, Clock clock) {
         this.duration = duration;
         this.interval = interval;
+        this.clock = clock;
     }
 
     public List<ClosedChunkIndex> plan(List<ClosedChunkIndex> indexes) {
@@ -41,8 +56,9 @@ public class TimeBasedRetention implements Retention {
         if (duration == -1) {
             return candidates;
         }
+
         for (ClosedChunkIndex closedChunkIndex : indexes) {
-            if (closedChunkIndex.getMaxTime().isAfter(indexes.getLast().getMaxTime().minusMillis(duration))) {
+            if (closedChunkIndex.getMaxTime().isAfter(Instant.now(clock).minusMillis(duration))) {
                 break;
             }
             candidates.add(closedChunkIndex);

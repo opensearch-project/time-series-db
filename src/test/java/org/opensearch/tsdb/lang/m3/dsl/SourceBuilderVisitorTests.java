@@ -36,7 +36,9 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RemoveEmptyPlanNode;
@@ -44,6 +46,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScaleToSecondsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
@@ -1058,6 +1061,107 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
         );
 
         assertTrue(SourceBuilderVisitor.shouldDisablePushdown(params));
+    }
+
+    // ========== Mapper Function Plan Node Tests ==========
+
+    /**
+     * Test LogarithmPlanNode with correct number of children (1).
+     */
+    public void testLogarithmPlanNodeWithOneChild() {
+        LogarithmPlanNode planNode = new LogarithmPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test LogarithmPlanNode with incorrect number of children (0).
+     */
+    public void testLogarithmPlanNodeWithNoChildren() {
+        LogarithmPlanNode planNode = new LogarithmPlanNode(1);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("LogarithmPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test LogarithmPlanNode with incorrect number of children (2).
+     */
+    public void testLogarithmPlanNodeWithTwoChildren() {
+        LogarithmPlanNode planNode = new LogarithmPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("LogarithmPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test SqrtPlanNode with correct number of children (1).
+     */
+    public void testSqrtPlanNodeWithOneChild() {
+        SqrtPlanNode planNode = new SqrtPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test SqrtPlanNode with incorrect number of children (0).
+     */
+    public void testSqrtPlanNodeWithNoChildren() {
+        SqrtPlanNode planNode = new SqrtPlanNode(1);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("SqrtPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test SqrtPlanNode with incorrect number of children (2).
+     */
+    public void testSqrtPlanNodeWithTwoChildren() {
+        SqrtPlanNode planNode = new SqrtPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("SqrtPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test OffsetPlanNode with correct number of children (1).
+     */
+    public void testOffsetPlanNodeWithOneChild() {
+        OffsetPlanNode planNode = new OffsetPlanNode(1, 5.0);
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test OffsetPlanNode with incorrect number of children (0).
+     */
+    public void testOffsetPlanNodeWithNoChildren() {
+        OffsetPlanNode planNode = new OffsetPlanNode(1, 5.0);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("OffsetPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test OffsetPlanNode with incorrect number of children (2).
+     */
+    public void testOffsetPlanNodeWithTwoChildren() {
+        OffsetPlanNode planNode = new OffsetPlanNode(1, 5.0);
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("OffsetPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**

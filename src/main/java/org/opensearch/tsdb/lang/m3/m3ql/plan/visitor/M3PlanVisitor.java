@@ -12,7 +12,9 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DivideScalarPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RoundPlanNode;
@@ -22,8 +24,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PercentileOfSeriesPlanNode;
@@ -33,10 +37,12 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScaleToSecondsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 
@@ -106,6 +112,15 @@ public abstract class M3PlanVisitor<T> {
     }
 
     /**
+     * Visit method for ChangedPlanNode.
+     * @param planNode the ChangedPlanNode to visit
+     * @return the result of processing the ChangedPlanNode
+     */
+    public T visit(ChangedPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
      * Visit method for ExcludeByTagPlanNode.
      * @param planNode the ExcludeByTagPlanNode to visit
      * @return the result of processing the ExcludeByTagPlanNode
@@ -151,6 +166,15 @@ public abstract class M3PlanVisitor<T> {
     }
 
     /**
+     * Visit method for DivideScalarPlanNode.
+     * @param planNode the DivideScalarPlanNode to visit
+     * @return the result of processing the DivideScalarPlanNode
+     */
+    public T visit(DivideScalarPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
      * Visit method for HeadPlanNode.
      * @param planNode the HeadPlanNode to visit
      * @return the result of processing the HeadPlanNode
@@ -186,11 +210,29 @@ public abstract class M3PlanVisitor<T> {
     }
 
     /**
+     * Visit method for LogarithmPlanNode.
+     * @param planNode the LogarithmPlanNode to visit
+     * @return the result of processing the LogarithmPlanNode
+     */
+    public T visit(LogarithmPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
      * Visit method for MovingPlanNode.
      * @param planNode the MovingPlanNode to visit
      * @return the result of processing the MovingPlanNode
      */
     public T visit(MovingPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for OffsetPlanNode.
+     * @param planNode the OffsetPlanNode to visit
+     * @return the result of processing the OffsetPlanNode
+     */
+    public T visit(OffsetPlanNode planNode) {
         return process(planNode);
     }
 
@@ -281,6 +323,24 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the SortPlanNode
      */
     public T visit(SortPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for SqrtPlanNode.
+     * @param planNode the SqrtPlanNode to visit
+     * @return the result of processing the SqrtPlanNode
+     */
+    public T visit(SqrtPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for TopKPlanNode.
+     * @param planNode the TopKPlanNode to visit
+     * @return the result of processing the TopKPlanNode
+     */
+    public T visit(TopKPlanNode planNode) {
         return process(planNode);
     }
 

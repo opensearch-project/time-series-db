@@ -11,10 +11,9 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.Sample;
-import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.lang.m3.common.SortByType;
 import org.opensearch.tsdb.lang.m3.common.SortOrderType;
+import org.opensearch.tsdb.lang.m3.stage.util.SortComparatorUtil;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -24,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.StreamSupport;
 
 /**
  * Pipeline stage that implements M3QL's sort function.
@@ -90,7 +88,7 @@ public class SortStage implements UnaryPipelineStage {
 
         // Sort time series based on the calculated sorting key
         // Each time series remains unchanged, only the order changes
-        Comparator<TimeSeries> comparator = createComparator();
+        Comparator<TimeSeries> comparator = SortComparatorUtil.createComparator(sortBy);
 
         if (sortOrder == SortOrderType.ASC) {
             result.sort(comparator);
@@ -99,149 +97,6 @@ public class SortStage implements UnaryPipelineStage {
         }
 
         return result;
-    }
-
-    /**
-     * Create a comparator that compares time series based on their sorting key.
-     */
-    private Comparator<TimeSeries> createComparator() {
-        return switch (sortBy) {
-            case AVG -> Comparator.comparingDouble(this::calculateAverage);
-            case CURRENT -> Comparator.comparingDouble(this::calculateCurrent);
-            case MAX -> Comparator.comparingDouble(this::calculateMax);
-            case MIN -> Comparator.comparingDouble(this::calculateMin);
-            case SUM -> Comparator.comparingDouble(this::calculateSum);
-            case STDDEV -> Comparator.comparingDouble(this::calculateStddev);
-            case NAME -> Comparator.comparing(this::extractAlias);
-        };
-    }
-
-    /**
-     * Calculate the average of all values in the time series as the sorting key.
-     */
-    private double calculateAverage(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return 0.0;
-        }
-
-        double sum = 0.0;
-        int count = 0;
-        for (Sample sample : samples) {
-            if (sample != null && !Double.isNaN(sample.getValue())) {
-                sum += sample.getValue();
-                count++;
-            }
-        }
-
-        return count == 0 ? 0.0 : sum / count;
-    }
-
-    /**
-     * Calculate the last of all values in the time series as the sorting key.
-     */
-    private double calculateCurrent(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return 0.0;
-        }
-        for (int i = samples.size() - 1; i >= 0; i--) {
-            double val = samples.getValue(i);
-            if (!Double.isNaN(val)) {
-                return val;
-            }
-        }
-        return 0.0;
-    }
-
-    /**
-     * Calculate the maximum value in the time series as the sorting key.
-     */
-    private double calculateMax(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return Double.NEGATIVE_INFINITY;
-        }
-
-        double max = Double.NEGATIVE_INFINITY;
-        for (Sample sample : samples) {
-            if (sample != null && !Double.isNaN(sample.getValue())) {
-                max = Math.max(max, sample.getValue());
-            }
-        }
-
-        return max == Double.NEGATIVE_INFINITY ? 0.0 : max;
-    }
-
-    /**
-     * Calculate the minimum value in the time series as the sorting key.
-     */
-    private double calculateMin(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return 0.0;
-        }
-
-        double min = Double.POSITIVE_INFINITY;
-        for (Sample sample : samples) {
-            if (sample != null && !Double.isNaN(sample.getValue())) {
-                min = Math.min(min, sample.getValue());
-            }
-        }
-
-        return min == Double.POSITIVE_INFINITY ? 0.0 : min;
-    }
-
-    /**
-     * Calculate the sum of all values in the time series as the sorting key.
-     */
-    private double calculateSum(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return 0.0;
-        }
-
-        double sum = 0.0;
-        for (Sample sample : samples) {
-            if (sample != null && !Double.isNaN(sample.getValue())) {
-                sum += sample.getValue();
-            }
-        }
-
-        return sum;
-    }
-
-    /**
-     * Calculate the standard deviation of all values in the time series as the sorting key.
-     */
-    private double calculateStddev(TimeSeries timeSeries) {
-        SampleList samples = timeSeries.getSamples();
-        if (samples.isEmpty()) {
-            return 0.0;
-        }
-        double stddev = 0.0;
-        if (samples.size() > 1) {
-            double avg = calculateAverage(timeSeries);
-            double sumOfSquaredDifferences = StreamSupport.stream(samples.spliterator(), false)
-                .filter(s -> s != null && !Double.isNaN(s.getValue()))
-                .map(s -> Math.pow(s.getValue() - avg, 2))
-                .mapToDouble(Double::doubleValue)
-                .sum();
-            double variance = sumOfSquaredDifferences / (samples.size() - 1);
-            stddev = Math.sqrt(variance);
-        }
-        return stddev;
-    }
-
-    /**
-     * Extract the alias from the time series labels as the sorting key.
-     * null alias will be treated as empty string
-     *
-     * @param timeSeries The time series to extract the alias from
-     * @return The value of the alias
-     */
-    private String extractAlias(TimeSeries timeSeries) {
-        return timeSeries.getAlias() == null ? "" : timeSeries.getAlias();
     }
 
     @Override

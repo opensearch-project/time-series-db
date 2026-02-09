@@ -117,7 +117,6 @@ public class RestM3QLAction extends BaseTSDBAction {
 
     private static final Logger logger = LogManager.getLogger(RestM3QLAction.class);
 
-    private volatile boolean forceNoPushdown;
     // Cluster service for accessing index settings
     private final ClusterService clusterService;
 
@@ -160,14 +159,6 @@ public class RestM3QLAction extends BaseTSDBAction {
         RemoteIndexSettingsCache settingsCache
     ) {
         super(clusterSettings);
-        // Initialize no-pushdown flag from current settings
-        this.forceNoPushdown = clusterSettings.get(TSDBPlugin.TSDB_ENGINE_FORCE_NO_PUSHDOWN);
-
-        // Register listener to update no-pushdown flag when setting changes
-        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.TSDB_ENGINE_FORCE_NO_PUSHDOWN, newValue -> {
-            this.forceNoPushdown = newValue;
-            logger.info("Updated force_no_pushdown setting to: {}", newValue);
-        });
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.settingsCache = settingsCache;

@@ -561,7 +561,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
     public void testKnownUnimplementedFunctionReturnsHttp501() throws Exception {
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
             .withPath("/_m3ql")
-            .withParams(Map.of("query", "fetch service:api | logarithm"))
+            .withParams(Map.of("query", "fetch service:api | constantLine"))
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
 
@@ -571,7 +571,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         String responseContent = channel.capturedResponse().content().utf8ToString();
         assertThat(responseContent, containsString("error"));
         assertThat(responseContent, containsString("not implemented"));
-        assertThat(responseContent, containsString("logarithm"));
+        assertThat(responseContent, containsString("constantLine"));
     }
 
     public void testKnownUnimplementedFunctionWithExplainMode() throws Exception {
@@ -1079,7 +1079,7 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         // Execute a query with known unimplemented function
         FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
             .withPath("/_m3ql")
-            .withParams(Map.of("query", "fetch service:api | logarithm"))
+            .withParams(Map.of("query", "fetch service:api | constantLine"))
             .build();
         FakeRestChannel channel = new FakeRestChannel(request, true, 1);
 

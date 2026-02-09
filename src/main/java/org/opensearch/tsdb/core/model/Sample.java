@@ -90,6 +90,7 @@ public interface Sample {
             case FLOAT_SAMPLE -> FloatSample.readFrom(in, timestamp);
             case SUM_COUNT_SAMPLE -> SumCountSample.readFrom(in, timestamp);
             case SORTED_VALUES_SAMPLE -> SortedValuesSample.readFrom(in, timestamp);
+            case MIN_MAX_SAMPLE -> MinMaxSample.readFrom(in, timestamp);
         };
     }
 }

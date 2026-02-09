@@ -21,7 +21,9 @@ import org.opensearch.tsdb.core.model.LabelConstants;
 import org.opensearch.tsdb.lang.m3.common.AggregationType;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DivideScalarPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DividePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
@@ -31,6 +33,7 @@ import org.opensearch.tsdb.lang.m3.stage.AbsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasByTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
+import org.opensearch.tsdb.lang.m3.stage.ChangedStage;
 import org.opensearch.tsdb.lang.m3.stage.CopyStage;
 import org.opensearch.tsdb.lang.m3.stage.ExcludeByTagStage;
 import org.opensearch.tsdb.lang.m3.stage.TagSubStage;
@@ -38,16 +41,20 @@ import org.opensearch.tsdb.lang.m3.stage.FallbackSeriesBinaryStage;
 import org.opensearch.tsdb.lang.m3.stage.FallbackSeriesUnaryStage;
 import org.opensearch.tsdb.lang.m3.stage.AvgStage;
 import org.opensearch.tsdb.lang.m3.stage.CountStage;
+import org.opensearch.tsdb.lang.m3.stage.DivideScalarStage;
 import org.opensearch.tsdb.lang.m3.stage.DivideStage;
 import org.opensearch.tsdb.lang.m3.stage.HistogramPercentileStage;
 import org.opensearch.tsdb.lang.m3.stage.IntersectStage;
 import org.opensearch.tsdb.lang.m3.stage.KeepLastValueStage;
+import org.opensearch.tsdb.lang.m3.stage.LogarithmStage;
 import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
+import org.opensearch.tsdb.lang.m3.stage.OffsetStage;
 import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondRateStage;
 import org.opensearch.tsdb.lang.m3.stage.PerSecondStage;
 import org.opensearch.tsdb.lang.m3.stage.PercentileOfSeriesStage;
+import org.opensearch.tsdb.lang.m3.stage.RangeStage;
 import org.opensearch.tsdb.lang.m3.stage.IsNonNullStage;
 import org.opensearch.tsdb.lang.m3.stage.RemoveEmptyStage;
 import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
@@ -57,9 +64,11 @@ import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
 import org.opensearch.tsdb.lang.m3.stage.HeadStage;
 import org.opensearch.tsdb.lang.m3.stage.ShowTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
+import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
 import org.opensearch.tsdb.lang.m3.stage.SustainStage;
 import org.opensearch.tsdb.lang.m3.stage.SubtractStage;
 import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
+import org.opensearch.tsdb.lang.m3.stage.TopKStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.MultiplyStage;
 import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
@@ -78,8 +87,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PercentileOfSeriesPlanNode;
@@ -89,9 +100,11 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScaleToSecondsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
@@ -253,6 +266,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             case AggregationType.MAX -> new MaxStage(planNode.getTags());
             case AggregationType.MULTIPLY -> new MultiplyStage(planNode.getTags());
             case AggregationType.COUNT -> new CountStage(planNode.getTags());
+            case AggregationType.RANGE -> new RangeStage(planNode.getTags());
         };
 
         stageStack.add(stage);
@@ -281,6 +295,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         validateChildCountExact(planNode, 2);
 
         return unionAndBinaryHandler(planNode);
+    }
+
+    @Override
+    public ComponentHolder visit(ChangedPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new ChangedStage());
+        return planNode.getChildren().getFirst().accept(this);
     }
 
     @Override
@@ -436,6 +457,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
+    public ComponentHolder visit(LogarithmPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new LogarithmStage());
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
     public ComponentHolder visit(MovingPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
@@ -475,6 +503,20 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
         stageStack.add(new DerivativeStage());
 
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(DivideScalarPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new DivideScalarStage(planNode.getDivisor()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(OffsetPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new OffsetStage(planNode.getOffset()));
         return planNode.getChildren().getFirst().accept(this);
     }
 
@@ -543,6 +585,17 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // SortStage is a global aggregation that should be used as a coordinator stage
         SortStage sortStage = new SortStage(planNode.getSortBy(), planNode.getSortOrder());
         stageStack.add(sortStage);
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(TopKPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+
+        // TopKStage is a global aggregation with pushdown optimization
+        TopKStage topKStage = new TopKStage(planNode.getK(), planNode.getSortBy(), planNode.getSortOrder());
+        stageStack.add(topKStage);
 
         return planNode.getChildren().getFirst().accept(this);
     }
@@ -625,6 +678,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         long duration = getDurationAsLong(planNode.getDuration());
         stageStack.add(new SustainStage(duration));
 
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(SqrtPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new SqrtStage());
         return planNode.getChildren().getFirst().accept(this);
     }
 

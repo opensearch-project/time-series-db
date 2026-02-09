@@ -175,6 +175,7 @@ public class ClosedChunkIndexManager implements Closeable {
 
     // visible for testing.
     synchronized void runOptimization() {
+        log.debug("Starting optimization cycle");
         try {
             if (Instant.now().isAfter(lastRetentionTime.plusMillis(retention.getFrequency()))) {
                 lastRetentionTime = Instant.now();
@@ -258,9 +259,10 @@ public class ClosedChunkIndexManager implements Closeable {
             } catch (Exception e) {
                 log.error("Failed to record index size metric", e);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Failed to run optimization cycle", e);
         }
+        log.debug("Optimization cycle completed");
     }
 
     private void logCurrentAgeOfIndexes(List<ClosedChunkIndex> currentIndexes, List<ClosedChunkIndex> removedIndexes) {
@@ -410,6 +412,7 @@ public class ClosedChunkIndexManager implements Closeable {
     private Set<ClosedChunkIndex> closeIndexes(Set<ClosedChunkIndex> indexes) throws InterruptedException {
         var closedIndexes = new HashSet<ClosedChunkIndex>();
         for (ClosedChunkIndex index : indexes) {
+            log.debug("Attempting to close index: {}", index.getMetadata().directoryName());
             try {
                 var readerManager = index.getDirectoryReaderManager();
                 var reader = readerManager.acquire();
@@ -451,6 +454,7 @@ public class ClosedChunkIndexManager implements Closeable {
     }
 
     private void deleteOrphanDirectories() throws IOException {
+        log.debug("Starting cleanup of orphan directories");
         List<Path> currentPaths = new ArrayList<>();
         // prevent indexes pending removal from being deleted to allow proper closing sequence to be executed.
         Set<Path> livePaths = pendingClosureIndexes.stream().map(ClosedChunkIndex::getPath).collect(Collectors.toSet());
@@ -473,6 +477,7 @@ public class ClosedChunkIndexManager implements Closeable {
                 log.info("Deleted orphan directory: {}", path);
             }
         }
+        log.debug("Cleanup of orphan directories completed");
     }
 
     /**

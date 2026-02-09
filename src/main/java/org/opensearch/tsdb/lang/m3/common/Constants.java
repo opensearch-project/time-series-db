@@ -51,13 +51,10 @@ public class Constants {
             "asMultiBurnRate",
             "burnRate",
             "burnRateMultiplier",
-            "changed",
             "constantLine",
-            "divideScalar",
             "divideWhen",
             "histogramCDF",
             "jainCP",
-            "logarithm",
             "mapKey",
             "mockFetch",
             "mockFetchLine",
@@ -66,24 +63,17 @@ public class Constants {
             "multiBurnRate",
             "nonNegativeDerivative",
             "nPercentile",
-            "offset",
             "promHistogramPercentile",
-            "range",
-            "rangeOfSeries",
             "removeAbovePercentile",
             "removeBelowPercentile",
-            "round",
             "setDiff",
             "showAnomalyThresholds",
             "stdev",
-            "sqrt",
-            "squareRoot",
             "sustainedAbove",
             "sustainedBelow",
             "switch",
             "tagCompare",
             "tail",
-            "topK",
             "timestamp",
             "toHistogram",
             "toHistogramLinearBuckets",
@@ -134,6 +124,11 @@ public class Constants {
          * derivative function name.
          */
         public static final String DERIVATIVE = "derivative";
+
+        /**
+         * changed function name.
+         */
+        public static final String CHANGED = "changed";
 
         /**
          * fetch function name.
@@ -236,6 +231,11 @@ public class Constants {
         public static final String SORT_SERIES = "sortSeries";
 
         /**
+         * topK function name.
+         */
+        public static final String TOP_K = "topK";
+
+        /**
          * summarize function name.
          */
         public static final String SUMMARIZE = "summarize";
@@ -264,6 +264,41 @@ public class Constants {
          * transformNull function name.
          */
         public static final String TRANSFORM_NULL = "transformNull";
+
+        /**
+         * logarithm function name.
+         */
+        public static final String LOGARITHM = "logarithm";
+
+        /**
+         * log function alias for logarithm.
+         */
+        public static final String LOG = "log";
+
+        /**
+         * sqrt function name.
+         */
+        public static final String SQRT = "sqrt";
+
+        /**
+         * squareRoot function name (alias for sqrt).
+         */
+        public static final String SQUARE_ROOT = "squareRoot";
+
+        /**
+         * offset function name.
+         */
+        public static final String OFFSET = "offset";
+
+        /**
+         * divideScalar function name.
+         */
+        public static final String DIVIDE_SCALAR = "divideScalar";
+
+        /**
+         * round function name.
+         */
+        public static final String ROUND = "round";
 
         /**
          * Functions used for value comparison.
@@ -428,6 +463,16 @@ public class Constants {
              * sumSeries aggregation function name.
              */
             public static final String SUM_SERIES = "sumSeries";
+
+            /**
+             * range aggregation function name.
+             */
+            public static final String RANGE = "range";
+
+            /**
+             * rangeOfSeries aggregation function name.
+             */
+            public static final String RANGE_OF_SERIES = "rangeOfSeries";
         }
 
         /**

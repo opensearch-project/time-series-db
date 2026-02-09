@@ -162,7 +162,35 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: { __name__: "status:200 method:POST", name: http_requests_seriesC, method: POST, status: "200" }
+          - metric: { name: http_requests_seriesC, method: POST, status: "200" }
+            alias: "status:200 method:POST"
             values: [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10]
-          - metric: { __name__: "status:500 method:POST", name: http_requests_seriesD, method: POST, status: "500" }
+          - metric: { name: http_requests_seriesD, method: POST, status: "500" }
+            alias: "status:500 method:POST"
             values: [26, 28, 31, 16, 12, 6, -2, 12, null, 2]
+    - name: "pipeline - changed function with linear series"
+      type: "m3ql"
+      indices: "functional_correctness_test"
+      query: "fetch name:http_requests_seriesA | changed"
+      time_config:
+        min_timestamp: "2025-01-01T01:00:00Z"
+        max_timestamp: "2025-01-01T02:40:00Z"
+        step: "10m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_seriesA", method: "GET", status: "200" }
+            values: [0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    - name: "pipeline - changed function with series containing nulls"
+      type: "m3ql"
+      indices: "functional_correctness_test"
+      query: "fetch name:http_requests_seriesB | changed"
+      time_config:
+        min_timestamp: "2025-01-01T01:00:00Z"
+        max_timestamp: "2025-01-01T02:40:00Z"
+        step: "10m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_seriesB", method: "GET", status: "200" }
+            values: [0, 1, 1, 1, 1, 0, 0, 0, 0, 0]

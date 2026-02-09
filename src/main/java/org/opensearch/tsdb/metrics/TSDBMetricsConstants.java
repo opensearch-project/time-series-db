@@ -124,8 +124,8 @@ public final class TSDBMetricsConstants {
     /** Histogram: Number of time series returned per query */
     public static final String AGGREGATION_SERIES_TOTAL = "tsdb.aggregation.series.total";
 
-    /** Histogram: Circuit breaker bytes tracked per aggregation request */
-    public static final String AGGREGATION_CIRCUIT_BREAKER_BYTES = "tsdb.aggregation.circuit_breaker.bytes";
+    /** Histogram: Circuit breaker MiB tracked per aggregation request */
+    public static final String AGGREGATION_CIRCUIT_BREAKER_MIB = "tsdb.aggregation.circuit_breaker.mib";
 
     /** Counter: Circuit breaker trips (when memory limit exceeded) */
     public static final String AGGREGATION_CIRCUIT_BREAKER_TRIPS_TOTAL = "tsdb.aggregation.circuit_breaker.trips.total";
@@ -282,8 +282,8 @@ public final class TSDBMetricsConstants {
     public static final String AGGREGATION_CHUNKS_FOR_DOC_ERRORS_TOTAL_DESC = "Total errors in chunksForDoc() operations";
     public static final String AGGREGATION_RESULTS_TOTAL_DESC = "Total queries tagged by result status (empty or hits)";
     public static final String AGGREGATION_SERIES_TOTAL_DESC = "Number of time series returned per query";
-    public static final String AGGREGATION_CIRCUIT_BREAKER_BYTES_DESC =
-        "Circuit breaker bytes tracked per aggregation request (measures memory usage)";
+    public static final String AGGREGATION_CIRCUIT_BREAKER_MIB_DESC =
+        "Circuit breaker MiB tracked per aggregation request (measures memory usage)";
     public static final String AGGREGATION_CIRCUIT_BREAKER_TRIPS_TOTAL_DESC = "Total circuit breaker trips when memory limit exceeded";
     public static final String AGGREGATION_PIPELINE_STAGE_LATENCY_DESC = "Latency per pipeline stage execution";
 
@@ -382,4 +382,7 @@ public final class TSDBMetricsConstants {
 
     /** Unit for bytes */
     public static final String UNIT_BYTES = "bytes";
+
+    /** Unit for mebibytes (UCUM: MiBy) */
+    public static final String UNIT_MEBIBYTES = "MiBy";
 }

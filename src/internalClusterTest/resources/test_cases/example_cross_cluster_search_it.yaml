@@ -46,7 +46,7 @@ test_case:
         max_timestamp: "now-10m"
         step: "10m"
       regular_metrics:
-        - labels: "__name__:http_requests,region:local"
+        - labels: "name:http_requests,region:local"
           values: [100, 110, 120, 130, 140]
 
     # Data for cluster_a
@@ -58,7 +58,7 @@ test_case:
         max_timestamp: "now-10m"
         step: "10m"
       regular_metrics:
-        - labels: "__name__:http_requests,region:us-west"
+        - labels: "name:http_requests,region:us-west"
           values: [10, 20, 30, 40, 50]
 
     # Data for cluster_b
@@ -70,7 +70,7 @@ test_case:
         max_timestamp: "now-10m"
         step: "10m"
       regular_metrics:
-        - labels: "__name__:http_requests,region:us-east"
+        - labels: "name:http_requests,region:us-east"
           values: [15, 25, 35, 45, 55]
 
   # CCS queries targeting multiple clusters
@@ -78,7 +78,7 @@ test_case:
     # Query targeting remote cluster only
     - name: "remote_cluster_a_query"
       type: "m3ql"
-      query: "fetch __name__:http_requests | sumSeries region"
+      query: "fetch name:http_requests | sumSeries region"
       indices: "cluster_a:remote_metrics_a"
       time_config:
         min_timestamp: "now-60m"
@@ -93,7 +93,7 @@ test_case:
     # Cross-cluster query targeting both remote clusters - minimize_roundtrip: true
     - name: "cross_cluster_query-minimize_roundtrips-true"
       type: "m3ql"
-      query: "fetch __name__:http_requests | sumSeries __name__"
+      query: "fetch name:http_requests | sumSeries name"
       indices: "cluster_a:remote_metrics_a,cluster_b:remote_metrics_b"
       ccs_minimize_roundtrips: true
       time_config:
@@ -103,13 +103,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "http_requests"}
+          - metric: {name: "http_requests"}
             values: [null, 25, 45, 65, 85, 105]
 
     # Cross-cluster query targeting both remote clusters
     - name: "cross_cluster_query-minimize_roundtrips-false"
       type: "m3ql"
-      query: "fetch __name__:http_requests | sumSeries __name__"
+      query: "fetch name:http_requests | sumSeries name"
       indices: "cluster_a:remote_metrics_a,cluster_b:remote_metrics_b"
       ccs_minimize_roundtrips: false
       time_config:
@@ -119,13 +119,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "http_requests"}
+          - metric: {name: "http_requests"}
             values: [null, 25, 45, 65, 85, 105]
 
     # Query targeting local and remote clusters together
     - name: "local_and_remote_query-minimize_roundtrips-true"
       type: "m3ql"
-      query: "fetch __name__:http_requests | sumSeries"
+      query: "fetch name:http_requests | sumSeries"
       indices: "local_metrics,cluster_a:remote_metrics_a"
       ccs_minimize_roundtrips: true
       time_config:
@@ -141,7 +141,7 @@ test_case:
     # Query targeting local and remote clusters together
     - name: "local_and_remote_query-minimize_roundtrips-false"
       type: "m3ql"
-      query: "fetch __name__:http_requests | sumSeries"
+      query: "fetch name:http_requests | sumSeries"
       indices: "local_metrics,cluster_a:remote_metrics_a"
       ccs_minimize_roundtrips: false
       time_config:

@@ -39,7 +39,7 @@ test_case:
         max_timestamp: "2025-01-01T00:02:00Z"
         step: "10s"  # Data ingested every 10s
       regular_metrics:
-        - labels: "__name__:default_metric,type:counter,service:api"
+        - labels: "name:default_metric,type:counter,service:api"
           values: [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220]
 
     # Data in 40d retention index with 60s step
@@ -50,7 +50,7 @@ test_case:
         max_timestamp: "2025-01-01T00:02:00Z"
         step: "60s"  # Data ingested every 60s to match index setting
       regular_metrics:
-        - labels: "__name__:large_step_metric,type:counter,service:batch"
+        - labels: "name:large_step_metric,type:counter,service:batch"
           values: [200, 260, 320]  # 3 points at 0s, 60s, 120s
 
   # M3QL queries - test various step size scenarios
@@ -61,7 +61,7 @@ test_case:
     - name: "fetch with 10s step from index setting (2d retention)"
       type: "m3ql"
       indices: "2d"
-      query: "fetch __name__:default_metric"
+      query: "fetch name:default_metric"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
         max_timestamp: "2025-01-01T00:02:00Z"
@@ -70,7 +70,7 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+          - metric: {name: "default_metric", type: "counter", service: "api"}
             values: [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210]
 
     # Test 2: Query with 25s step parameter (overrides 10s index setting)
@@ -81,7 +81,7 @@ test_case:
     - name: "fetch with 25s step overriding 2d index setting"
       type: "m3ql"
       indices: "2d"
-      query: "fetch __name__:default_metric"
+      query: "fetch name:default_metric"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
         max_timestamp: "2025-01-01T00:02:00Z"
@@ -89,7 +89,7 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+          - metric: {name: "default_metric", type: "counter", service: "api"}
             values: [120, 140, 170, 190, 210]
 
     # Test 3: Query with 1 minute (60s) step parameter
@@ -100,7 +100,7 @@ test_case:
     - name: "fetch with 60s step overriding 2d index setting"
       type: "m3ql"
       indices: "2d"
-      query: "fetch __name__:default_metric"
+      query: "fetch name:default_metric"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
         max_timestamp: "2025-01-01T00:02:00Z"
@@ -108,7 +108,7 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "default_metric", type: "counter", service: "api"}
+          - metric: {name: "default_metric", type: "counter", service: "api"}
             values: [150, 210]  # 2 points at lookback from 0s (→50s), 60s (→110s)
 
     # Test 4: Query without step parameter on 40d retention index with 60s setting
@@ -119,7 +119,7 @@ test_case:
     - name: "fetch with 60s step from 40d index setting"
       type: "m3ql"
       indices: "40d"
-      query: "fetch __name__:large_step_metric"
+      query: "fetch name:large_step_metric"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
         max_timestamp: "2025-01-01T00:02:00Z"
@@ -128,5 +128,5 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {__name__: "large_step_metric", type: "counter", service: "batch"}
+          - metric: {name: "large_step_metric", type: "counter", service: "batch"}
             values: [200, 260]  # 2 points at 0s, 60s - perfect alignment

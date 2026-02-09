@@ -14,5 +14,6 @@ import java.util.Map;
 /**
  * Expected data configuration for time series testing
  */
-public record ExpectedData(@JsonProperty("metric") Map<String, String> metric, @JsonProperty("values") Double[] values) {
+public record ExpectedData(@JsonProperty("metric") Map<String, String> metric, @JsonProperty("values") Double[] values,
+    @JsonProperty("alias") String alias) {
 }
