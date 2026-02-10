@@ -27,6 +27,8 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
 
+import static org.opensearch.tsdb.metrics.TSDBMetricsConstants.NANOS_PER_MILLI;
+
 /**
  * Transforms OpenSearch search responses into Prometheus-compatible matrix format.
  *
@@ -104,9 +106,6 @@ public class PromMatrixResponseListener extends RestToXContentListener<SearchRes
 
     // Aggregator name for profile extraction
     private static final String TIME_SERIES_UNFOLD_AGGREGATOR_NAME = TimeSeriesUnfoldAggregator.class.getSimpleName();
-
-    // Conversion factor: nanoseconds per millisecond
-    private static final double NANOS_PER_MILLI = 1_000_000.0;
 
     private final String finalAggregationName;
 
