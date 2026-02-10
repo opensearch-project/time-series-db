@@ -15,6 +15,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
@@ -146,8 +147,8 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
 
             // Report memory overhead for new groups (batching handled by aggregator)
             if (isNewGroup && circuitBreakerConsumer != null) {
-                long groupOverhead = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + groupLabels.ramBytesUsed() + RamUsageEstimator
-                    .shallowSizeOfInstance(ArrayList.class);
+                long groupOverhead = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + groupLabels.ramBytesUsed()
+                    + SampleList.ARRAYLIST_OVERHEAD;
                 circuitBreakerConsumer.accept(groupOverhead);
             }
         }

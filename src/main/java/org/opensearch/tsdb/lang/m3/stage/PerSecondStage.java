@@ -166,15 +166,6 @@ public class PerSecondStage implements UnaryPipelineStage {
      */
     @Override
     public long estimateMemoryOverhead(List<TimeSeries> input) {
-        if (input == null || input.isEmpty()) {
-            return 0;
-        }
-
-        long totalOverhead = 0;
-        for (TimeSeries ts : input) {
-            // New TimeSeries object + new sample list (labels are reused by reference)
-            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().ramBytesUsed();
-        }
-        return totalOverhead;
+        return UnaryPipelineStage.estimateSampleReuseOverhead(input);
     }
 }

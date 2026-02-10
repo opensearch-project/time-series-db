@@ -37,6 +37,9 @@ public interface SampleList extends Iterable<Sample>, Accountable {
      * With scalar replacement (common in hot paths): 16 bytes (8-byte timestamp + 8-byte value)
      * Without scalar replacement: ~32 bytes (includes object header)
      * Conservative estimate assuming scalar replacement.
+     *
+     * TODO: Different Sample implementations have different sizes (e.g., SortedValuesSample has an ArrayList,
+     * SumCountSample has extra fields). Consider a more accurate per-type estimation in the future.
      */
     long ESTIMATED_SAMPLE_SIZE = 16;
 
@@ -108,13 +111,6 @@ public interface SampleList extends Iterable<Sample>, Accountable {
      *       clear about the cost
      */
     List<Sample> toList();
-
-    /**
-     * Estimate the memory usage of this sample list in bytes.
-     * @return memory usage in bytes
-     */
-    @Override
-    long ramBytesUsed();
 
     /**
      * Wrap a java List to {@link SampleList}, it's helpful when some stage need to create an instantiated sample,

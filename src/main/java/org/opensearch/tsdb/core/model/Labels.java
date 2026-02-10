@@ -101,13 +101,6 @@ public interface Labels extends Accountable {
     Labels deepCopy();
 
     /**
-     * Estimate the memory footprint of this Labels instance in bytes.
-     * @return memory usage in bytes
-     */
-    @Override
-    long ramBytesUsed();
-
-    /**
      * Extract sorted names (label names) from this Labels instance.
      * Returns a list of all label names sorted by name.
      *

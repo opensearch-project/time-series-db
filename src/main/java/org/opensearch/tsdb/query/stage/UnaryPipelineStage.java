@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.query.stage;
 
 import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 
@@ -135,5 +136,49 @@ public interface UnaryPipelineStage extends PipelineStage {
      */
     default List<TimeSeries> processWithContext(List<TimeSeries> input, boolean coordinatorExecution, LongConsumer circuitBreakerConsumer) {
         return process(input);
+    }
+
+    // ========== Memory Estimation Helpers ==========
+
+    /**
+     * Estimate memory overhead for stages that create deep copies of time series.
+     *
+     * <p>Use this for stages where each output time series is a full copy including
+     * new labels and samples (e.g., CopyStage, mapper stages that modify labels).</p>
+     *
+     * @param input The input time series
+     * @return Estimated bytes for ArrayList + deep copy of each TimeSeries
+     */
+    static long estimateDeepCopyOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+        long totalOverhead = SampleList.ARRAYLIST_OVERHEAD;
+        for (TimeSeries ts : input) {
+            totalOverhead += ts.ramBytesUsed();
+        }
+        return totalOverhead;
+    }
+
+    /**
+     * Estimate memory overhead for stages that reuse labels but create new samples.
+     *
+     * <p>Use this for stages where output time series have new TimeSeries objects
+     * and new sample lists, but labels are reused by reference (e.g., derivative,
+     * integral, per_second, transform_null).</p>
+     *
+     * @param input The input time series
+     * @return Estimated bytes for new TimeSeries objects with reused labels
+     */
+    static long estimateSampleReuseOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // New TimeSeries object + new sample list (labels are reused by reference)
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().ramBytesUsed();
+        }
+        return totalOverhead;
     }
 }

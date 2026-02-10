@@ -813,8 +813,8 @@ public class ByteLabels implements Labels {
      */
     @Override
     public long ramBytesUsed() {
-        // SHALLOW_SIZE includes the data reference, so add the array's overhead + content
-        return SHALLOW_SIZE + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + data.length;
+        // SHALLOW_SIZE includes the data reference, so add the array's full size
+        return SHALLOW_SIZE + RamUsageEstimator.sizeOf(data);
     }
 
     /**

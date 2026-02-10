@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.core.model;
 
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
@@ -754,13 +755,16 @@ public class ByteLabelsTests extends OpenSearchTestCase {
         assertTrue("Small labels should use more memory than empty", smallSize > emptySize);
         assertTrue("Large labels should use more memory than small", largeSize > smallSize);
 
-        // The difference should be roughly proportional to the data length difference
-        int emptyDataLen = empty.getDataForTesting().length;
-        int smallDataLen = small.getDataForTesting().length;
-        int largeDataLen = large.getDataForTesting().length;
+        // Memory difference should equal RamUsageEstimator.sizeOf() difference (which includes alignment)
+        byte[] emptyData = empty.getDataForTesting();
+        byte[] smallData = small.getDataForTesting();
+        byte[] largeData = large.getDataForTesting();
 
-        assertEquals("Memory difference should equal data length difference", smallDataLen - emptyDataLen, smallSize - emptySize);
-        assertEquals("Memory difference should equal data length difference", largeDataLen - smallDataLen, largeSize - smallSize);
+        long expectedSmallVsEmpty = RamUsageEstimator.sizeOf(smallData) - RamUsageEstimator.sizeOf(emptyData);
+        long expectedLargeVsSmall = RamUsageEstimator.sizeOf(largeData) - RamUsageEstimator.sizeOf(smallData);
+
+        assertEquals("Memory difference should equal sizeOf difference", expectedSmallVsEmpty, smallSize - emptySize);
+        assertEquals("Memory difference should equal sizeOf difference", expectedLargeVsSmall, largeSize - smallSize);
 
         logger.info("ramBytesUsed validation: empty={}, small={}, large={}", emptySize, smallSize, largeSize);
     }

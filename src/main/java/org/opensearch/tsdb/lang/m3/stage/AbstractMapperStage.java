@@ -7,7 +7,6 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
-import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -178,16 +177,7 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
      */
     @Override
     public long estimateMemoryOverhead(List<TimeSeries> input) {
-        if (input == null || input.isEmpty()) {
-            return 0;
-        }
-
-        // Result ArrayList + new TimeSeries objects (delegated estimation)
-        long totalOverhead = RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
-        for (TimeSeries ts : input) {
-            totalOverhead += ts.ramBytesUsed();
-        }
-        return totalOverhead;
+        return UnaryPipelineStage.estimateDeepCopyOverhead(input);
     }
 
     @Override

@@ -473,8 +473,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             List<Sample> alignedSamples = new ArrayList<>(allSamples.size());
 
             // Accumulate circuit breaker bytes for aligned samples list
-            bytesForThisDoc += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class) + (allSamples.size()
-                * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            bytesForThisDoc += SampleList.ARRAYLIST_OVERHEAD + (allSamples.size() * TimeSeries.ESTIMATED_SAMPLE_SIZE);
 
             long lastAlignedTimestamp = Long.MIN_VALUE;
             for (Sample sample : allSamples) {
@@ -509,8 +508,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Accumulate circuit breaker bytes for new bucket (if this is the first time series in this bucket)
             if (isNewBucket) {
-                bytesForThisDoc += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class)
-                    + RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY;
+                bytesForThisDoc += SampleList.ARRAYLIST_OVERHEAD + RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY;
             }
 
             // Find existing time series with same labels, or create new one
@@ -641,9 +639,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Track circuit breaker for processed time series storage
                 // Estimate the size of the processed time series list
-                long processedBytes = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + RamUsageEstimator.shallowSizeOfInstance(
-                    ArrayList.class
-                );
+                long processedBytes = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + SampleList.ARRAYLIST_OVERHEAD;
                 for (TimeSeries ts : processedTimeSeries) {
                     processedBytes += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getLabels().ramBytesUsed();
                     processedBytes += ts.getSamples().size() * TimeSeries.ESTIMATED_SAMPLE_SIZE;

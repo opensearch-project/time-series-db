@@ -27,8 +27,6 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
-import org.apache.lucene.util.RamUsageEstimator;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -286,7 +284,7 @@ public class KeepLastValueStage implements UnaryPipelineStage {
 
                 // Only track expansion (new samples beyond current)
                 int expansion = Math.max(0, potentialSamples - currentSamples);
-                totalOverhead += RamUsageEstimator.shallowSizeOfInstance(ArrayList.class) + (expansion * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+                totalOverhead += SampleList.ARRAYLIST_OVERHEAD + (expansion * TimeSeries.ESTIMATED_SAMPLE_SIZE);
             }
         }
 

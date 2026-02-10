@@ -7,7 +7,6 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
-import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
@@ -71,16 +70,7 @@ public class CopyStage implements UnaryPipelineStage {
      */
     @Override
     public long estimateMemoryOverhead(List<TimeSeries> input) {
-        if (input == null || input.isEmpty()) {
-            return 0;
-        }
-
-        // Result ArrayList + deep copy of each TimeSeries
-        long totalOverhead = RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
-        for (TimeSeries ts : input) {
-            totalOverhead += ts.ramBytesUsed();
-        }
-        return totalOverhead;
+        return UnaryPipelineStage.estimateDeepCopyOverhead(input);
     }
 
     /**
