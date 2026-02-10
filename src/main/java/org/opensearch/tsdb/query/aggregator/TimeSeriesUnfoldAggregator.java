@@ -12,6 +12,7 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.search.aggregations.Aggregator;
 import org.opensearch.search.aggregations.AggregatorFactories;
@@ -240,14 +241,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                 circuitBreakerBytes += bytes;
 
                 // Log at DEBUG level for normal tracking
-                if (logger.isDebugEnabled()) {
-                    logger.debug(
+                logger.debug(
+                    () -> new ParameterizedMessage(
                         "Circuit breaker allocation: +{} bytes, total={} bytes, aggregator={}",
                         bytes,
                         circuitBreakerBytes,
                         name()
-                    );
-                }
+                    )
+                );
 
             } catch (CircuitBreakingException e) {
                 // Try to get the original query source from SearchContext
@@ -300,14 +301,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             addRequestCircuitBreakerBytes(bytes);
             circuitBreakerBytes -= bytesToRelease;
 
-            if (logger.isDebugEnabled()) {
-                logger.debug(
+            logger.debug(
+                () -> new ParameterizedMessage(
                     "Circuit breaker release: -{} bytes, total={} bytes, aggregator={}",
                     bytesToRelease,
                     circuitBreakerBytes,
                     name()
-                );
-            }
+                )
+            );
         }
     }
 
@@ -725,13 +726,13 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         flushPendingCircuitBreakerBytes();
 
         // Log circuit breaker summary before cleanup
-        if (logger.isDebugEnabled()) {
-            logger.debug(
+        logger.debug(
+            () -> new ParameterizedMessage(
                 "Closing aggregator '{}': total circuit breaker bytes tracked={}",
                 name(),
                 RamUsageEstimator.humanReadableUnits(circuitBreakerBytes)
-            );
-        }
+            )
+        );
 
         // Clear data structures - circuit breaker will be automatically released
         // by the parent AggregatorBase class when close() is called
