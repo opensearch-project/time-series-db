@@ -130,6 +130,12 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     private long pendingCircuitBreakerBytes = 0;
 
     /**
+     * Total bytes committed to the circuit breaker by this aggregator.
+     * Used for logging (doClose, commitToCircuitBreaker), error reporting on trip, and metrics (passed to ExecutionStats at report time).
+     */
+    private long circuitBreakerBytes = 0;
+
+    /**
      * Circuit breaker batch threshold in bytes (5 MB).
      * When tracking memory in tight loops (e.g., group creation), bytes are accumulated locally
      * and only flushed to the circuit breaker when this threshold is exceeded.
@@ -541,7 +547,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             return results;
         } finally {
             // Emit all metrics in one batch - minimal overhead
-            executionStats.recordMetrics();
+            executionStats.recordMetrics(circuitBreakerBytes);
         }
     }
 
@@ -709,7 +715,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         super.collectDebugInfo(add);
-        executionStats.add(add);
+        executionStats.add(add, circuitBreakerBytes);
         add.accept("stages", stages == null ? "" : stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
     }
 
@@ -752,13 +758,11 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         // Error counts
         long chunksForDocErrors = 0;
 
-        // Circuit breaker tracking
-        long circuitBreakerBytes = 0; // package-private for testing
-
         /**
          * Add debug info to profiler output.
+         * @param circuitBreakerBytes total bytes committed to circuit breaker (supplied by aggregator at report time)
          */
-        void add(BiConsumer<String, Object> add) {
+        void add(BiConsumer<String, Object> add, long circuitBreakerBytes) {
             add.accept(ProfileInfoMapper.TOTAL_DOCS, totalDocCount);
             add.accept(ProfileInfoMapper.LIVE_DOC_COUNT, liveDocCount);
             add.accept(ProfileInfoMapper.CLOSED_DOC_COUNT, closedDocCount);
@@ -779,9 +783,10 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         /**
          * Emit all collected metrics to TSDBMetrics in one batch for minimal overhead.
          * All metrics are batched and emitted together at the end in a finally block.
+         * @param circuitBreakerBytes total bytes committed to circuit breaker (supplied by aggregator at report time)
          */
         // TODO need to go through metrics and figure out if we want to emit metrics even when they are zero
-        void recordMetrics() {
+        void recordMetrics(long circuitBreakerBytes) {
             if (!TSDBMetrics.isInitialized()) {
                 return;
             }
@@ -862,7 +867,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
      * Package-private for testing.
      */
     void setOutputSeriesCountForTesting(int count) {
-        this.outputSeriesCount = count;
+        this.executionStats.outputSeriesCount = count;
     }
 
     /**
@@ -879,5 +884,29 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
      */
     void flushPendingCircuitBreakerBytesForTesting() {
         flushPendingCircuitBreakerBytes();
+    }
+
+    /**
+     * Call recordMetrics on execution stats for testing purposes.
+     * Package-private for testing.
+     */
+    void recordMetricsForTesting() {
+        executionStats.recordMetrics(circuitBreakerBytes);
+    }
+
+    /**
+     * Add circuit breaker bytes for testing (delegates to {@link #trackCircuitBreakerBytesForTesting(long)}).
+     * Package-private for testing.
+     */
+    void addCircuitBreakerBytesForTesting(int bytes) {
+        trackCircuitBreakerBytesForTesting(bytes);
+    }
+
+    /**
+     * Get current circuit breaker bytes for testing.
+     * Package-private for testing.
+     */
+    long getCircuitBreakerBytesForTesting() {
+        return circuitBreakerBytes;
     }
 }
