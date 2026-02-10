@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.core.model;
 
 import org.apache.lucene.util.ArrayUtil;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
 import java.io.IOException;
@@ -23,6 +24,9 @@ import java.util.Objects;
 public class FloatSampleList implements SampleList {
 
     private static final int BUILDER_INITIAL_CAPACITY = 16;
+
+    /** Cached shallow size to avoid reflection at runtime. */
+    private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(FloatSampleList.class);
 
     private final double[] values;
     private final long[] timestamps;
@@ -57,6 +61,12 @@ public class FloatSampleList implements SampleList {
     @Override
     public SampleType getSampleType() {
         return SampleType.FLOAT_SAMPLE;
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        // Shallow size + array contents (timestamps are long[], values are double[])
+        return SHALLOW_SIZE + RamUsageEstimator.sizeOf(timestamps) + RamUsageEstimator.sizeOf(values);
     }
 
     @Override
@@ -242,6 +252,9 @@ public class FloatSampleList implements SampleList {
      */
     public record ConstantList(long minTimestamp, long maxTimestamp, long step, double value) implements SampleList {
 
+        /** Cached shallow size to avoid reflection at runtime. */
+        private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ConstantList.class);
+
         public ConstantList {
             if (minTimestamp > maxTimestamp) {
                 throw new IllegalArgumentException("min timestamp must be smaller or equal to max timestamp");
@@ -271,6 +284,12 @@ public class FloatSampleList implements SampleList {
         @Override
         public SampleType getSampleType() {
             return SampleType.FLOAT_SAMPLE;
+        }
+
+        @Override
+        public long ramBytesUsed() {
+            // Record with 4 primitive fields (3 longs + 1 double = 32 bytes) + object header
+            return SHALLOW_SIZE;
         }
 
         @Override
