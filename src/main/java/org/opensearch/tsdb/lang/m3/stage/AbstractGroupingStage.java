@@ -72,49 +72,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (input == null) {
             throw new NullPointerException(getName() + " stage received null input");
         }
-        return process(input, true, null);
-    }
-
-    /**
-     * Process a list of time series with coordination control and circuit breaker tracking.
-     *
-     * @param input The input time series to process
-     * @param isCoord Whether this is called from coordination aggregator (enables normalization and materialization)
-     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
-     * @return The processed time series
-     */
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord, LongConsumer circuitBreakerConsumer) {
-        if (input == null) {
-            throw new NullPointerException(getName() + " stage received null input");
-        }
-        if (input.isEmpty()) {
-            return input;
-        }
-
-        List<TimeSeries> result;
-        if (groupByLabels.isEmpty()) {
-            // No label grouping: treat all time series as one group
-            // Normalize all series together if called from coordination aggregator
-            List<TimeSeries> normalizedInput = isCoord ? normalizeInputSeries(input) : input;
-            TimeSeries processedSeries = processGroup(normalizedInput, null);
-
-            // Apply sample materialization if called from coordination aggregator
-            if (isCoord && needsMaterialization()) {
-                processedSeries = materializeSamples(processedSeries);
-            }
-
-            return List.of(processedSeries);
-        } else {
-            // Label grouping: group by specified labels and aggregate within each group
-            // Pass circuit breaker consumer for granular tracking of cardinality
-            result = processWithLabelGrouping(input, isCoord, circuitBreakerConsumer);
-            // Apply sample materialization if called from coordination aggregator
-            if (isCoord && needsMaterialization()) {
-                result.replaceAll(this::materializeSamples);
-            }
-
-            return result;
-        }
+        return processWithContext(input, true, null);
     }
 
     /**
@@ -429,6 +387,36 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
      */
     @Override
     public List<TimeSeries> processWithContext(List<TimeSeries> input, boolean coordinatorExecution, LongConsumer circuitBreakerConsumer) {
-        return process(input, coordinatorExecution, circuitBreakerConsumer);
+        if (input == null) {
+            throw new NullPointerException(getName() + " stage received null input");
+        }
+        if (input.isEmpty()) {
+            return input;
+        }
+
+        List<TimeSeries> result;
+        if (groupByLabels.isEmpty()) {
+            // No label grouping: treat all time series as one group
+            // Normalize all series together if called from coordination aggregator
+            List<TimeSeries> normalizedInput = coordinatorExecution ? normalizeInputSeries(input) : input;
+            TimeSeries processedSeries = processGroup(normalizedInput, null);
+
+            // Apply sample materialization if called from coordination aggregator
+            if (coordinatorExecution && needsMaterialization()) {
+                processedSeries = materializeSamples(processedSeries);
+            }
+
+            return List.of(processedSeries);
+        } else {
+            // Label grouping: group by specified labels and aggregate within each group
+            // Pass circuit breaker consumer for granular tracking of cardinality
+            result = processWithLabelGrouping(input, coordinatorExecution, circuitBreakerConsumer);
+            // Apply sample materialization if called from coordination aggregator
+            if (coordinatorExecution && needsMaterialization()) {
+                result.replaceAll(this::materializeSamples);
+            }
+
+            return result;
+        }
     }
 }

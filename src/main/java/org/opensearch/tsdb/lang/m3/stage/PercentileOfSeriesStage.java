@@ -265,12 +265,16 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<SortedV
      * Groups series by labels first, then expands each group into multiple series (one per percentile).
      */
     @Override
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord, java.util.function.LongConsumer circuitBreakerConsumer) {
+    public List<TimeSeries> processWithContext(
+        List<TimeSeries> input,
+        boolean coordinatorExecution,
+        java.util.function.LongConsumer circuitBreakerConsumer
+    ) {
         // First, use the parent's grouping logic to aggregate values (without materialization)
-        List<TimeSeries> groupedSeries = super.process(input, false, circuitBreakerConsumer);
+        List<TimeSeries> groupedSeries = super.processWithContext(input, false, circuitBreakerConsumer);
 
         // If materialization is requested, expand each grouped series into multiple percentile series
-        if (isCoord) {
+        if (coordinatorExecution) {
             // Pre-allocate: each grouped series generates one series per percentile
             List<TimeSeries> result = new ArrayList<>(groupedSeries.size() * percentiles.size());
             for (TimeSeries series : groupedSeries) {

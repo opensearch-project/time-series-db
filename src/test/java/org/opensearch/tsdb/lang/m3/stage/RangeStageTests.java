@@ -278,7 +278,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
     public void testProcessWithoutMaterialization() {
         // Test process() with materialization=false to get MinMaxSample results
         List<TimeSeries> input = TEST_TIME_SERIES;
-        List<TimeSeries> result = rangeStage.process(input, false, null);
+        List<TimeSeries> result = rangeStage.processWithContext(input, false, null);
 
         assertEquals(1, result.size());
         TimeSeries ranged = result.get(0);
