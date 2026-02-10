@@ -330,6 +330,69 @@ public final class TSDBMetricsConstants {
     public static final String COMPACTION_DELETED_TOTAL_DESC = "Total number of indexes deleted by compaction";
 
     // ============================================
+    // Node Runtime Metrics (JVM Heap, CPU)
+    // ============================================
+
+    /** Gauge: JVM heap memory used in bytes */
+    public static final String NODE_JVM_HEAP_USED_BYTES = "tsdb.node.jvm.heap.used_bytes";
+
+    /** Gauge: JVM heap memory max in bytes */
+    public static final String NODE_JVM_HEAP_MAX_BYTES = "tsdb.node.jvm.heap.max_bytes";
+
+    /** Gauge: JVM heap memory used as a percentage (0-100) */
+    public static final String NODE_JVM_HEAP_USED_PERCENT = "tsdb.node.jvm.heap.used_percent";
+
+    /** Gauge: JVM heap memory committed in bytes */
+    public static final String NODE_JVM_HEAP_COMMITTED_BYTES = "tsdb.node.jvm.heap.committed_bytes";
+
+    /** Gauge: JVM non-heap memory used in bytes */
+    public static final String NODE_JVM_NONHEAP_USED_BYTES = "tsdb.node.jvm.nonheap.used_bytes";
+
+    /** Gauge: JVM GC collection count (tagged by gc name) */
+    public static final String NODE_JVM_GC_COLLECTION_COUNT = "tsdb.node.jvm.gc.collection_count";
+
+    /** Gauge: JVM GC collection time in milliseconds (tagged by gc name) */
+    public static final String NODE_JVM_GC_COLLECTION_TIME_MS = "tsdb.node.jvm.gc.collection_time_ms";
+
+    /** Gauge: JVM thread count */
+    public static final String NODE_JVM_THREADS_COUNT = "tsdb.node.jvm.threads.count";
+
+    /** Gauge: JVM uptime in seconds */
+    public static final String NODE_JVM_UPTIME_SECONDS = "tsdb.node.jvm.uptime_seconds";
+
+    /** Gauge: Process CPU usage as a percentage (0-100) */
+    public static final String NODE_PROCESS_CPU_PERCENT = "tsdb.node.process.cpu.percent";
+
+    /** Gauge: OS CPU usage as a percentage (0-100) */
+    public static final String NODE_OS_CPU_PERCENT = "tsdb.node.os.cpu.percent";
+
+    // Node Runtime Metric Descriptions
+    public static final String NODE_JVM_HEAP_USED_BYTES_DESC = "JVM heap memory used in bytes";
+    public static final String NODE_JVM_HEAP_MAX_BYTES_DESC = "JVM heap memory max in bytes";
+    public static final String NODE_JVM_HEAP_USED_PERCENT_DESC = "JVM heap memory used as a percentage";
+    public static final String NODE_JVM_HEAP_COMMITTED_BYTES_DESC = "JVM heap memory committed in bytes";
+    public static final String NODE_JVM_NONHEAP_USED_BYTES_DESC = "JVM non-heap memory used in bytes";
+    public static final String NODE_JVM_GC_COLLECTION_COUNT_DESC = "JVM GC collection count";
+    public static final String NODE_JVM_GC_COLLECTION_TIME_MS_DESC = "JVM GC collection time in milliseconds";
+    public static final String NODE_JVM_THREADS_COUNT_DESC = "JVM thread count";
+    public static final String NODE_JVM_UPTIME_SECONDS_DESC = "JVM uptime in seconds";
+    public static final String NODE_PROCESS_CPU_PERCENT_DESC = "Process CPU usage as a percentage";
+    public static final String NODE_OS_CPU_PERCENT_DESC = "OS CPU usage as a percentage";
+
+    /** Tag key for GC collector name */
+    public static final String TAG_GC_NAME = "gc";
+
+    // ============================================
+    // Metric Units (Additional)
+    // ============================================
+
+    /** Unit for seconds */
+    public static final String UNIT_SECONDS = "s";
+
+    /** Unit for percentage */
+    public static final String UNIT_PERCENT = "%";
+
+    // ============================================
     // Metric Tags
     // ============================================
 
