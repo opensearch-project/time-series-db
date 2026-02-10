@@ -16,23 +16,23 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 import java.util.Locale;
 
 /**
- * HeadPlanNode represents a plan node that handles head operations in M3QL.
+ * TailPlanNode represents a plan node that handles tail operations in M3QL.
  *
- * The head function returns the first n series from the series list.
+ * The tail function returns the last n series from the series list.
  * Takes an optional limit argument (defaults to 10).
  *
  * This is a coordinator-only stage that operates on all time series at once.
  */
-public class HeadPlanNode extends M3PlanNode {
+public class TailPlanNode extends M3PlanNode {
     private final int limit;
 
     /**
-     * Constructor for HeadPlanNode.
+     * Constructor for TailPlanNode.
      *
      * @param id    The node ID
      * @param limit The number of series to return (defaults to 10 if not specified)
      */
-    public HeadPlanNode(int id, int limit) {
+    public TailPlanNode(int id, int limit) {
         super(id);
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be positive, got: " + limit);
@@ -47,7 +47,7 @@ public class HeadPlanNode extends M3PlanNode {
 
     @Override
     public String getExplainName() {
-        return String.format(Locale.ROOT, "HEAD(%d)", limit);
+        return String.format(Locale.ROOT, "TAIL(%d)", limit);
     }
 
     /**
@@ -60,18 +60,18 @@ public class HeadPlanNode extends M3PlanNode {
     }
 
     /**
-     * Creates a HeadPlanNode from a FunctionNode for head function.
+     * Creates a TailPlanNode from a FunctionNode for tail function.
      * Expected format:
-     * - head() -> defaults to 10
-     * - head(5) -> returns first 5 series
+     * - tail() -> defaults to 10
+     * - tail(5) -> returns last 5 series
      *
      * @param functionNode The function node to parse
-     * @return HeadPlanNode instance
+     * @return TailPlanNode instance
      * @throws IllegalArgumentException if the function arguments are invalid
      */
-    public static HeadPlanNode of(FunctionNode functionNode) {
-        int limit = parseLimit(functionNode, "head");
-        return new HeadPlanNode(M3PlannerContext.generateId(), limit);
+    public static TailPlanNode of(FunctionNode functionNode) {
+        int limit = parseLimit(functionNode, "tail");
+        return new TailPlanNode(M3PlannerContext.generateId(), limit);
     }
 
     /**

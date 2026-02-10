@@ -73,7 +73,6 @@ public class Constants {
             "sustainedBelow",
             "switch",
             "tagCompare",
-            "tail",
             "timestamp",
             "toHistogram",
             "toHistogramLinearBuckets",
@@ -139,6 +138,11 @@ public class Constants {
          * head function name.
          */
         public static final String HEAD = "head";
+
+        /**
+         * tail function name.
+         */
+        public static final String TAIL = "tail";
 
         /**
          * histogramPercentile function name.

@@ -77,6 +77,7 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
             // Apply the mapping function to each sample
             for (Sample sample : originalSamples) {
                 Sample mappedSample = mapSample(sample);
+                assert mappedSample == null || mappedSample != sample : "Mapped sample must be a new instance";
                 if (mappedSample != null) {
                     mappedSamples.add(mappedSample);
                 }

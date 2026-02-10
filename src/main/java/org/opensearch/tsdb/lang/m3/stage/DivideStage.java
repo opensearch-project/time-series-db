@@ -11,9 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
@@ -118,31 +116,28 @@ public class DivideStage extends AbstractBinaryProjectionStage {
     }
 
     /**
-     * Process samples to calculate division. Both samples are expected to be available.
+     * Process sample values to calculate division. Both values are expected to be available.
      *
      * <p>If either the numerator (left) or denominator (right) is NaN, returns NaN.
      * If the denominator is zero, returns NaN.
      *
-     * @param leftSample The left sample (numerator)
-     * @param rightSample The right sample (denominator)
-     * @return A FloatSample with the division result, or NaN if either value is NaN or denominator is zero
+     * @param leftValue The left value (numerator)
+     * @param rightValue The right value (denominator)
+     * @return the division result, or NaN if either value is NaN or denominator is zero
      */
     @Override
-    protected Sample processSamples(Sample leftSample, Sample rightSample) {
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // Divide only keep sample if left and right timestamp both exist
-        if (leftSample == null || rightSample == null) {
+        if (leftValue == null || rightValue == null) {
             return null;
         }
-        double leftValue = leftSample.getValue();
-        double rightValue = rightSample.getValue();
 
         // If numerator or denominator is NaN, or if the denominator is 0, return NaN
         if (Double.isNaN(leftValue) || Double.isNaN(rightValue) || rightValue == 0.0) {
-            return new FloatSample(leftSample.getTimestamp(), Float.NaN);
+            return Double.NaN;
         }
 
-        double result = leftValue / rightValue;
-        return new FloatSample(leftSample.getTimestamp(), result);
+        return leftValue / rightValue;
     }
 
     @Override

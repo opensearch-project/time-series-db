@@ -160,8 +160,7 @@ public class MinMaxSampleTests extends OpenSearchTestCase {
         MinMaxSample minMaxSample = new MinMaxSample(1000L, 10.0, 30.0);
         FloatSample floatSample = new FloatSample(1000L, 25.0);
 
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> minMaxSample.merge(floatSample));
-        assertEquals("Cannot merge MinMaxSample with FloatSample", e.getMessage());
+        assertEquals(minMaxSample, minMaxSample.merge(floatSample));
     }
 
     public void testMergeWithNull() {

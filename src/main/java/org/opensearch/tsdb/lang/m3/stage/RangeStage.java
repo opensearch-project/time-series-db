@@ -58,7 +58,7 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "range")
-public class RangeStage extends AbstractGroupingSampleStage {
+public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
     /** The name identifier for this stage type. */
     public static final String NAME = "range";
 
@@ -86,13 +86,16 @@ public class RangeStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return MinMaxSample.fromSample(sample);
+    protected MinMaxSample aggregateSingleSample(MinMaxSample bucket, Sample newSample) {
+        if (bucket == null) {
+            return MinMaxSample.fromSample(newSample);
+        }
+        return bucket.merge(newSample);
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        return ((MinMaxSample) existing).merge((MinMaxSample) newSample);
+    protected Sample bucketToSample(long timestamp, MinMaxSample bucket) {
+        return bucket;
     }
 
     @Override

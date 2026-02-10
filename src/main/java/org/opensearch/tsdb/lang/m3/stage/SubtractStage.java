@@ -118,28 +118,27 @@ public class SubtractStage extends AbstractBinaryProjectionStage {
     }
 
     @Override
-    protected Sample processSamples(Sample leftSample, Sample rightSample) {
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // Treat NaN samples as null at the very beginning
-        if (leftSample != null && Double.isNaN(leftSample.getValue())) {
-            leftSample = null;
+        if (leftValue != null && Double.isNaN(leftValue)) {
+            leftValue = null;
         }
-        if (rightSample != null && Double.isNaN(rightSample.getValue())) {
-            rightSample = null;
+        if (rightValue != null && Double.isNaN(rightValue)) {
+            rightValue = null;
         }
 
         // Scenario 1: Both samples are null. Regardless keepNans, we should return null.
-        if (leftSample == null && rightSample == null) {
+        if (leftValue == null && rightValue == null) {
             return null;
         }
         // Scenario 2: One sample is null, and we are configured to propagate null (keepNaNs = true).
-        if (keepNaNs && (leftSample == null || rightSample == null)) {
+        if (keepNaNs && (leftValue == null || rightValue == null)) {
             return null;
         }
         // Scenario 3: KeepNans is false, we treat null samples as 0.0
-        Sample timestampSource = leftSample != null ? leftSample : rightSample;
-        double leftValue = leftSample != null ? leftSample.getValue() : 0.0;
-        double rightValue = rightSample != null ? rightSample.getValue() : 0.0;
-        return new FloatSample(timestampSource.getTimestamp(), leftValue - rightValue);
+        leftValue = leftValue != null ? leftValue : 0.0;
+        rightValue = rightValue != null ? rightValue : 0.0;
+        return leftValue - rightValue;
     }
 
     @Override

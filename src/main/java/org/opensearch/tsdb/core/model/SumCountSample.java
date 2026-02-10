@@ -80,11 +80,14 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     }
 
     @Override
-    public Sample merge(Sample other) {
-        if (!(other instanceof SumCountSample otherSumCount)) {
-            throw new IllegalArgumentException("Cannot merge SumCountSample with " + other.getClass().getSimpleName());
+    public SumCountSample merge(Sample other) {
+        if (other instanceof SumCountSample otherSumCount) {
+            return new SumCountSample(this.getTimestamp, this.sum + otherSumCount.sum, this.count + otherSumCount.count);
         }
-        return new SumCountSample(this.getTimestamp, this.sum + otherSumCount.sum, this.count + otherSumCount.count);
+        if (other.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return add(other.getValue());
+        }
+        throw new IllegalArgumentException("Cannot merge SumCountSample with " + other.getClass().getSimpleName());
     }
 
     /**
@@ -108,8 +111,8 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     public static SumCountSample fromSample(Sample sample) {
         if (sample instanceof SumCountSample) {
             return (SumCountSample) sample;
-        } else if (sample instanceof FloatSample) {
-            return fromValue(sample.getTimestamp(), ((FloatSample) sample).getValue());
+        } else if (sample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return fromValue(sample.getTimestamp(), sample.getValue());
         } else {
             throw new IllegalArgumentException("Unsupported sample type [" + sample.getClass() + "]");
         }

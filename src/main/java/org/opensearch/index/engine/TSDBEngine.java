@@ -646,11 +646,21 @@ public class TSDBEngine extends Engine {
 
     /**
      * Indicates whether a periodic flush should be performed based on translog size.
+     * This is a no-op for TSDB engine. TSDB relies on periodic async flush job to trigger flush.
      *
-     * @return true if translog size exceeds the flush threshold
+     * @return always returns false
      */
     @Override
     public boolean shouldPeriodicallyFlush() {
+        return false;
+    }
+
+    /**
+     * Checks if flush should be performed based on translog size exceeding the threshold.
+     *
+     * @return true if translog size exceeds the flush threshold
+     */
+    boolean shouldFlushBasedOnTranslogSize() {
         final long localCheckpointOfLastCommit;
         segmentInfosLock.lock();
         try {
@@ -698,13 +708,9 @@ public class TSDBEngine extends Engine {
                 }
 
                 // Check if flush is needed based on translog size
-                boolean shouldPeriodicallyFlush = shouldPeriodicallyFlush();
-                if (!force && !shouldPeriodicallyFlush) {
-                    logger.debug(
-                        "Skipping commit - translog size below threshold (force={}, shouldFlush={})",
-                        force,
-                        shouldPeriodicallyFlush
-                    );
+                boolean shouldFlush = shouldFlushBasedOnTranslogSize();
+                if (!force && !shouldFlush) {
+                    logger.debug("Skipping commit - translog size below threshold (force={}, shouldFlush={})", force, shouldFlush);
                     return;
                 }
 

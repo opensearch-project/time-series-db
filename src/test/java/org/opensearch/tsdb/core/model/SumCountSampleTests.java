@@ -78,7 +78,7 @@ public class SumCountSampleTests extends OpenSearchTestCase {
 
             @Override
             public SampleType getSampleType() {
-                return SampleType.FLOAT_SAMPLE;
+                return SampleType.SORTED_VALUES_SAMPLE;
             }
 
             @Override
@@ -148,8 +148,7 @@ public class SumCountSampleTests extends OpenSearchTestCase {
         SumCountSample sumCountSample = new SumCountSample(1000L, 50.0, 2);
         FloatSample floatSample = new FloatSample(1000L, 25.0);
 
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> sumCountSample.merge(floatSample));
-        assertEquals("Cannot merge SumCountSample with FloatSample", e.getMessage());
+        assertEquals(new SumCountSample(1000L, 75.0, 3), sumCountSample.merge(floatSample));
     }
 
     public void testMergeWithNull() {

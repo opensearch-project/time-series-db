@@ -51,9 +51,9 @@ public class DivideScalarStageTests extends AbstractWireSerializingTestCase<Divi
         assertEquals(1, result.size());
         TimeSeries dividedSeries = result.get(0);
         assertEquals(3, dividedSeries.getSamples().size());
-        assertEquals(5.0, dividedSeries.getSamples().getSample(0).getValue(), 0.001); // 10.0 / 2.0
-        assertEquals(10.0, dividedSeries.getSamples().getSample(1).getValue(), 0.001); // 20.0 / 2.0
-        assertEquals(-3.0, dividedSeries.getSamples().getSample(2).getValue(), 0.001); // -6.0 / 2.0
+        assertEquals(5.0, dividedSeries.getSamples().getValue(0), 0.001); // 10.0 / 2.0
+        assertEquals(10.0, dividedSeries.getSamples().getValue(1), 0.001); // 20.0 / 2.0
+        assertEquals(-3.0, dividedSeries.getSamples().getValue(2), 0.001); // -6.0 / 2.0
         assertEquals(labels, dividedSeries.getLabels());
         assertEquals("test-series", dividedSeries.getAlias());
     }
@@ -74,7 +74,7 @@ public class DivideScalarStageTests extends AbstractWireSerializingTestCase<Divi
 
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getSamples().size());
-        assertTrue(Double.isNaN(result.get(0).getSamples().getSample(0).getValue()));
+        assertTrue(Double.isNaN(result.get(0).getSamples().getValue(0)));
     }
 
     public void testProcessWithEmptyInput() {

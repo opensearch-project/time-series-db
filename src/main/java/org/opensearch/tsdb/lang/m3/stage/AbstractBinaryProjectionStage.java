@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.lang.m3.stage;
 
 import org.opensearch.tsdb.core.model.ByteLabels;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
@@ -127,7 +128,7 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
             return null;
         }
 
-        List<Sample> resultSamples = new ArrayList<>();
+        FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder();
         boolean hasKeepNansOptions = hasKeepNansOption();
 
         // Find matching timestamps between the two sorted time series.
@@ -147,35 +148,39 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
                 rightTimestamp = rightSample.getTimestamp();
             }
 
-            Sample resultSample;
+            Double resultValue;
+            long timestamp;
             if (leftTimestamp < rightTimestamp) {
                 // If stage doesn't have keepNans option, we skip processing
                 if (hasKeepNansOptions) {
-                    resultSample = processSamples(leftSample, null);
+                    resultValue = processSampleValues(leftSample.getValue(), null);
                 } else {
-                    resultSample = null;
+                    resultValue = null;
                 }
+                timestamp = leftTimestamp;
                 leftSample = advanceIterOrNull(leftIter);
 
             } else if (rightTimestamp < leftTimestamp) {
                 // If stage doesn't have keepNans option, we skip processing
                 if (hasKeepNansOptions) {
-                    resultSample = processSamples(null, rightSample);
+                    resultValue = processSampleValues(null, rightSample.getValue());
                 } else {
-                    resultSample = null;
+                    resultValue = null;
                 }
+                timestamp = rightTimestamp;
                 rightSample = advanceIterOrNull(rightIter);
             } else {
-                resultSample = processSamples(leftSample, rightSample);
+                resultValue = processSampleValues(leftSample.getValue(), rightSample.getValue());
+                timestamp = leftTimestamp;
                 leftSample = advanceIterOrNull(leftIter);
                 rightSample = advanceIterOrNull(rightIter);
             }
-            if (resultSample != null) {
-                resultSamples.add(resultSample);
+            if (resultValue != null) {
+                resultBuilder.add(timestamp, resultValue);
             }
         }
 
-        if (resultSamples.isEmpty()) {
+        if (resultBuilder.isEmpty()) {
             return null;
         }
 
@@ -186,7 +191,14 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
         // Transform labels if needed (can be overridden by subclasses)
         Labels transformedLabels = transformLabels(leftSeries.getLabels());
 
-        return new TimeSeries(resultSamples, transformedLabels, minTimestamp, maxTimestamp, leftSeries.getStep(), leftSeries.getAlias());
+        return new TimeSeries(
+            resultBuilder.build(),
+            transformedLabels,
+            minTimestamp,
+            maxTimestamp,
+            leftSeries.getStep(),
+            leftSeries.getAlias()
+        );
     }
 
     /**
@@ -473,15 +485,15 @@ public abstract class AbstractBinaryProjectionStage implements BinaryPipelineSta
     }
 
     /**
-     * Process samples from left and right time series and return a result sample.
+     * Process sample values from left and right time series and return a result sample value.
      * This method should be overridden by subclasses to implement their specific logic.
-     * Both samples are expected to be non-null and have matching timestamps.
+     * Both values are expected to be non-null and have matching timestamps.
      *
-     * @param leftSample The left sample
-     * @param rightSample The right sample
-     * @return The result sample
+     * @param leftValue The left sample value
+     * @param rightValue The right sample value
+     * @return The result value, null if the result value is not supposed to be added to the final result series
      */
-    protected abstract Sample processSamples(Sample leftSample, Sample rightSample);
+    protected abstract Double processSampleValues(Double leftValue, Double rightValue);
 
     @Override
     public int hashCode() {

@@ -288,7 +288,11 @@ public class TSDBEngineTests extends EngineTestCase {
         assertSame(Engine.GetResult.NOT_EXISTS, result);
     }
 
-    public void testShouldPeriodicallyFlushReturnsFalse() throws IOException {
+    public void testShouldPeriodicallyFlushAlwaysReturnsFalse() throws IOException {
+        assertFalse("shouldPeriodicallyFlush should always return false for TSDB engine", metricsEngine.shouldPeriodicallyFlush());
+    }
+
+    public void testShouldFlushBasedOnTranslogSizeReturnsFalse() throws IOException {
         String sample1 = createSampleJson(series1, 1712576200L, 1024.0);
         String sample2 = createSampleJson(series1, 1712576400L, 1026.0);
         String sample3 = createSampleJson(series2, 1712576200L, 85.5);
@@ -298,10 +302,13 @@ public class TSDBEngineTests extends EngineTestCase {
         publishSample(2, sample3);
 
         // With default settings, translog should not exceed threshold
-        assertFalse("shouldPeriodicallyFlush should return false with default settings", metricsEngine.shouldPeriodicallyFlush());
+        assertFalse(
+            "shouldFlushBasedOnTranslogSize should return false with default settings",
+            metricsEngine.shouldFlushBasedOnTranslogSize()
+        );
     }
 
-    public void testShouldPeriodicallyFlushReturnsTrue() throws Exception {
+    public void testShouldFlushBasedOnTranslogSizeReturnsTrue() throws Exception {
         // Create engine with very small flush threshold (128b)
         IndexSettings smallThresholdSettings = IndexSettingsModule.newIndexSettings(
             "index",
@@ -334,7 +341,10 @@ public class TSDBEngineTests extends EngineTestCase {
         }
 
         // With tiny threshold, translog should exceed it after indexing many samples
-        assertTrue("shouldPeriodicallyFlush should return true when translog exceeds threshold", metricsEngine.shouldPeriodicallyFlush());
+        assertTrue(
+            "shouldFlushBasedOnTranslogSize should return true when translog exceeds threshold",
+            metricsEngine.shouldFlushBasedOnTranslogSize()
+        );
     }
 
     public void testThrottling() {
