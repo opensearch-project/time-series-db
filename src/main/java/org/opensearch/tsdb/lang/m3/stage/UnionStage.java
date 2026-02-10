@@ -16,6 +16,7 @@ import org.opensearch.tsdb.query.stage.BinaryPipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -56,8 +57,11 @@ public class UnionStage implements BinaryPipelineStage {
         if (right == null) {
             throw new NullPointerException(getName() + " stage received null right input");
         }
-        left.addAll(right);
-        return left;
+        List<TimeSeries> result = new ArrayList<>(left.size() + right.size());
+        // Both left and right could be unmodifiable list so create a new list and add all
+        result.addAll(left);
+        result.addAll(right);
+        return result;
     }
 
     /**
