@@ -163,11 +163,11 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     }
 
     /**
-     * Expose addCircuitBreakerBytes for testing purposes.
+     * Expose {@link #trackCircuitBreakerBytes(long)} for testing purposes.
      * Package-private for testing.
      */
-    void addCircuitBreakerBytesForTesting(long bytes) {
-        addCircuitBreakerBytes(bytes);
+    void trackCircuitBreakerBytesForTesting(long bytes) {
+        trackCircuitBreakerBytes(bytes);
     }
 
     /**
@@ -180,32 +180,35 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
     /**
      * Flush any pending circuit breaker bytes to the actual circuit breaker.
-     * Called automatically when threshold exceeded, and should be called explicitly
-     * at key checkpoints (end of collection, close, etc.).
+     *
+     * <p>Commits any accumulated {@code pendingCircuitBreakerBytes} to the parent's
+     * circuit breaker via {@link #commitToCircuitBreaker(long)}. Resets pending bytes
+     * to 0 before calling commit to prevent double-flush if an exception occurs.</p>
      */
     private void flushPendingCircuitBreakerBytes() {
         if (pendingCircuitBreakerBytes > 0) {
             long bytesToFlush = pendingCircuitBreakerBytes;
             pendingCircuitBreakerBytes = 0; // Reset before call to avoid double-flush on exception
-            doAddCircuitBreakerBytes(bytesToFlush);
+            commitToCircuitBreaker(bytesToFlush);
         }
     }
 
     /**
      * Track memory allocation/release with circuit breaker.
-     * This method uses batching for efficiency: small allocations are accumulated locally
-     * and only flushed to the circuit breaker when a threshold is exceeded.
      *
-     * <p>For positive values (allocations): Bytes are accumulated in {@code pendingCircuitBreakerBytes}
-     * and flushed when the batch threshold ({@link #CIRCUIT_BREAKER_BATCH_THRESHOLD})
-     * is exceeded. This reduces overhead during tight loops like group creation.</p>
+     * <p>Batches small allocations locally and only commits to the circuit breaker when the
+     * threshold ({@link #CIRCUIT_BREAKER_BATCH_THRESHOLD}) is exceeded.</p>
      *
-     * <p>For negative values (releases): Any pending bytes are flushed first, then the release
-     * is processed immediately to ensure proper accounting.</p>
+     * <ul>
+     *   <li><b>Positive bytes (allocation):</b> Accumulated in {@code pendingCircuitBreakerBytes},
+     *       flushed when threshold exceeded</li>
+     *   <li><b>Negative bytes (release):</b> Pending bytes flushed first (for accurate peak tracking),
+     *       then release committed immediately</li>
+     * </ul>
      *
      * @param bytes the number of bytes to allocate (positive) or release (negative)
      */
-    private void addCircuitBreakerBytes(long bytes) {
+    private void trackCircuitBreakerBytes(long bytes) {
         if (bytes == 0) {
             return;
         }
@@ -223,17 +226,19 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             // then release immediately. Without this, pending +4MB and release -1MB would incorrectly
             // net to +3MB, missing the actual peak allocation.
             flushPendingCircuitBreakerBytes();
-            doAddCircuitBreakerBytes(bytes);
+            commitToCircuitBreaker(bytes);
         }
     }
 
     /**
-     * Internal method to actually add bytes to the circuit breaker (no batching).
-     * Handles both allocations and releases.
+     * Commit bytes directly to the parent's circuit breaker (no batching).
+     *
+     * <p>Calls {@link #addRequestCircuitBreakerBytes(long)} from the parent
+     * {@code AggregatorBase} class to update the circuit breaker.</p>
      *
      * @param bytes the number of bytes to allocate (positive) or release (negative)
      */
-    private void doAddCircuitBreakerBytes(long bytes) {
+    private void commitToCircuitBreaker(long bytes) {
         if (bytes > 0) {
             // Allocation
             try {
@@ -569,8 +574,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
             // Track circuit breaker bytes for this document
             // Note: bytesForThisDoc is always > 0 here because we return early if allSamples is empty,
-            // and line 476 always adds positive bytes when allSamples is non-empty
-            addCircuitBreakerBytes(bytesForThisDoc);
+            // and the aligned samples list always adds positive bytes when allSamples is non-empty
+            trackCircuitBreakerBytes(bytesForThisDoc);
 
             // TODO: maybe we need to move this
             collectBucket(subCollector, doc, bucket);
@@ -605,7 +610,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     stage,
                     processedTimeSeries,
                     false, // shard-level execution
-                    this::addCircuitBreakerBytes // pass circuit breaker consumer for stage overhead tracking
+                    this::trackCircuitBreakerBytes // pass circuit breaker consumer for stage overhead tracking
                 );
             }
         }
@@ -645,7 +650,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     processedBytes += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getLabels().ramBytesUsed();
                     processedBytes += ts.getSamples().size() * TimeSeries.ESTIMATED_SAMPLE_SIZE;
                 }
-                addCircuitBreakerBytes(processedBytes);
+                trackCircuitBreakerBytes(processedBytes);
 
                 // Store the processed time series
                 processedTimeSeriesByBucket.put(bucketOrd, processedTimeSeries);

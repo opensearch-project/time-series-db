@@ -688,22 +688,22 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             assertEquals("Initial circuit breaker bytes should be 0", 0L, aggregator.circuitBreakerBytes);
 
             // Add some bytes and flush (batching defers updates until threshold/flush)
-            aggregator.addCircuitBreakerBytesForTesting(1024);
+            aggregator.trackCircuitBreakerBytesForTesting(1024);
             aggregator.flushPendingCircuitBreakerBytesForTesting();
             assertEquals("Circuit breaker bytes should be updated after flush", 1024L, aggregator.circuitBreakerBytes);
 
             // Add more bytes and flush
-            aggregator.addCircuitBreakerBytesForTesting(2048);
+            aggregator.trackCircuitBreakerBytesForTesting(2048);
             aggregator.flushPendingCircuitBreakerBytesForTesting();
             assertEquals("Circuit breaker bytes should accumulate", 3072L, aggregator.circuitBreakerBytes);
 
             // Adding 0 bytes should be a no-op
-            aggregator.addCircuitBreakerBytesForTesting(0);
+            aggregator.trackCircuitBreakerBytesForTesting(0);
             aggregator.flushPendingCircuitBreakerBytesForTesting();
             assertEquals("Adding 0 bytes should not change total", 3072L, aggregator.circuitBreakerBytes);
 
             // Adding negative bytes releases memory (flushes pending first, then releases immediately)
-            aggregator.addCircuitBreakerBytesForTesting(-100);
+            aggregator.trackCircuitBreakerBytesForTesting(-100);
             assertEquals("Adding negative bytes should release memory immediately", 2972L, aggregator.circuitBreakerBytes);
 
             aggregator.close();
@@ -725,12 +725,12 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
         // Add bytes and flush
-        aggregator.addCircuitBreakerBytesForTesting(500);
+        aggregator.trackCircuitBreakerBytesForTesting(500);
         aggregator.flushPendingCircuitBreakerBytesForTesting();
         assertEquals("Circuit breaker bytes should be 500", 500L, aggregator.circuitBreakerBytes);
 
         // Add more bytes and flush - should accumulate
-        aggregator.addCircuitBreakerBytesForTesting(600);
+        aggregator.trackCircuitBreakerBytesForTesting(600);
         aggregator.flushPendingCircuitBreakerBytesForTesting();
         assertEquals("Circuit breaker bytes should be 1100", 1100L, aggregator.circuitBreakerBytes);
 
@@ -752,15 +752,15 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         long thresholdBytes = 5 * 1024 * 1024;
 
         // Add bytes just under the threshold - should NOT auto-flush
-        aggregator.addCircuitBreakerBytesForTesting(thresholdBytes - 1);
+        aggregator.trackCircuitBreakerBytesForTesting(thresholdBytes - 1);
         assertEquals("Bytes under threshold should be pending (not flushed)", 0L, aggregator.circuitBreakerBytes);
 
         // Add 1 more byte to reach threshold - should trigger auto-flush
-        aggregator.addCircuitBreakerBytesForTesting(1);
+        aggregator.trackCircuitBreakerBytesForTesting(1);
         assertEquals("Bytes at threshold should trigger auto-flush", thresholdBytes, aggregator.circuitBreakerBytes);
 
         // Add more bytes exceeding threshold - should also auto-flush
-        aggregator.addCircuitBreakerBytesForTesting(thresholdBytes + 1000);
+        aggregator.trackCircuitBreakerBytesForTesting(thresholdBytes + 1000);
         assertEquals(
             "Bytes exceeding threshold should trigger auto-flush",
             thresholdBytes + thresholdBytes + 1000,
@@ -782,12 +782,12 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         TimeSeriesUnfoldAggregator aggregator = createAggregator(minTimestamp, maxTimestamp, step);
 
         // Add some bytes first
-        aggregator.addCircuitBreakerBytesForTesting(1000);
+        aggregator.trackCircuitBreakerBytesForTesting(1000);
         aggregator.flushPendingCircuitBreakerBytesForTesting();
         assertEquals(1000L, aggregator.circuitBreakerBytes);
 
         // Adding 0 should be a complete no-op
-        aggregator.addCircuitBreakerBytesForTesting(0);
+        aggregator.trackCircuitBreakerBytesForTesting(0);
         assertEquals("Zero bytes should not change anything", 1000L, aggregator.circuitBreakerBytes);
 
         aggregator.close();
@@ -872,7 +872,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, List.of());
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(2000);
+            aggregator.trackCircuitBreakerBytesForTesting(2000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
@@ -912,7 +912,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, List.of());
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(1000);
+            aggregator.trackCircuitBreakerBytesForTesting(1000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
@@ -950,7 +950,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, List.of());
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(1000);
+            aggregator.trackCircuitBreakerBytesForTesting(1000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
@@ -990,7 +990,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, List.of());
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(1000);
+            aggregator.trackCircuitBreakerBytesForTesting(1000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
@@ -1024,7 +1024,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             TimeSeriesUnfoldAggregator aggregator = createAggregatorWithDelayedTripBreaker(mockSearchContext, 1, null);
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(1000);
+            aggregator.trackCircuitBreakerBytesForTesting(1000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
@@ -1065,7 +1065,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             );
 
             // Add bytes (batched) then flush to trigger circuit breaker
-            aggregator.addCircuitBreakerBytesForTesting(1000);
+            aggregator.trackCircuitBreakerBytesForTesting(1000);
             CircuitBreakingException exception = expectThrows(
                 CircuitBreakingException.class,
                 () -> aggregator.flushPendingCircuitBreakerBytesForTesting()
