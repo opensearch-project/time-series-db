@@ -547,7 +547,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             return results;
         } finally {
             // Emit all metrics in one batch - minimal overhead
-            executionStats.recordMetrics(circuitBreakerBytes);
+            executionStats.recordMetrics();
         }
     }
 
@@ -626,6 +626,15 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     }
 
     /**
+     * Update aggregator's circuit breaker total and ExecutionStats max in one place.
+     * Call this whenever circuitBreakerBytes changes so the max (used for metrics) stays correct.
+     */
+    private void applyCircuitBreakerDelta(long delta) {
+        circuitBreakerBytes += delta;
+        executionStats.updateMaxCircuitBreakerBytes(circuitBreakerBytes);
+    }
+
+    /**
      * Commit bytes directly to the parent's circuit breaker.
      *
      * <p>Calls {@link #addRequestCircuitBreakerBytes(long)} from the parent
@@ -638,7 +647,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             // Allocation
             try {
                 addRequestCircuitBreakerBytes(bytes);
-                circuitBreakerBytes += bytes;
+                applyCircuitBreakerDelta(bytes);
 
                 // Log at DEBUG level for normal tracking
                 logger.debug(
@@ -699,7 +708,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             // AggregatorBase.addRequestCircuitBreakerBytes uses addWithoutBreaking() for negative values
             long bytesToRelease = -bytes;
             addRequestCircuitBreakerBytes(bytes);
-            circuitBreakerBytes -= bytesToRelease;
+            applyCircuitBreakerDelta(-bytesToRelease);
 
             logger.debug(
                 () -> new ParameterizedMessage(
@@ -715,7 +724,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     @Override
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         super.collectDebugInfo(add);
-        executionStats.add(add, circuitBreakerBytes);
+        executionStats.add(add);
         add.accept("stages", stages == null ? "" : stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
     }
 
@@ -758,11 +767,18 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         // Error counts
         long chunksForDocErrors = 0;
 
+        /** Max circuit breaker bytes tracked across the lifecycle of the request (peak usage). Emitted as metric. */
+        long maxCircuitBreakerBytes = 0;
+
+        void updateMaxCircuitBreakerBytes(long currentBytes) {
+            this.maxCircuitBreakerBytes = Math.max(this.maxCircuitBreakerBytes, currentBytes);
+        }
+
         /**
          * Add debug info to profiler output.
-         * @param circuitBreakerBytes total bytes committed to circuit breaker (supplied by aggregator at report time)
+         * Uses maxCircuitBreakerBytes (kept up to date by aggregator when circuit breaker changes).
          */
-        void add(BiConsumer<String, Object> add, long circuitBreakerBytes) {
+        void add(BiConsumer<String, Object> add) {
             add.accept(ProfileInfoMapper.TOTAL_DOCS, totalDocCount);
             add.accept(ProfileInfoMapper.LIVE_DOC_COUNT, liveDocCount);
             add.accept(ProfileInfoMapper.CLOSED_DOC_COUNT, closedDocCount);
@@ -777,16 +793,16 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
             add.accept(ProfileInfoMapper.CLOSED_SAMPLES_POST_FILTER, closedSamplesPostFilter);
             add.accept(ProfileInfoMapper.TOTAL_INPUT_SERIES, inputSeriesCount);
             add.accept(ProfileInfoMapper.TOTAL_OUTPUT_SERIES, outputSeriesCount);
-            add.accept(ProfileInfoMapper.CIRCUIT_BREAKER_BYTES, circuitBreakerBytes);
+            add.accept(ProfileInfoMapper.CIRCUIT_BREAKER_BYTES, maxCircuitBreakerBytes);
         }
 
         /**
          * Emit all collected metrics to TSDBMetrics in one batch for minimal overhead.
          * All metrics are batched and emitted together at the end in a finally block.
-         * @param circuitBreakerBytes total bytes committed to circuit breaker (supplied by aggregator at report time)
+         * Uses maxCircuitBreakerBytes (kept up to date by aggregator when circuit breaker changes).
          */
         // TODO need to go through metrics and figure out if we want to emit metrics even when they are zero
-        void recordMetrics(long circuitBreakerBytes) {
+        void recordMetrics() {
             if (!TSDBMetrics.isInitialized()) {
                 return;
             }
@@ -849,9 +865,9 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     TSDBMetrics.incrementCounter(TSDBMetrics.AGGREGATION.resultsTotal, 1, TAGS_STATUS_EMPTY);
                 }
 
-                // Record circuit breaker bytes
-                if (circuitBreakerBytes > 0) {
-                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerMiB, circuitBreakerBytes / (1024.0 * 1024.0));
+                // Record max circuit breaker bytes (peak usage over request lifecycle)
+                if (maxCircuitBreakerBytes > 0) {
+                    TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.circuitBreakerMiB, maxCircuitBreakerBytes / (1024.0 * 1024.0));
                 }
             } catch (Exception e) {
                 // Swallow exceptions in metrics recording to avoid impacting actual operation
@@ -891,7 +907,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
      * Package-private for testing.
      */
     void recordMetricsForTesting() {
-        executionStats.recordMetrics(circuitBreakerBytes);
+        executionStats.recordMetrics();
     }
 
     /**
