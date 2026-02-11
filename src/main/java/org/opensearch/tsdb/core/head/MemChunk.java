@@ -341,6 +341,19 @@ public class MemChunk {
         }
 
         /**
+         * Returns the total number of samples across all internal chunks before deduplication.
+         *
+         * @return total raw sample count across all internal chunks
+         */
+        public int rawSampleCount() {
+            int total = 0;
+            for (ChunkEntry entry : chunks) {
+                total += entry.getChunk().numSamples();
+            }
+            return total;
+        }
+
+        /**
          * Get a chunk for serialization. If there is a single underlying chunk, return it directly. Otherwise, merge and deduplicate
          * all underlying chunks into a single chunk.
          * @return a Chunk instance representing this MemChunk's data

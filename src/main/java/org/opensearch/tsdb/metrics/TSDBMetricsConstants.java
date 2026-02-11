@@ -18,7 +18,24 @@ public final class TSDBMetricsConstants {
     // Engine Metrics (Ingestion, Lifecycle, Flush)
     // ============================================
 
+    // Shard-Level Gauges
+    /** Gauge: Current number of samples held in this shard (Head + closed blocks) */
+    public static final String SHARD_SAMPLE_COUNT = "tsdb.shard.sample_count";
+
+    /** Gauge: Current on-disk size of this shard in bytes */
+    public static final String SHARD_SIZE_BYTES = "tsdb.shard.size_bytes";
+
     // Ingestion Counters
+    /** Counter: Total number of samples successfully appended to storage */
+    public static final String SAMPLES_APPENDED = "tsdb.samples.appended";
+
+    /** Counter: Total number of samples rejected (tagged by reason) */
+    public static final String SAMPLES_FAILED = "tsdb.samples.failed";
+
+    /** Counter: Total number of samples dropped during OOO dedup at flush */
+    public static final String SAMPLES_DEDUPED = "tsdb.samples.deduped";
+
+    // Legacy Ingestion Counters
     /** Counter: Total number of samples ingested into TSDB across all shards */
     public static final String SAMPLES_INGESTED_TOTAL = "tsdb.samples.ingested.total";
 
@@ -257,6 +274,15 @@ public final class TSDBMetricsConstants {
     // Metric Descriptions
     // ============================================
 
+    // Shard-Level Gauges
+    public static final String SHARD_SAMPLE_COUNT_DESC = "Current number of samples held in this shard (Head + closed blocks)";
+    public static final String SHARD_SIZE_BYTES_DESC = "Current on-disk size of this shard in bytes";
+
+    // Ingestion Counters
+    public static final String SAMPLES_APPENDED_DESC = "Total number of samples successfully appended to storage";
+    public static final String SAMPLES_FAILED_DESC = "Total number of samples rejected (tagged by reason)";
+    public static final String SAMPLES_DEDUPED_DESC = "Total number of samples dropped during OOO dedup at flush";
+
     // Engine Metrics - Ingestion
     public static final String SAMPLES_INGESTED_TOTAL_DESC = "Total number of samples ingested into TSDB across all shards";
     public static final String SERIES_CREATED_TOTAL_DESC = "Total number of time series created across all shards";
@@ -379,6 +405,33 @@ public final class TSDBMetricsConstants {
 
     /** Tag value for binary stage type */
     public static final String TAG_STAGE_TYPE_BINARY = "binary";
+
+    /** Tag key for shard role (primary / replica) */
+    public static final String TAG_ROLE = "role";
+
+    /** Tag value for primary role */
+    public static final String TAG_ROLE_PRIMARY = "primary";
+
+    /** Tag value for replica role */
+    public static final String TAG_ROLE_REPLICA = "replica";
+
+    /** Tag key for failure reason on samples.failed counter */
+    public static final String TAG_REASON = "reason";
+
+    /** Tag value: sample rejected due to empty labels */
+    public static final String TAG_REASON_EMPTY_LABELS = "empty_labels";
+
+    /** Tag value: sample rejected due to OOO cutoff */
+    public static final String TAG_REASON_OOO_REJECTED = "ooo_rejected";
+
+    /** Tag value: sample rejected due to parse error */
+    public static final String TAG_REASON_PARSE_ERROR = "parse_error";
+
+    /** Tag value: sample rejected due to tragic engine error */
+    public static final String TAG_REASON_TRAGIC = "tragic";
+
+    /** Tag value: sample rejected for other reasons */
+    public static final String TAG_REASON_OTHER = "other";
 
     /** Tag key for execution location */
     public static final String TAG_LOCATION = "location";

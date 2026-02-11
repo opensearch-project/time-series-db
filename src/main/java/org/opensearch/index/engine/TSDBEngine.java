@@ -60,6 +60,7 @@ import org.opensearch.tsdb.core.reader.TSDBDirectoryReaderReferenceManager;
 import org.opensearch.tsdb.core.retention.RetentionFactory;
 import org.opensearch.tsdb.core.utils.RateLimitedLock;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.core.index.shard.ShardId;
 
@@ -132,6 +133,9 @@ public class TSDBEngine extends Engine {
     private volatile int maxCloseableChunksPerChunkRangePercentage; // controls the percentage of chunks closed per chunk range
 
     private final Tags metricTags; // tags for metrics (index name and shard ID)
+
+    private final AtomicLong totalSampleCount = new AtomicLong(0);
+
     private Head head;
     private Path metricsStorePath;
     private TSDBDirectoryReaderReferenceManager tsdbReaderManager;
@@ -216,6 +220,12 @@ public class TSDBEngine extends Engine {
                 engineConfig.getShardId(),
                 engineConfig.getIndexSettings().getSettings()
             );
+
+            closedChunkIndexManager.setDedupCallback(deduped -> totalSampleCount.addAndGet(-deduped));
+            closedChunkIndexManager.setRetentionCallback(removed -> totalSampleCount.addAndGet(-removed));
+            closedChunkIndexManager.setMetricTags(metricTags);
+            totalSampleCount.set(closedChunkIndexManager.getTotalPersistedSampleCount());
+
             head = new Head(
                 metricsStorePath,
                 engineConfig.getShardId(),
@@ -423,6 +433,7 @@ public class TSDBEngine extends Engine {
 
         // TODO: delete this once OOO is supported
         boolean emptyLabelExceptionEncountered = false;
+        boolean appended = false;
 
         try {
             context.isNewSeriesCreated = appender.preprocess(
@@ -436,7 +447,7 @@ public class TSDBEngine extends Engine {
             );
 
             // preprocess succeeded, now call append
-            appender.append(
+            appended = appender.append(
                 () -> writeIndexingOperationToTranslog(indexOp, seriesReference, metricDocument, context),
                 () -> writeNoopOperationToTranslog(indexOp, context)
             );
@@ -444,13 +455,23 @@ public class TSDBEngine extends Engine {
             // TODO: delete this once OOO is supported
             logger.error("Encountered empty label exception, operation origin " + indexOp.origin().name(), e);
             emptyLabelExceptionEncountered = true;
+            incrementSamplesFailed(TSDBMetricsConstants.TAG_REASON_EMPTY_LABELS);
         } catch (TSDBOutOfOrderException e) {
             // OOO sample rejected - expected failure, do not log as error
             logger.debug("Sample rejected due to OOO cutoff, writing NoOp to translog, operation origin " + indexOp.origin().name(), e);
             context.failureException = e;
+            incrementSamplesFailed(TSDBMetricsConstants.TAG_REASON_OOO_REJECTED);
         } catch (Exception e) {
             logger.error("Index operation failed during preprocess or append, operation origin " + indexOp.origin().name(), e);
             context.failureException = e;
+            incrementSamplesFailed(
+                (e instanceof TSDBTragicException) ? TSDBMetricsConstants.TAG_REASON_TRAGIC : TSDBMetricsConstants.TAG_REASON_OTHER
+            );
+        }
+
+        if (appended) {
+            totalSampleCount.incrementAndGet();
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesAppended, 1, head.getMetricTags());
         }
 
         // TODO: We ignore empty label exceptions temporarily. Delete this once OOO support is added.
@@ -1710,6 +1731,31 @@ public class TSDBEngine extends Engine {
             },
             () -> (double) headRef.getNumOpenChunks(),       // Current open chunks count
             headRef.getMetricTags()
+        );
+
+        String role = engineConfig.isReadOnlyReplica() ? TSDBMetricsConstants.TAG_ROLE_REPLICA : TSDBMetricsConstants.TAG_ROLE_PRIMARY;
+        Tags shardGaugeTags = Tags.create()
+            .addTag("index", engineConfig.getShardId().getIndexName())
+            .addTag("shard", (long) engineConfig.getShardId().getId())
+            .addTag(TSDBMetricsConstants.TAG_ROLE, role);
+
+        TSDBMetrics.ENGINE.registerShardGauges(TSDBMetrics.getRegistry(), () -> (double) totalSampleCount.get(), () -> {
+            try {
+                return (double) store.stats(0L).getSizeInBytes();
+            } catch (Exception e) {
+                return 0.0;
+            }
+        }, shardGaugeTags);
+    }
+
+    private void incrementSamplesFailed(String reason) {
+        TSDBMetrics.incrementCounter(
+            TSDBMetrics.ENGINE.samplesFailed,
+            1,
+            Tags.create()
+                .addTag("index", engineConfig.getShardId().getIndexName())
+                .addTag("shard", (long) engineConfig.getShardId().getId())
+                .addTag(TSDBMetricsConstants.TAG_REASON, reason)
         );
     }
 }

@@ -459,4 +459,88 @@ public class ClosedChunkIndexTests extends OpenSearchTestCase {
 
         expectThrows(AlreadyClosedException.class, () -> closedChunkIndex.forceMerge(1));
     }
+
+    public void testMetadataV2MarshalUnmarshal() throws IOException {
+        ClosedChunkIndex.Stats stats = new ClosedChunkIndex.Stats(42000);
+        ClosedChunkIndex.Metadata original = new ClosedChunkIndex.Metadata("blk_123", 1000L, 2000L, stats);
+
+        String json = original.marshal();
+        ClosedChunkIndex.Metadata restored = ClosedChunkIndex.Metadata.unmarshal(json);
+
+        assertEquals("blk_123", restored.directoryName());
+        assertEquals(1000L, restored.minTimestamp());
+        assertEquals(2000L, restored.maxTimestamp());
+        assertEquals(42000, restored.stats().sampleCount());
+    }
+
+    public void testMetadataV1BackwardCompatibility() {
+        String v1Json = "{\"version\":1,\"directory_name\":\"blk_old\",\"min_timestamp\":500,\"max_timestamp\":1500}";
+        ClosedChunkIndex.Metadata restored = ClosedChunkIndex.Metadata.unmarshal(v1Json);
+
+        assertEquals("blk_old", restored.directoryName());
+        assertEquals(500L, restored.minTimestamp());
+        assertEquals(1500L, restored.maxTimestamp());
+        assertEquals(0, restored.stats().sampleCount());
+    }
+
+    public void testMetadataThreeArgConstructorDefaultsToEmptyStats() throws IOException {
+        ClosedChunkIndex.Metadata meta = new ClosedChunkIndex.Metadata("blk_test", 100L, 200L);
+
+        assertEquals(0, meta.stats().sampleCount());
+
+        String json = meta.marshal();
+        ClosedChunkIndex.Metadata restored = ClosedChunkIndex.Metadata.unmarshal(json);
+        assertEquals(0, restored.stats().sampleCount());
+    }
+
+    public void testStatsEmpty() {
+        assertEquals(0, ClosedChunkIndex.Stats.EMPTY.sampleCount());
+    }
+
+    public void testPendingSampleCountAccumulation() throws IOException {
+        var dir = createTempDir("testPendingSampleCountAccumulation");
+        ClosedChunkIndex closedChunkIndex = new ClosedChunkIndex(
+            dir,
+            new ClosedChunkIndex.Metadata(dir.getFileName().toString(), 0, 10000),
+            DEFAULT_TIME_UNIT,
+            Settings.EMPTY
+        );
+
+        assertEquals(0, closedChunkIndex.getPendingSampleCount());
+
+        Labels labels = ByteLabels.fromStrings("k1", "v1");
+        closedChunkIndex.addNewChunk(labels, buildMemChunk(5, 0, 90));
+        assertEquals(5, closedChunkIndex.getPendingSampleCount());
+
+        closedChunkIndex.addNewChunk(labels, buildMemChunk(10, 100, 190));
+        assertEquals(15, closedChunkIndex.getPendingSampleCount());
+
+        closedChunkIndex.close();
+    }
+
+    public void testAddNewChunkReturnsDedupCount() throws IOException {
+        var dir = createTempDir("testAddNewChunkReturnsDedupCount");
+        ClosedChunkIndex closedChunkIndex = new ClosedChunkIndex(
+            dir,
+            new ClosedChunkIndex.Metadata(dir.getFileName().toString(), 0, 10000),
+            DEFAULT_TIME_UNIT,
+            Settings.EMPTY
+        );
+
+        Labels labels = ByteLabels.fromStrings("k1", "v1");
+
+        // In-order chunk: no dedup
+        int deduped = closedChunkIndex.addNewChunk(labels, buildMemChunk(5, 0, 90));
+        assertEquals(0, deduped);
+
+        // OOO chunk with duplicate timestamps: should report dedup count
+        MemChunk oooChunk = new MemChunk(0, 0, 10000, null, Encoding.XOR);
+        oooChunk.append(1000L, 1.0, 1L);
+        oooChunk.append(2000L, 2.0, 2L);
+        oooChunk.append(1000L, 3.0, 3L); // duplicate timestamp
+        int oooDeduped = closedChunkIndex.addNewChunk(labels, oooChunk);
+        assertEquals(1, oooDeduped);
+
+        closedChunkIndex.close();
+    }
 }

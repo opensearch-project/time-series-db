@@ -378,4 +378,43 @@ public class MemChunkTests extends OpenSearchTestCase {
             TSDBMetrics.cleanup();
         }
     }
+
+    public void testRawSampleCountInOrder() {
+        MemChunk chunk = new MemChunk(1L, 0L, 10000L, null, Encoding.XOR);
+        chunk.append(1000L, 1.0, 1L);
+        chunk.append(2000L, 2.0, 2L);
+        chunk.append(3000L, 3.0, 3L);
+
+        assertEquals(3, chunk.getCompoundChunk().rawSampleCount());
+        assertEquals(1, chunk.getCompoundChunk().getNumChunks());
+    }
+
+    public void testRawSampleCountOutOfOrder() {
+        MemChunk chunk = new MemChunk(1L, 0L, 10000L, null, Encoding.XOR);
+        chunk.append(3000L, 3.0, 1L);
+        chunk.append(1000L, 1.0, 2L);
+        chunk.append(2000L, 2.0, 3L);
+
+        assertEquals(3, chunk.getCompoundChunk().rawSampleCount());
+        assertTrue(chunk.getCompoundChunk().getNumChunks() > 1);
+    }
+
+    public void testRawSampleCountWithDuplicatesBeforeDedup() {
+        MemChunk chunk = new MemChunk(1L, 0L, 10000L, null, Encoding.XOR);
+        chunk.append(1000L, 1.0, 1L);
+        chunk.append(2000L, 2.0, 2L);
+        chunk.append(1000L, 3.0, 3L); // duplicate timestamp, stored in OOO buffer
+
+        int rawCount = chunk.getCompoundChunk().rawSampleCount();
+        int dedupedCount = chunk.getCompoundChunk().toChunk().numSamples();
+
+        assertEquals(3, rawCount);
+        assertEquals(2, dedupedCount);
+        assertEquals(1, rawCount - dedupedCount);
+    }
+
+    public void testRawSampleCountEmpty() {
+        MemChunk chunk = new MemChunk(1L, 0L, 10000L, null, Encoding.XOR);
+        assertEquals(0, chunk.getCompoundChunk().rawSampleCount());
+    }
 }

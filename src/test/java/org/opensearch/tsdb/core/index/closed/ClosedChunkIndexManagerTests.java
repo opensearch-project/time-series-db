@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
@@ -806,6 +807,151 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         }
         assertTrue("At least one index should have been force merged", singleSegmentCount > 0);
 
+        manager.close();
+    }
+
+    public void testGetTotalPersistedSampleCount() throws IOException {
+        Path tempDir = createTempDir("testGetTotalPersistedSampleCount");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 1600, 2500));
+        manager.commitChangedIndexes(List.of(series));
+
+        long totalSamples = manager.getTotalPersistedSampleCount();
+        assertEquals(15, totalSamples);
+
+        manager.close();
+    }
+
+    public void testGetTotalPersistedSampleCountMultipleBlocks() throws IOException {
+        Path tempDir = createTempDir("testGetTotalPersistedSampleCountMultipleBlocks");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        // Block 1
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        // Block 2 (different block boundary)
+        manager.addMemChunk(series, TestUtils.getMemChunk(10, 7200000, 7800000));
+        manager.commitChangedIndexes(List.of(series));
+
+        long totalSamples = manager.getTotalPersistedSampleCount();
+        assertEquals(15, totalSamples);
+
+        manager.close();
+
+        // Reopen and verify persisted count survives restart
+        ClosedChunkIndexManager reopened = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        assertEquals(15, reopened.getTotalPersistedSampleCount());
+        reopened.close();
+    }
+
+    public void testDedupCallbackFired() throws IOException {
+        Path tempDir = createTempDir("testDedupCallbackFired");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        AtomicLong totalDeduped = new AtomicLong(0);
+        manager.setDedupCallback(totalDeduped::addAndGet);
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        // Create an OOO memchunk with a duplicate timestamp
+        var memChunk = new org.opensearch.tsdb.core.head.MemChunk(0, 0, 10000, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
+        memChunk.append(1000L, 1.0, 1L);
+        memChunk.append(2000L, 2.0, 2L);
+        memChunk.append(1000L, 3.0, 3L); // duplicate
+
+        manager.addMemChunk(series, memChunk);
+        manager.commitChangedIndexes(List.of(series));
+
+        assertEquals(1, totalDeduped.get());
+
+        manager.close();
+    }
+
+    public void testRetentionCallbackFired() throws Exception {
+        Path tempDir = createTempDir("testRetentionCallbackFired");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+
+        Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
+
+        Settings settings = Settings.builder()
+            .put(TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.getKey(), TimeValue.timeValueHours(2))
+            .put(TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.getKey(), 120)
+            .put(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.getKey(), org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_TIME_UNIT.toString())
+            .build();
+
+        // Use short retention so the block will be expired
+        TimeBasedRetention retention = new TimeBasedRetention(1L, 0L, frozenClock);
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            retention,
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            settings
+        );
+
+        AtomicLong totalRemoved = new AtomicLong(0);
+        manager.setRetentionCallback(totalRemoved::addAndGet);
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        manager.commitChangedIndexes(List.of(series));
+
+        long samplesBefore = manager.getTotalPersistedSampleCount();
+        assertTrue(samplesBefore > 0);
+
+        // Run optimization which triggers retention
+        manager.runOptimization();
+
+        assertEquals(samplesBefore, totalRemoved.get());
         manager.close();
     }
 }

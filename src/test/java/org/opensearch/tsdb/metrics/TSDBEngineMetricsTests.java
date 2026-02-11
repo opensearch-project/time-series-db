@@ -63,10 +63,13 @@ public class TSDBEngineMetricsTests extends OpenSearchTestCase {
         assertNotNull(metrics.deferredChunkCloseCount);
         assertNotNull(metrics.memChunksCloseableTotal);
         assertNotNull(metrics.translogReadersCount);
+        assertNotNull(metrics.samplesAppended);
+        assertNotNull(metrics.samplesFailed);
+        assertNotNull(metrics.samplesDeduped);
 
-        // Verify registry calls for counters (13 counters total: 3 ingestion + 3 OOO + 3 lifecycle + commit + deferred chunks + closeable
-        // chunks + translog readers)
-        verify(registry, times(13)).createCounter(anyString(), anyString(), anyString());
+        // Verify registry calls for counters (16 counters total: 3 ingestion + 3 OOO + 3 lifecycle + commit + deferred chunks + closeable
+        // chunks + translog readers + 3 accurate ingestion counters)
+        verify(registry, times(16)).createCounter(anyString(), anyString(), anyString());
     }
 
     public void testInitializeCreatesAllHistograms() {
@@ -184,6 +187,9 @@ public class TSDBEngineMetricsTests extends OpenSearchTestCase {
         assertNull(metrics.deferredChunkCloseCount);
         assertNull(metrics.memChunksCloseableTotal);
         assertNull(metrics.translogReadersCount);
+        assertNull(metrics.samplesAppended);
+        assertNull(metrics.samplesFailed);
+        assertNull(metrics.samplesDeduped);
 
         // Verify all histograms are reset to null
         assertNull(metrics.closedChunkSize);
@@ -288,5 +294,63 @@ public class TSDBEngineMetricsTests extends OpenSearchTestCase {
 
         // The supplier should not be invoked during registration (only when scraped)
         assertEquals(0, invocationCount[0]);
+    }
+
+    public void testRegisterShardGaugesCreatesGauges() {
+        metrics.initialize(registry);
+
+        Supplier<Double> sampleCountSupplier = () -> 42000.0;
+        Supplier<Double> sizeBytesSupplier = () -> 1024.0;
+        Tags tags = Tags.create().addTag("index", "test").addTag("shard", 0L).addTag("role", "primary");
+
+        metrics.registerShardGauges(registry, sampleCountSupplier, sizeBytesSupplier, tags);
+
+        assertNotNull(metrics.shardSampleCountGauge);
+        assertNotNull(metrics.shardSizeBytesGauge);
+
+        verify(registry).createGauge(
+            eq(TSDBMetricsConstants.SHARD_SAMPLE_COUNT),
+            eq(TSDBMetricsConstants.SHARD_SAMPLE_COUNT_DESC),
+            eq(TSDBMetricsConstants.UNIT_COUNT),
+            eq(sampleCountSupplier),
+            eq(tags)
+        );
+
+        verify(registry).createGauge(
+            eq(TSDBMetricsConstants.SHARD_SIZE_BYTES),
+            eq(TSDBMetricsConstants.SHARD_SIZE_BYTES_DESC),
+            eq(TSDBMetricsConstants.UNIT_BYTES),
+            eq(sizeBytesSupplier),
+            eq(tags)
+        );
+    }
+
+    public void testRegisterShardGaugesWithNullRegistryDoesNothing() {
+        metrics.initialize(registry);
+
+        metrics.registerShardGauges(null, () -> 0.0, () -> 0.0, Tags.EMPTY);
+
+        assertNull(metrics.shardSampleCountGauge);
+        assertNull(metrics.shardSizeBytesGauge);
+    }
+
+    public void testCleanupClosesShardGauges() throws Exception {
+        metrics.initialize(registry);
+
+        Closeable sampleCountGauge = mock(Closeable.class);
+        Closeable sizeBytesGauge = mock(Closeable.class);
+
+        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            sampleCountGauge,
+            sizeBytesGauge
+        );
+
+        metrics.registerShardGauges(registry, () -> 0.0, () -> 0.0, Tags.EMPTY);
+        metrics.cleanup();
+
+        verify(sampleCountGauge).close();
+        verify(sizeBytesGauge).close();
+        assertNull(metrics.shardSampleCountGauge);
+        assertNull(metrics.shardSizeBytesGauge);
     }
 }
