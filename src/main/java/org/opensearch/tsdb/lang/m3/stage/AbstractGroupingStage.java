@@ -406,7 +406,10 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
                 processedSeries = materializeSamples(processedSeries);
             }
 
-            return List.of(processedSeries);
+            // Use mutable list so downstream code can modify if needed (avoids immutable collection issues)
+            result = new ArrayList<>(1);
+            result.add(processedSeries);
+            return result;
         } else {
             // Label grouping: group by specified labels and aggregate within each group
             // Pass circuit breaker consumer for granular tracking of cardinality
