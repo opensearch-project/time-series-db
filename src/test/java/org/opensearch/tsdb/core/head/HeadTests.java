@@ -2351,7 +2351,8 @@ public class HeadTests extends OpenSearchTestCase {
 
     /**
      * Tests chunk boundary-based rate limiting with dynamic percentage changes.
-     * Dynamic setting changes only take effect at the next chunk boundary crossing.
+     * Within a boundary, cachedChunksToProcess uses max(existing, new) to handle growth.
+     * At boundary crossing, cachedChunksToProcess is reset to the new value.
      */
     public void testChunkBoundaryRateLimiting() throws Exception {
         // Create head with 10% rate limit
@@ -2398,12 +2399,14 @@ public class HeadTests extends OpenSearchTestCase {
         Head.IndexChunksResult result1 = head.closeHeadChunks(true, 10);
         assertEquals("First flush should close 2 chunks (10% of 20)", 2, result1.numClosedChunks());
 
-        // Now change percentage to 5% for remaining flushes in first range
-        // This change should not affect the first chunk range and will only update after chunk boundary.
+        // Within same boundary, passing 5% should still close 2 chunks because:
+        // - new target = 5% of 18 remaining = 1
+        // - cached target = 2
+        // - max(2, 1) = 2
         for (int flush = 2; flush <= 10; flush++) {
-            Head.IndexChunksResult result = head.closeHeadChunks(true, 5);  // Pass 5% but should still close 2
+            Head.IndexChunksResult result = head.closeHeadChunks(true, 5);
             assertEquals(
-                String.format(Locale.getDefault(), "Flush %d should still close 2 chunks (cached 10%% target from first boundary)", flush),
+                String.format(Locale.getDefault(), "Flush %d should close 2 chunks (max of cached=2 and new=1)", flush),
                 2,
                 result.numClosedChunks()
             );
@@ -2413,8 +2416,8 @@ public class HeadTests extends OpenSearchTestCase {
         // Cutoff at 360000, so maxTime = 360000 + 20000 = 380000
         head.updateMaxSeenTimestamp(380000L);
 
-        // Now in second range, the 5% setting should take effect
-        // 5% of 10 = 0.5, which rounds to 1
+        // Now in second range, boundary crossed so cachedChunksToProcess is reset
+        // 5% of 10 = 1
         for (int flush = 1; flush <= 10; flush++) {
             Head.IndexChunksResult result = head.closeHeadChunks(true, 5);
             assertEquals(
@@ -2423,6 +2426,108 @@ public class HeadTests extends OpenSearchTestCase {
                 result.numClosedChunks()
             );
         }
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
+     * Tests that getCutoffTimestamp() returns Long.MIN_VALUE when maxTime is Long.MIN_VALUE,
+     * preventing underflow that would wrap to a huge positive value.
+     */
+    public void testGetCutoffTimestampUnderflowProtection() throws Exception {
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("metrics"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("headTest", "headTestUid", 0),
+            defaultSettings
+        );
+
+        Head head = new Head(
+            createTempDir("testGetCutoffTimestamp"),
+            new ShardId("headTest", "headTestUid", 0),
+            closedChunkIndexManager,
+            defaultSettings
+        );
+
+        // When no samples have been ingested, maxTime is Long.MIN_VALUE
+        // getCutoffTimestamp() should return Long.MIN_VALUE to avoid underflow
+        long cutoffTimestamp = head.getCutoffTimestamp();
+        assertEquals(
+            "getCutoffTimestamp should return Long.MIN_VALUE when no samples ingested to avoid underflow",
+            Long.MIN_VALUE,
+            cutoffTimestamp
+        );
+
+        // After ingesting a sample, getCutoffTimestamp should return maxTime - oooCutoffWindow
+        Labels series = ByteLabels.fromStrings("test", "cutoff");
+        Head.HeadAppender appender = head.newAppender();
+        appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, series.stableHash(), series, 100000L, 1.0, () -> {});
+        appender.append(() -> {}, () -> {});
+
+        // Now maxTime = 100000, oooCutoffWindow = 8000 (from defaultSettings)
+        cutoffTimestamp = head.getCutoffTimestamp();
+        assertEquals("getCutoffTimestamp should return maxTime - oooCutoffWindow after samples ingested", 100000L - 8000L, cutoffTimestamp);
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
+     * Tests that when closeable chunks decrease within the same boundary, the cached value is preserved
+     * (conservative approach to avoid thrashing).
+     */
+    public void testRateLimitingPreservesCachedValueWhenChunksDecrease() throws Exception {
+        Settings customSettings = Settings.builder()
+            .put(defaultSettings)
+            .put(TSDBPlugin.TSDB_ENGINE_MAX_CLOSEABLE_CHUNKS_PER_CHUNK_RANGE_PERCENTAGE.getKey(), 50)
+            .build();
+
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("metrics"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("headTest", "headTestUid", 0),
+            customSettings
+        );
+
+        Head head = new Head(
+            createTempDir("testPreserveCachedValue"),
+            new ShardId("headTest", "headTestUid", 0),
+            closedChunkIndexManager,
+            customSettings
+        );
+
+        long seqNo = 0;
+
+        // Create 10 series with 1 chunk each
+        for (int s = 0; s < 10; s++) {
+            Labels series = ByteLabels.fromStrings("series", String.valueOf(s));
+            for (int i = 1; i <= 4; i++) {
+                appendSampleWithSeqNo(head, series, i * 1000L, 1.0, seqNo++);
+            }
+        }
+
+        // Make chunks closeable
+        head.updateMaxSeenTimestamp(20000L);
+
+        // First flush: 10 closeable chunks, 50% = 5 chunks per flush
+        Head.IndexChunksResult result1 = head.closeHeadChunks(true, 50);
+        assertEquals("First flush should close 5 chunks (50% of 10)", 5, result1.numClosedChunks());
+        assertEquals("Should have 5 deferred chunks", 5, result1.deferredChunkCount());
+
+        // Second flush: only 5 closeable chunks remaining
+        // new target = 50% of 5 = 2
+        // cached target = 5
+        // max(5, 2) = 5 (preserved, but limited by available chunks)
+        Head.IndexChunksResult result2 = head.closeHeadChunks(true, 50);
+        assertEquals("Should close all 5 remaining chunks (cached=5, available=5)", 5, result2.numClosedChunks());
+        assertEquals("Should have no deferred chunks", 0, result2.deferredChunkCount());
 
         head.close();
         closedChunkIndexManager.close();
