@@ -388,6 +388,21 @@ Open `.html` files in browser for interactive flamegraphs.
 JMX enabled on port 9010. Connect VisualVM to `localhost:9010`.
 You can connect to it using (VisualVM)[https://visualvm.github.io/], and use (File > Add JMX Connection) to connect to it via: localhost:9010
 
+Visualizing flame graphs:
+* relevant blog post: https://softwaredoug.com/blog/2023/10/15/visualvm-flamegraphs
+  * script to parse VisualVM call graph export into text file: https://gist.github.com/softwaredoug/b0ddee0941c9dd5b3922a68f64622f32
+  * flamegraphs repo to convert above text file into flame graph: https://github.com/brendangregg/FlameGraph 
+  * Example:
+      * VisuaVM > sampler
+        * select CPU, let it run for the duration you want to sample
+        * "snapshot"
+        * "export forward call graphs"
+      * generate flame graph
+      ```shell
+      python parse_stack.py ~/stacks/stack.csv > intellij_stack.txt
+      ./path/to/flamegraph.pl intellij_stack.txt > intellij_graph.svg
+      ```
+
 ## Useful Commands
 
 ```bash
