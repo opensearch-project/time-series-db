@@ -38,7 +38,6 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
     private ThreadContext threadContext;
     private TSDBIngestionLagMetrics metrics;
     private TSDBIngestionLagActionFilter filter;
-    private Histogram mockNetworkLatencyHistogram;
     private Histogram mockCoordinatorLagHistogram;
 
     @Override
@@ -46,9 +45,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         super.setUp();
         threadContext = new ThreadContext(org.opensearch.common.settings.Settings.EMPTY);
         metrics = new TSDBIngestionLagMetrics();
-        mockNetworkLatencyHistogram = mock(Histogram.class);
         mockCoordinatorLagHistogram = mock(Histogram.class);
-        metrics.networkLatency = mockNetworkLatencyHistogram;
         metrics.coordinatorLag = mockCoordinatorLagHistogram;
         filter = new TSDBIngestionLagActionFilter(threadContext, metrics, () -> true);
         TSDBMetrics.initialize(mock(org.opensearch.telemetry.metrics.MetricsRegistry.class));
@@ -73,7 +70,6 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         filter.apply(task, "some-other-action", request, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, "some-other-action", request, listener);
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
 
@@ -84,29 +80,19 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
         // Simulate HTTP headers being copied to ThreadContext by RestController
-        long flushTimestamp = System.currentTimeMillis() - 50; // 50ms ago
         long minSampleTimestamp = System.currentTimeMillis() - 1000; // 1 second ago
-        threadContext.putHeader("X-Flush-Timestamp-Ms", String.valueOf(flushTimestamp));
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(minSampleTimestamp));
 
-        long beforeApply = System.currentTimeMillis();
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
-        long afterApply = System.currentTimeMillis();
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // Both metrics should be recorded
-        verify(mockNetworkLatencyHistogram, times(1)).record(anyDouble(), any(Tags.class));
+        // Coordinator lag metric should be recorded
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
 
         // Verify headers are forwarded to data nodes
         String minTimestamp = threadContext.getHeader("tsdb.min_sample_timestamp_ms");
         assertNotNull(minTimestamp);
         assertEquals(String.valueOf(minSampleTimestamp), minTimestamp);
-
-        String arrivalTime = threadContext.getHeader("tsdb.arrival_time_ms");
-        assertNotNull(arrivalTime);
-        long arrivalTimeMs = Long.parseLong(arrivalTime);
-        assertTrue(arrivalTimeMs >= beforeApply && arrivalTimeMs <= afterApply);
 
         String bulkRequestId = threadContext.getHeader("tsdb.bulk_request_id");
         assertNotNull(bulkRequestId);
@@ -124,26 +110,8 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         // No metrics should be recorded without headers
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
         assertNull(threadContext.getHeader("tsdb.min_sample_timestamp_ms"));
-    }
-
-    public void testApplyWithOnlyFlushTimestamp() {
-        ActionFilterChain<ActionRequest, ActionResponse> chain = mock(ActionFilterChain.class);
-        Task task = mock(Task.class);
-        BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
-        ActionListener<ActionResponse> listener = mock(ActionListener.class);
-
-        // Only flush timestamp, missing min sample timestamp
-        threadContext.putHeader("X-Flush-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
-
-        filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
-
-        verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // No metrics without both headers
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
-        verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
 
     public void testApplyWithOnlyMinSampleTimestamp() {
@@ -152,15 +120,14 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        // Only min sample timestamp, missing flush timestamp
+        // Min sample timestamp header provided
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // No metrics without both headers
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
-        verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
+        // Coordinator lag metric should be recorded
+        verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
     }
 
     public void testApplyWithInvalidTimestampHeaders() {
@@ -170,14 +137,12 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
         // Invalid timestamps (not numbers)
-        threadContext.putHeader("X-Flush-Timestamp-Ms", "not-a-number");
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", "also-not-a-number");
+        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", "not-a-number");
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         // Should not crash, chain should proceed
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
 
@@ -187,14 +152,12 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = new BulkRequest();
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Flush-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         // Metrics should still be recorded even with empty bulk request (headers are valid)
-        verify(mockNetworkLatencyHistogram, times(1)).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
     }
 
@@ -207,14 +170,12 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Flush-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         // No metrics should be recorded when disabled
-        verify(mockNetworkLatencyHistogram, never()).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
 
@@ -224,13 +185,11 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("my-custom-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Flush-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        verify(mockNetworkLatencyHistogram, times(1)).record(anyDouble(), any(Tags.class));
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
     }
 

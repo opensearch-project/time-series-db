@@ -61,6 +61,7 @@ import org.opensearch.tsdb.core.retention.RetentionFactory;
 import org.opensearch.tsdb.core.utils.RateLimitedLock;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.TSDBPlugin;
+import org.opensearch.core.index.shard.ShardId;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -95,7 +96,7 @@ public class TSDBEngine extends Engine {
     private static final String POST_RECOVERY_REFRESH_SOURCE = "post_recovery";
 
     // Static registry for looking up TSDBEngine instances by shard ID
-    private static final ConcurrentHashMap<org.opensearch.core.index.shard.ShardId, TSDBEngine> ENGINE_REGISTRY = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<ShardId, TSDBEngine> ENGINE_REGISTRY = new ConcurrentHashMap<>();
 
     /**
      * Returns the TSDBEngine instance for the given shard ID, or null if not found.

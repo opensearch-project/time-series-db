@@ -14,25 +14,13 @@ import org.opensearch.telemetry.metrics.MetricsRegistry;
  * Ingestion lag metrics for TSDB.
  */
 public class TSDBIngestionLagMetrics {
-    /** Network latency from client flush to coordinator arrival. */
-    public Histogram networkLatency;
-
     /** Time from sample timestamp to coordinator arrival. */
     public Histogram coordinatorLag;
 
     /** End-to-end time from sample timestamp to searchable. */
     public Histogram searchableLag;
 
-    /** Time from coordinator arrival to searchable. */
-    public Histogram indexingLatency;
-
     public void initialize(MetricsRegistry registry) {
-        networkLatency = registry.createHistogram(
-            TSDBMetricsConstants.INGESTION_NETWORK_LATENCY,
-            TSDBMetricsConstants.INGESTION_NETWORK_LATENCY_DESC,
-            TSDBMetricsConstants.UNIT_MILLISECONDS
-        );
-
         coordinatorLag = registry.createHistogram(
             TSDBMetricsConstants.INGESTION_COORDINATOR_LAG,
             TSDBMetricsConstants.INGESTION_COORDINATOR_LAG_DESC,
@@ -44,18 +32,10 @@ public class TSDBIngestionLagMetrics {
             TSDBMetricsConstants.INGESTION_SEARCHABLE_LAG_DESC,
             TSDBMetricsConstants.UNIT_MILLISECONDS
         );
-
-        indexingLatency = registry.createHistogram(
-            TSDBMetricsConstants.INGESTION_INDEXING_LATENCY,
-            TSDBMetricsConstants.INGESTION_INDEXING_LATENCY_DESC,
-            TSDBMetricsConstants.UNIT_MILLISECONDS
-        );
     }
 
     public void cleanup() {
-        networkLatency = null;
         coordinatorLag = null;
         searchableLag = null;
-        indexingLatency = null;
     }
 }

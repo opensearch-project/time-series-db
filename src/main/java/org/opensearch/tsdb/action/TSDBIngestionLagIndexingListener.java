@@ -45,7 +45,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
     private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
     private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
-    private static final String HEADER_ARRIVAL_TIME = "tsdb.arrival_time_ms";
 
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
@@ -136,8 +135,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         }
 
         String minTimestampStr = threadContext.getHeader(HEADER_MIN_SAMPLE_TIMESTAMP);
-        String arrivalTimeStr = threadContext.getHeader(HEADER_ARRIVAL_TIME);
-        if (minTimestampStr == null || arrivalTimeStr == null) {
+        if (minTimestampStr == null) {
             return;
         }
 
@@ -148,10 +146,9 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
         try {
             long minSampleTimestamp = Long.parseLong(minTimestampStr);
-            long arrivalTime = Long.parseLong(arrivalTimeStr);
             long seqNo = result.getSeqNo();
 
-            listener.trackRequest(bulkRequestId, seqNo, minSampleTimestamp, arrivalTime);
+            listener.trackRequest(bulkRequestId, seqNo, minSampleTimestamp);
         } catch (Exception e) {
             logger.debug("Failed to track bulk request {}", bulkRequestId, e);
         }
@@ -178,7 +175,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             this.enabledSupplier = enabledSupplier;
         }
 
-        void trackRequest(String bulkRequestId, long seqNo, long minTimestamp, long arrivalTime) {
+        void trackRequest(String bulkRequestId, long seqNo, long minTimestamp) {
             if (pendingRequests.size() >= MAX_PENDING_REQUESTS) {
                 logger.debug("Pending requests map full for shard {}, skipping {}", shardId, bulkRequestId);
                 return;
@@ -186,7 +183,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
             pendingRequests.compute(bulkRequestId, (k, existing) -> {
                 if (existing == null) {
-                    return new PendingBulkRequest(bulkRequestId, minTimestamp, arrivalTime, seqNo);
+                    return new PendingBulkRequest(bulkRequestId, minTimestamp, seqNo);
                 } else {
                     existing.updateMaxSeqNo(seqNo);
                     return existing;
@@ -241,17 +238,14 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
                     Tags tags = Tags.create().addTag("index", shardId.getIndexName());
 
                     long searchableLagMs = now - pending.minSampleTimestamp;
-                    long indexingLatencyMs = now - pending.arrivalTime;
 
                     TSDBMetrics.recordHistogram(metrics.searchableLag, searchableLagMs, tags);
-                    TSDBMetrics.recordHistogram(metrics.indexingLatency, indexingLatencyMs, tags);
 
                     logger.debug(
-                        "Searchable metrics - shard: {}, bulkId: {}, searchableLag: {}ms, indexingLatency: {}ms",
+                        "Searchable metrics - shard: {}, bulkId: {}, searchableLag: {}ms",
                         shardId,
                         pending.bulkRequestId,
-                        searchableLagMs,
-                        indexingLatencyMs
+                        searchableLagMs
                     );
 
                     iter.remove();
@@ -271,16 +265,14 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
     private static class PendingBulkRequest {
         final String bulkRequestId;
         final long minSampleTimestamp;
-        final long arrivalTime;
         final long createdAt;
         final AtomicLong maxSeqNo;
         final AtomicInteger docsSeen;
         volatile int frozenDocsSeen;
 
-        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp, long arrivalTime, long seqNo) {
+        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp, long seqNo) {
             this.bulkRequestId = bulkRequestId;
             this.minSampleTimestamp = minSampleTimestamp;
-            this.arrivalTime = arrivalTime;
             this.createdAt = System.currentTimeMillis();
             this.maxSeqNo = new AtomicLong(seqNo);
             this.docsSeen = new AtomicInteger(1);

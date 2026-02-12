@@ -34,12 +34,10 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
 
     // HTTP headers (copied to ThreadContext by RestController)
-    private static final String HTTP_HEADER_FLUSH_TIMESTAMP = "X-Flush-Timestamp-Ms";
     private static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
 
     // Internal headers forwarded to data nodes
     private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
-    private static final String HEADER_ARRIVAL_TIME = "tsdb.arrival_time_ms";
     private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
 
     private final ThreadContext threadContext;
@@ -75,37 +73,25 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
 
         try {
             // Read timestamps from HTTP headers (already copied to ThreadContext by RestController)
-            String flushTimestampStr = threadContext.getHeader(HTTP_HEADER_FLUSH_TIMESTAMP);
             String minSampleTimestampStr = threadContext.getHeader(HTTP_HEADER_MIN_SAMPLE_TIMESTAMP);
 
-            if (flushTimestampStr != null && minSampleTimestampStr != null) {
-                long flushTimestamp = Long.parseLong(flushTimestampStr);
+            if (minSampleTimestampStr != null) {
                 long minSampleTimestamp = Long.parseLong(minSampleTimestampStr);
-                long arrivalTime = System.currentTimeMillis();
+                long now = System.currentTimeMillis();
 
                 String indexName = getPrimaryIndex(bulkRequest);
                 Tags tags = Tags.create().addTag("index", indexName);
 
-                // Metric 1: Network latency (client flush → coordinator arrival)
-                long networkLatencyMs = arrivalTime - flushTimestamp;
-                TSDBMetrics.recordHistogram(metrics.networkLatency, networkLatencyMs, tags);
-
-                // Metric 2: Coordinator lag (min sample timestamp → coordinator arrival)
-                long coordinatorLagMs = arrivalTime - minSampleTimestamp;
+                // Coordinator lag (min sample timestamp → coordinator arrival)
+                long coordinatorLagMs = now - minSampleTimestamp;
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
 
-                // Forward headers to data nodes for searchable lag and indexing latency metrics
+                // Forward headers to data nodes for searchable lag metric
                 String bulkRequestId = UUID.randomUUID().toString();
                 threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
-                threadContext.putHeader(HEADER_ARRIVAL_TIME, String.valueOf(arrivalTime));
                 threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
 
-                logger.debug(
-                    "Ingestion lag metrics - index: {}, networkLatency: {}ms, coordinatorLag: {}ms",
-                    indexName,
-                    networkLatencyMs,
-                    coordinatorLagMs
-                );
+                logger.debug("Ingestion lag metrics - index: {}, coordinatorLag: {}ms", indexName, coordinatorLagMs);
             }
         } catch (Exception e) {
             logger.debug("Failed to process ingestion lag metrics from HTTP headers", e);
