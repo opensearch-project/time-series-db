@@ -193,6 +193,16 @@ public class ClosedChunkIndex implements Closeable {
     }
 
     /**
+     * Returns the total sample count for this index: persisted metadata stats plus
+     * any samples accumulated since the last commit.
+     *
+     * @return total sample count (persisted + pending)
+     */
+    public long getTotalSampleCount() {
+        return metadata.stats().sampleCount() + pendingSampleCount.get();
+    }
+
+    /**
      * Force a merge of the index segments to the specified number of segments.
      * This is an expensive operation and should be used sparingly.
      *

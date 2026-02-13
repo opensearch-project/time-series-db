@@ -222,7 +222,7 @@ public class TSDBEngine extends Engine {
             );
 
             closedChunkIndexManager.setDedupCallback(deduped -> totalSampleCount.addAndGet(-deduped));
-            closedChunkIndexManager.setRetentionCallback(removed -> totalSampleCount.addAndGet(-removed));
+            closedChunkIndexManager.setRetentionDeletionCallback(removed -> totalSampleCount.addAndGet(-removed));
             closedChunkIndexManager.setMetricTags(metricTags);
             totalSampleCount.set(closedChunkIndexManager.getTotalPersistedSampleCount());
 

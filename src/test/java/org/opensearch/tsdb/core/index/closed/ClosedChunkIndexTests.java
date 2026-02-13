@@ -518,6 +518,27 @@ public class ClosedChunkIndexTests extends OpenSearchTestCase {
         closedChunkIndex.close();
     }
 
+    public void testGetTotalSampleCountCombinesPersistedAndPending() throws IOException {
+        ClosedChunkIndex.Stats stats = new ClosedChunkIndex.Stats(100);
+        var dir = createTempDir("testGetTotalSampleCount");
+        ClosedChunkIndex closedChunkIndex = new ClosedChunkIndex(
+            dir,
+            new ClosedChunkIndex.Metadata(dir.getFileName().toString(), 0, 10000, stats),
+            DEFAULT_TIME_UNIT,
+            Settings.EMPTY
+        );
+
+        // Initially: persisted=100, pending=0
+        assertEquals(100, closedChunkIndex.getTotalSampleCount());
+
+        // Add some samples: persisted=100, pending=5
+        Labels labels = ByteLabels.fromStrings("k1", "v1");
+        closedChunkIndex.addNewChunk(labels, buildMemChunk(5, 0, 90));
+        assertEquals(105, closedChunkIndex.getTotalSampleCount());
+
+        closedChunkIndex.close();
+    }
+
     public void testAddNewChunkReturnsDedupCount() throws IOException {
         var dir = createTempDir("testAddNewChunkReturnsDedupCount");
         ClosedChunkIndex closedChunkIndex = new ClosedChunkIndex(

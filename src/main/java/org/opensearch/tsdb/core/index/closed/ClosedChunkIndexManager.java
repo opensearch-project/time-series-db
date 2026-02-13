@@ -114,7 +114,7 @@ public class ClosedChunkIndexManager implements Closeable {
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
 
     private volatile LongConsumer dedupCallback;
-    private volatile LongConsumer retentionCallback;
+    private volatile LongConsumer retentionDeletionCallback;
     private volatile Tags metricTags;
 
     /**
@@ -192,8 +192,8 @@ public class ClosedChunkIndexManager implements Closeable {
      *
      * @param callback accepts the sample count of the deleted block
      */
-    public void setRetentionCallback(LongConsumer callback) {
-        this.retentionCallback = callback;
+    public void setRetentionDeletionCallback(LongConsumer callback) {
+        this.retentionDeletionCallback = callback;
     }
 
     /**
@@ -206,7 +206,7 @@ public class ClosedChunkIndexManager implements Closeable {
         try {
             long total = 0;
             for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
-                total += index.getMetadata().stats().sampleCount() + index.getPendingSampleCount();
+                total += index.getTotalSampleCount();
             }
             return total;
         } finally {
@@ -239,8 +239,7 @@ public class ClosedChunkIndexManager implements Closeable {
 
                 for (ClosedChunkIndex closedChunkIndex : candidates) {
                     try {
-                        long blockSampleCount = closedChunkIndex.getMetadata().stats().sampleCount() + closedChunkIndex
-                            .getPendingSampleCount();
+                        long blockSampleCount = closedChunkIndex.getTotalSampleCount();
                         remove(closedChunkIndex);
                         pendingClosureIndexes.add(closedChunkIndex);
                         var removed = closeIndexes(Set.of(closedChunkIndex));
@@ -248,8 +247,8 @@ public class ClosedChunkIndexManager implements Closeable {
                             org.opensearch.tsdb.core.utils.Files.deleteDirectory(closedChunkIndex.getPath().toAbsolutePath());
                             pendingClosureIndexes.removeAll(removed);
                             TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.retentionSuccessTotal, removed.size());
-                            if (retentionCallback != null && blockSampleCount > 0) {
-                                retentionCallback.accept(blockSampleCount);
+                            if (retentionDeletionCallback != null && blockSampleCount > 0) {
+                                retentionDeletionCallback.accept(blockSampleCount);
                             }
                         }
                     } catch (Exception e) {
@@ -448,10 +447,10 @@ public class ClosedChunkIndexManager implements Closeable {
         var newMap = new TreeMap<Long, ClosedChunkIndex>();
         var indexMetadata = new ArrayList<String>();
         newMap.put(Time.toTimestamp(replacedIndexes.getLast().getMaxTime(), resolution), replacementIndex);
-        indexMetadata.add(marshalWithCurrentStats(replacementIndex));
 
         lock.lock();
         try {
+            indexMetadata.add(marshalWithCurrentStats(replacementIndex));
             for (ClosedChunkIndex closedChunkIndex : closedChunkIndexMap.values()) {
                 if (replacedIndexes.contains(closedChunkIndex)) {
                     continue;
@@ -477,12 +476,11 @@ public class ClosedChunkIndexManager implements Closeable {
      */
     private String marshalWithCurrentStats(ClosedChunkIndex index) throws IOException {
         ClosedChunkIndex.Metadata meta = index.getMetadata();
-        long totalSampleCount = meta.stats().sampleCount() + index.getPendingSampleCount();
         return new ClosedChunkIndex.Metadata(
             meta.directoryName(),
             meta.minTimestamp(),
             meta.maxTimestamp(),
-            new ClosedChunkIndex.Stats(totalSampleCount)
+            new ClosedChunkIndex.Stats(index.getTotalSampleCount())
         ).marshal();
     }
 

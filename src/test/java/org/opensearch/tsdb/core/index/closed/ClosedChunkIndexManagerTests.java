@@ -911,6 +911,78 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         manager.close();
     }
 
+    public void testRetentionWithNullCallbackDoesNotThrow() throws Exception {
+        Path tempDir = createTempDir("testRetentionNullCallback");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+
+        Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
+
+        Settings settings = Settings.builder()
+            .put(TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.getKey(), TimeValue.timeValueHours(2))
+            .put(TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.getKey(), 120)
+            .put(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.getKey(), org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_TIME_UNIT.toString())
+            .build();
+
+        TimeBasedRetention retention = new TimeBasedRetention(1L, 0L, frozenClock);
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            retention,
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            settings
+        );
+
+        // Intentionally do NOT set retentionDeletionCallback — it should remain null
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        manager.commitChangedIndexes(List.of(series));
+
+        // Run optimization which triggers retention — should not throw with null callback
+        manager.runOptimization();
+
+        // Block should have been deleted
+        assertEquals(0, manager.getTotalPersistedSampleCount());
+
+        manager.close();
+    }
+
+    public void testDedupWithNullCallbackDoesNotThrow() throws IOException {
+        Path tempDir = createTempDir("testDedupNullCallback");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        // Intentionally do NOT set dedupCallback — it should remain null
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels);
+
+        // Create an OOO memchunk with a duplicate timestamp
+        var memChunk = new org.opensearch.tsdb.core.head.MemChunk(0, 0, 10000, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
+        memChunk.append(1000L, 1.0, 1L);
+        memChunk.append(2000L, 2.0, 2L);
+        memChunk.append(1000L, 3.0, 3L); // duplicate
+
+        // Should not throw with null callback
+        manager.addMemChunk(series, memChunk);
+        manager.commitChangedIndexes(List.of(series));
+
+        manager.close();
+    }
+
     public void testRetentionCallbackFired() throws Exception {
         Path tempDir = createTempDir("testRetentionCallbackFired");
         MetadataStore metadataStore = new InMemoryMetadataStore();
@@ -937,7 +1009,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         AtomicLong totalRemoved = new AtomicLong(0);
-        manager.setRetentionCallback(totalRemoved::addAndGet);
+        manager.setRetentionDeletionCallback(totalRemoved::addAndGet);
 
         Labels labels = ByteLabels.fromStrings("metric", "cpu");
         MemSeries series = new MemSeries(0, labels);
