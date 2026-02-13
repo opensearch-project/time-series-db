@@ -23,6 +23,7 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -90,11 +91,11 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
 
         // Verify headers are forwarded to data nodes
-        String minTimestamp = threadContext.getHeader("tsdb.min_sample_timestamp_ms");
+        String minTimestamp = threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP);
         assertNotNull(minTimestamp);
         assertEquals(String.valueOf(minSampleTimestamp), minTimestamp);
 
-        String bulkRequestId = threadContext.getHeader("tsdb.bulk_request_id");
+        String bulkRequestId = threadContext.getHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID);
         assertNotNull(bulkRequestId);
     }
 
@@ -111,7 +112,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         // No metrics should be recorded without headers
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
-        assertNull(threadContext.getHeader("tsdb.min_sample_timestamp_ms"));
+        assertNull(threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP));
     }
 
     public void testApplyWithOnlyMinSampleTimestamp() {

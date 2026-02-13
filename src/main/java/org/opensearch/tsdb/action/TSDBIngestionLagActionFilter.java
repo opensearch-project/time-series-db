@@ -23,6 +23,7 @@ import org.opensearch.tasks.Task;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -33,12 +34,8 @@ import java.util.function.Supplier;
 public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
 
-    // HTTP headers (copied to ThreadContext by RestController)
+    // HTTP header (copied to ThreadContext by RestController)
     private static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
-
-    // Internal headers forwarded to data nodes
-    private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
-    private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
 
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
@@ -88,8 +85,8 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
 
                 // Forward headers to data nodes for searchable lag metric
                 String bulkRequestId = UUID.randomUUID().toString();
-                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
-                threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
+                threadContext.putHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
+                threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
 
                 logger.debug("Ingestion lag metrics - index: {}, coordinatorLag: {}ms", indexName, coordinatorLagMs);
             }

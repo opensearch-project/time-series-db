@@ -380,6 +380,16 @@ public final class TSDBMetricsConstants {
     public static final String TAG_LOCATION_COORDINATOR = "coordinator";
 
     // ============================================
+    // Ingestion Lag Internal Headers
+    // ============================================
+
+    /** Internal header: unique identifier for a bulk request, forwarded from coordinator to data nodes */
+    public static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
+
+    /** Internal header: minimum sample timestamp (ms) in a bulk request, forwarded from coordinator to data nodes */
+    public static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
+
+    // ============================================
     // Conversion Constants
     // ============================================
 

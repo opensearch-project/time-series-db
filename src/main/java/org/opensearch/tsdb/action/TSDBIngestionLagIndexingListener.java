@@ -23,13 +23,13 @@ import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndice
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -37,14 +37,12 @@ import java.util.function.Supplier;
  * Tracks ingestion lag until data becomes searchable using per-shard refresh listeners.
  *
  * <p>For each shard, a dedicated {@link ReferenceManager.RefreshListener} is registered
- * with the {@link TSDBEngine}. When a refresh occurs, the listener checks the shard's
- * processedLocalCheckpoint to determine which pending bulk requests have become searchable.</p>
+ * with the {@link TSDBEngine}. When a refresh occurs ({@code didRefresh=true}), the listener
+ * checks whether all documents from a pending bulk request have been indexed before the refresh
+ * via {@code isComplete()}, and if so, records the searchable lag metric.</p>
  */
 public class TSDBIngestionLagIndexingListener implements IndexingOperationListener, IndexEventListener {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagIndexingListener.class);
-
-    private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
-    private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
 
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
@@ -80,7 +78,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
     public void afterIndexShardStarted(IndexShard indexShard) {
         TSDBEngine engine = engineLookup.apply(indexShard.shardId());
         if (engine != null) {
-            ShardRefreshListener listener = new ShardRefreshListener(indexShard.shardId(), indexShard, metrics, enabledSupplier);
+            ShardRefreshListener listener = new ShardRefreshListener(indexShard.shardId(), metrics, enabledSupplier);
             shardListeners.put(indexShard.shardId(), listener);
             engine.addRefreshListener(listener);
             logger.debug("Registered refresh listener for shard {}", indexShard.shardId());
@@ -94,11 +92,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             listener.clear();
             logger.debug("Removed refresh listener for shard {}", shardId);
         }
-    }
-
-    @Override
-    public void afterIndexShardClosed(ShardId shardId, IndexShard indexShard, org.opensearch.common.settings.Settings indexSettings) {
-        shardListeners.remove(shardId);
     }
 
     @Override
@@ -129,12 +122,12 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             return;
         }
 
-        String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);
+        String bulkRequestId = threadContext.getHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID);
         if (bulkRequestId == null) {
             return;
         }
 
-        String minTimestampStr = threadContext.getHeader(HEADER_MIN_SAMPLE_TIMESTAMP);
+        String minTimestampStr = threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP);
         if (minTimestampStr == null) {
             return;
         }
@@ -146,9 +139,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
         try {
             long minSampleTimestamp = Long.parseLong(minTimestampStr);
-            long seqNo = result.getSeqNo();
-
-            listener.trackRequest(bulkRequestId, seqNo, minSampleTimestamp);
+            listener.trackRequest(bulkRequestId, minSampleTimestamp);
         } catch (Exception e) {
             logger.debug("Failed to track bulk request {}", bulkRequestId, e);
         }
@@ -163,19 +154,17 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         private static final long MAX_PENDING_AGE_MS = 60_000;
 
         private final ShardId shardId;
-        private final IndexShard indexShard;
         private final TSDBIngestionLagMetrics metrics;
         private final Supplier<Boolean> enabledSupplier;
         private final ConcurrentHashMap<String, PendingBulkRequest> pendingRequests = new ConcurrentHashMap<>();
 
-        ShardRefreshListener(ShardId shardId, IndexShard indexShard, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
+        ShardRefreshListener(ShardId shardId, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
             this.shardId = shardId;
-            this.indexShard = indexShard;
             this.metrics = metrics;
             this.enabledSupplier = enabledSupplier;
         }
 
-        void trackRequest(String bulkRequestId, long seqNo, long minTimestamp) {
+        void trackRequest(String bulkRequestId, long minTimestamp) {
             if (pendingRequests.size() >= MAX_PENDING_REQUESTS) {
                 logger.debug("Pending requests map full for shard {}, skipping {}", shardId, bulkRequestId);
                 return;
@@ -183,9 +172,9 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
             pendingRequests.compute(bulkRequestId, (k, existing) -> {
                 if (existing == null) {
-                    return new PendingBulkRequest(bulkRequestId, minTimestamp, seqNo);
+                    return new PendingBulkRequest(bulkRequestId, minTimestamp);
                 } else {
-                    existing.updateMaxSeqNo(seqNo);
+                    existing.trackAdditionalDoc();
                     return existing;
                 }
             });
@@ -212,13 +201,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             }
 
             long now = System.currentTimeMillis();
-            long checkpoint;
-            try {
-                checkpoint = indexShard.getProcessedLocalCheckpoint();
-            } catch (Exception e) {
-                logger.debug("Failed to get checkpoint for shard {}", shardId, e);
-                return;
-            }
 
             Iterator<Map.Entry<String, PendingBulkRequest>> iter = pendingRequests.entrySet().iterator();
             while (iter.hasNext()) {
@@ -232,9 +214,11 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
                     continue;
                 }
 
-                // Check if searchable: all docs from this bulk must have been indexed
-                // (no new docs arrived during the refresh) and checkpoint must have advanced past them
-                if (pending.isComplete() && pending.maxSeqNo.get() <= checkpoint) {
+                // A bulk request is searchable when didRefresh=true (a new reader was opened) and
+                // isComplete() confirms all documents from this bulk were indexed before the refresh.
+                // Lucene's DirectoryReader.openIfChanged() captures everything in the IndexWriter at
+                // refresh time, so documents indexed before beforeRefresh() are guaranteed visible.
+                if (pending.isComplete()) {
                     Tags tags = Tags.create().addTag("index", shardId.getIndexName());
 
                     long searchableLagMs = now - pending.minSampleTimestamp;
@@ -266,21 +250,18 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         final String bulkRequestId;
         final long minSampleTimestamp;
         final long createdAt;
-        final AtomicLong maxSeqNo;
         final AtomicInteger docsSeen;
         volatile int frozenDocsSeen;
 
-        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp, long seqNo) {
+        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp) {
             this.bulkRequestId = bulkRequestId;
             this.minSampleTimestamp = minSampleTimestamp;
             this.createdAt = System.currentTimeMillis();
-            this.maxSeqNo = new AtomicLong(seqNo);
             this.docsSeen = new AtomicInteger(1);
             this.frozenDocsSeen = -1;
         }
 
-        void updateMaxSeqNo(long seqNo) {
-            maxSeqNo.updateAndGet(current -> Math.max(current, seqNo));
+        void trackAdditionalDoc() {
             docsSeen.incrementAndGet();
         }
 

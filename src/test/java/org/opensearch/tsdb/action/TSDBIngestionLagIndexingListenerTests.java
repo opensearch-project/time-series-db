@@ -19,6 +19,7 @@ import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 import java.io.IOException;
 
@@ -113,7 +114,7 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         listener.afterIndexShardStarted(mockIndexShard);
 
         String bulkRequestId = "test-bulk-request-id";
-        threadContext.putHeader("tsdb.bulk_request_id", bulkRequestId);
+        threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
 
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = createSuccessResult(100L);
@@ -127,9 +128,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         listener.afterIndexShardStarted(mockIndexShard);
 
         setupHeaders("test-bulk-request-id", 1000L);
-
-        // Mock checkpoint to be greater than seqNo (document is searchable)
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(200L);
 
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = createSuccessResult(100L);
@@ -159,7 +157,7 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
     }
 
-    public void testRefreshDoesNotRecordMetricsUntilCheckpointAdvances() throws IOException {
+    public void testRefreshRecordsMetricsWhenBulkIsComplete() throws IOException {
         listener.afterIndexShardStarted(mockIndexShard);
 
         setupHeaders("test-bulk-request-id", 1000L);
@@ -167,26 +165,13 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = createSuccessResult(100L);
 
-        // Checkpoint is 50 (document not yet searchable)
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(50L);
-
         listener.postIndex(shardId, index, result);
 
-        // Simulate refresh
+        // Simulate refresh — isComplete() should be true since all docs indexed before beforeRefresh
         capturedRefreshListener.beforeRefresh();
         capturedRefreshListener.afterRefresh(true);
 
-        // Should NOT record metrics because maxSeqNo (100) > checkpoint (50)
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
-
-        // Advance checkpoint
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(100L);
-
-        // Simulate another refresh
-        capturedRefreshListener.beforeRefresh();
-        capturedRefreshListener.afterRefresh(true);
-
-        // Now metrics should be recorded
+        // Metrics should be recorded immediately on the first refresh after all docs are indexed
         verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
     }
 
@@ -197,32 +182,23 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
 
         Engine.Index index = mock(Engine.Index.class);
 
-        // First document with seqNo 100
+        // First document
         Engine.IndexResult result1 = createSuccessResult(100L);
         listener.postIndex(shardId, index, result1);
 
-        // Second document with seqNo 200 (higher)
+        // Second document
         Engine.IndexResult result2 = createSuccessResult(200L);
         listener.postIndex(shardId, index, result2);
 
-        // Third document with seqNo 150 (lower than max)
+        // Third document
         Engine.IndexResult result3 = createSuccessResult(150L);
         listener.postIndex(shardId, index, result3);
 
-        // Checkpoint at 199 - not all docs searchable yet
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(199L);
+        // All 3 documents indexed before refresh — isComplete() should be true
         capturedRefreshListener.beforeRefresh();
         capturedRefreshListener.afterRefresh(true);
 
-        // Should NOT record metrics because maxSeqNo (200) > checkpoint (199)
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
-
-        // Advance checkpoint to 200
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(200L);
-        capturedRefreshListener.beforeRefresh();
-        capturedRefreshListener.afterRefresh(true);
-
-        // Now metrics should be recorded (once for the whole bulk request)
+        // Metrics should be recorded once for the whole bulk request
         verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
     }
 
@@ -247,9 +223,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         // Third document arrives DURING the refresh (between beforeRefresh and afterRefresh)
         Engine.IndexResult result3 = createSuccessResult(12L);
         listener.postIndex(shardId, index, result3);
-
-        // Checkpoint has advanced past all docs
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(12L);
 
         // afterRefresh fires — should NOT record metrics because docsSeen changed during refresh
         capturedRefreshListener.afterRefresh(true);
@@ -279,9 +252,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         // After closing, posting to this shard should not track anything
         threadContext = new ThreadContext(org.opensearch.common.settings.Settings.EMPTY);
         setupHeaders("test-bulk-request-id-2", 2000L);
-
-        // Even if checkpoint advances and refresh happens, no metrics for closed shard
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(200L);
 
         // The captured listener is still the same, but the shard listener was cleared
         capturedRefreshListener.beforeRefresh();
@@ -319,7 +289,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         disabledListener.afterIndexShardStarted(mockIndexShard);
 
         setupHeaders("test-bulk-request-id", 1000L);
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(200L);
 
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = createSuccessResult(100L);
@@ -339,7 +308,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         listener.afterIndexShardStarted(mockIndexShard);
 
         setupHeaders("test-bulk-request-id", 1000L);
-        when(mockIndexShard.getProcessedLocalCheckpoint()).thenReturn(200L);
 
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = createSuccessResult(100L);
@@ -355,8 +323,8 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
     }
 
     private void setupHeaders(String bulkRequestId, long minTimestamp) {
-        threadContext.putHeader("tsdb.bulk_request_id", bulkRequestId);
-        threadContext.putHeader("tsdb.min_sample_timestamp_ms", String.valueOf(minTimestamp));
+        threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
+        threadContext.putHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minTimestamp));
     }
 
     private Engine.IndexResult createSuccessResult(long seqNo) {
