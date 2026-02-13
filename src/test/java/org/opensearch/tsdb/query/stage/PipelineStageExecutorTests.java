@@ -23,6 +23,7 @@ import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
+import org.opensearch.tsdb.query.utils.StageProfiler;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +59,18 @@ public class PipelineStageExecutorTests extends OpenSearchTestCase {
 
         assertNotNull("Result should not be null", result);
         assertEquals("Result should have same number of series", input.size(), result.size());
+    }
+
+    public void testExecuteUnaryStage_WithStageProfiler() {
+        AbsStage stage = new AbsStage();
+        List<TimeSeries> input = createTimeSeriesList(2, 3); // 6 samples total
+        StageProfiler profiler = new StageProfiler();
+
+        PipelineStageExecutor.executeUnaryStage(stage, input, false, null, profiler);
+
+        // Validate formatting and recorded overhead/sample counts
+        String results = profiler.getResults();
+        assertTrue("Profiler should include stage name, sample count, and overhead", results.matches("abs\\(6\\): \\d+ ns, \\d+ bytes"));
     }
 
     public void testExecuteUnaryStage_CircuitBreakerTracking_MapperStage() {
