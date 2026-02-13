@@ -34,8 +34,9 @@ public class TSDBNodeRuntimeMetricsTests extends OpenSearchTestCase {
         registry = mock(MetricsRegistry.class);
         metrics = new TSDBNodeRuntimeMetrics();
 
-        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class)))
-            .thenReturn(mock(Closeable.class));
+        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            mock(Closeable.class)
+        );
     }
 
     public void testInitializeRegistersAllGauges() {
@@ -95,9 +96,9 @@ public class TSDBNodeRuntimeMetricsTests extends OpenSearchTestCase {
             eq(Tags.EMPTY)
         );
         verify(registry).createGauge(
-            eq(TSDBMetricsConstants.NODE_JVM_GC_COLLECTION_TIME_MS),
-            eq(TSDBMetricsConstants.NODE_JVM_GC_COLLECTION_TIME_MS_DESC),
-            eq(TSDBMetricsConstants.UNIT_MILLISECONDS),
+            eq(TSDBMetricsConstants.NODE_JVM_GC_COLLECTION_TIME_SECONDS),
+            eq(TSDBMetricsConstants.NODE_JVM_GC_COLLECTION_TIME_SECONDS_DESC),
+            eq(TSDBMetricsConstants.UNIT_SECONDS),
             any(Supplier.class),
             eq(Tags.EMPTY)
         );
@@ -146,10 +147,19 @@ public class TSDBNodeRuntimeMetricsTests extends OpenSearchTestCase {
         Closeable gauge2 = mock(Closeable.class);
         Closeable gauge3 = mock(Closeable.class);
 
-        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class)))
-            .thenReturn(gauge1, gauge2, gauge3, mock(Closeable.class), mock(Closeable.class),
-                mock(Closeable.class), mock(Closeable.class), mock(Closeable.class),
-                mock(Closeable.class), mock(Closeable.class), mock(Closeable.class));
+        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            gauge1,
+            gauge2,
+            gauge3,
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class),
+            mock(Closeable.class)
+        );
 
         metrics.initialize(registry);
         metrics.cleanup();
@@ -163,8 +173,7 @@ public class TSDBNodeRuntimeMetricsTests extends OpenSearchTestCase {
         Closeable failingGauge = mock(Closeable.class);
         org.mockito.Mockito.doThrow(new IOException("Close failed")).when(failingGauge).close();
 
-        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class)))
-            .thenReturn(failingGauge);
+        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(failingGauge);
 
         metrics.initialize(registry);
         metrics.cleanup();

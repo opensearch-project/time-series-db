@@ -59,7 +59,6 @@ import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -957,8 +956,8 @@ public class TSDBDirectoryReaderReferenceManagerTests extends OpenSearchTestCase
             any(Tags.class)
         );
 
-        // Verify exactly 3 gauges were registered
-        verify(mockRegistry, times(3)).createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class));
+        // The 3 reader capacity gauges are verified individually above.
+        // Additional gauges (e.g., node runtime) are also registered via TSDBMetrics.initialize().
     }
 
     @Test

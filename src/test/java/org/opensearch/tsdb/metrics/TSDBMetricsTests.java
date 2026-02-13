@@ -13,9 +13,13 @@ import org.opensearch.telemetry.metrics.MetricsRegistry;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.io.Closeable;
 import java.util.List;
+import java.util.function.Supplier;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,6 +34,9 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         registry = mock(MetricsRegistry.class);
         when(registry.createCounter(anyString(), anyString(), anyString())).thenReturn(mock(Counter.class));
         when(registry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
+        when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            mock(Closeable.class)
+        );
     }
 
     @Override
@@ -262,6 +269,26 @@ public class TSDBMetricsTests extends OpenSearchTestCase {
         assertNotNull(TSDBMetrics.AGGREGATION.samplesLive);
         assertNotNull(TSDBMetrics.AGGREGATION.samplesClosed);
         assertNotNull(TSDBMetrics.AGGREGATION.chunksForDocErrors);
+    }
+
+    public void testNodeRuntimeMetricsInitialized() {
+        TSDBMetrics.initialize(registry);
+
+        assertNotNull(TSDBMetrics.NODE_RUNTIME);
+        verify(registry).createGauge(
+            eq(TSDBMetricsConstants.NODE_JVM_HEAP_USED_BYTES),
+            eq(TSDBMetricsConstants.NODE_JVM_HEAP_USED_BYTES_DESC),
+            eq(TSDBMetricsConstants.UNIT_BYTES),
+            any(Supplier.class),
+            any(Tags.class)
+        );
+        verify(registry).createGauge(
+            eq(TSDBMetricsConstants.NODE_OS_CPU_PERCENT),
+            eq(TSDBMetricsConstants.NODE_OS_CPU_PERCENT_DESC),
+            eq(TSDBMetricsConstants.UNIT_PERCENT),
+            any(Supplier.class),
+            any(Tags.class)
+        );
     }
 
     public void testMetricsRegistryAccessors() {
