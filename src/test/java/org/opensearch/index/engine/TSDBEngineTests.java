@@ -46,10 +46,18 @@ import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 import org.opensearch.tsdb.core.index.live.MemChunkReader;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
+import org.opensearch.telemetry.metrics.Counter;
+import org.opensearch.telemetry.metrics.Histogram;
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import org.opensearch.telemetry.metrics.tags.Tags;
 import org.junit.After;
 import org.junit.Before;
+import org.mockito.ArgumentCaptor;
 import org.opensearch.tsdb.core.utils.Time;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.HashMap;
@@ -61,10 +69,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import org.mockito.Mockito;
 import static org.opensearch.tsdb.core.mapping.Constants.Mapping.DEFAULT_INDEX_MAPPING;
 import static org.opensearch.tsdb.utils.TSDBTestUtils.createSampleJson;
 import static org.opensearch.tsdb.utils.TSDBTestUtils.countSamples;
@@ -1686,6 +1698,100 @@ public class TSDBEngineTests extends EngineTestCase {
                 assertTrue("Translog operation should have labels field", sourceMap.containsKey("labels"));
                 assertNotNull("Translog operation labels should not be null", sourceMap.get("labels"));
             }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testRegisterHeadGaugesRegistersShardGauges() throws Exception {
+        metricsEngine.close();
+        engineStore.close();
+        metricsEngine = null;
+        engineStore = null;
+        engineConfig = null;
+
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mock(Counter.class));
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
+        when(mockRegistry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            mock(Closeable.class)
+        );
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+            engineStore = createStore(indexSettings, newDirectory());
+            metricsEngine = buildTSDBEngine(globalCheckpoint, engineStore, indexSettings, clusterApplierService);
+            metricsEngine.translogManager()
+                .recoverFromTranslog(this.translogHandler, metricsEngine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+
+            ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<Supplier<Double>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
+            ArgumentCaptor<Tags> tagsCaptor = ArgumentCaptor.forClass(Tags.class);
+
+            Mockito.verify(mockRegistry, Mockito.atLeast(4))
+                .createGauge(nameCaptor.capture(), anyString(), anyString(), supplierCaptor.capture(), tagsCaptor.capture());
+
+            List<String> names = nameCaptor.getAllValues();
+            List<Supplier<Double>> suppliers = supplierCaptor.getAllValues();
+            List<Tags> tagsList = tagsCaptor.getAllValues();
+
+            int sampleCountIdx = names.indexOf(TSDBMetricsConstants.SHARD_SAMPLE_COUNT);
+            int sizeBytesIdx = names.indexOf(TSDBMetricsConstants.SHARD_SIZE_BYTES);
+
+            assertTrue("shard.sample_count gauge should be registered", sampleCountIdx >= 0);
+            assertTrue("shard.size_bytes gauge should be registered", sizeBytesIdx >= 0);
+
+            assertEquals(0.0, suppliers.get(sampleCountIdx).get(), 0.001);
+            assertTrue("size bytes should be >= 0", suppliers.get(sizeBytesIdx).get() >= 0.0);
+        } finally {
+            TSDBMetrics.cleanup();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testShardSizeBytesSupplierReturnsZeroOnException() throws Exception {
+        metricsEngine.close();
+        engineStore.close();
+        metricsEngine = null;
+        engineStore = null;
+        engineConfig = null;
+
+        MetricsRegistry mockRegistry = mock(MetricsRegistry.class);
+        when(mockRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mock(Counter.class));
+        when(mockRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mock(Histogram.class));
+        when(mockRegistry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
+            mock(Closeable.class)
+        );
+        TSDBMetrics.initialize(mockRegistry);
+
+        try {
+            AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+            engineStore = createStore(indexSettings, newDirectory());
+            metricsEngine = buildTSDBEngine(globalCheckpoint, engineStore, indexSettings, clusterApplierService);
+            metricsEngine.translogManager()
+                .recoverFromTranslog(this.translogHandler, metricsEngine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+
+            ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<Supplier<Double>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
+
+            Mockito.verify(mockRegistry, Mockito.atLeast(4))
+                .createGauge(nameCaptor.capture(), anyString(), anyString(), supplierCaptor.capture(), any(Tags.class));
+
+            List<String> names = nameCaptor.getAllValues();
+            List<Supplier<Double>> suppliers = supplierCaptor.getAllValues();
+            int sizeBytesIdx = names.indexOf(TSDBMetricsConstants.SHARD_SIZE_BYTES);
+            assertTrue("shard.size_bytes gauge should be registered", sizeBytesIdx >= 0);
+            Supplier<Double> sizeBytesSupplier = suppliers.get(sizeBytesIdx);
+
+            // Close the engine (and its store) to force store.stats() to throw
+            metricsEngine.close();
+            engineStore.close();
+
+            assertEquals("Should return 0.0 when store.stats() throws", 0.0, sizeBytesSupplier.get(), 0.001);
+        } finally {
+            metricsEngine = null;
+            engineStore = null;
+            TSDBMetrics.cleanup();
         }
     }
 }
