@@ -58,6 +58,7 @@ import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.Mockito.doReturn;
 
@@ -2153,6 +2154,107 @@ public class HeadTests extends OpenSearchTestCase {
 
         // Verify the anchor series still exists
         assertNotNull("Anchor series should still exist", head.getSeriesMap().getByReference(highSeqNoRef));
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
+     * Ensure callback failure during append does not deadlock with dropEmptySeries.
+     * This stresses the lock ordering between series.lock() and per-ref locks.
+     */
+    public void testNoDeadlockBetweenDropEmptySeriesAndCallbackFailure() throws Exception {
+        ShardId shardId = new ShardId("headTest", "headTestUid", 0);
+        Path metricsPath = createTempDir("testNoDeadlockBetweenDropEmptySeriesAndCallbackFailure");
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            metricsPath,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            shardId,
+            defaultSettings
+        );
+        Head head = new Head(metricsPath, shardId, closedChunkIndexManager, defaultSettings);
+
+        long baseTimestamp = 100_000L;
+
+        // Anchor series to ensure closeHeadChunks runs dropEmptySeries (minSeqNo != Long.MAX_VALUE).
+        Labels anchorLabels = ByteLabels.fromStrings("type", "anchor", "id", "1");
+        long anchorRef = anchorLabels.stableHash();
+        Head.HeadAppender anchorAppender = head.newAppender();
+        anchorAppender.preprocess(Engine.Operation.Origin.PRIMARY, 0, anchorRef, anchorLabels, baseTimestamp, 10.0, () -> {});
+        anchorAppender.append(() -> {}, () -> {});
+
+        int iterations = 50;
+        for (int i = 0; i < iterations; i++) {
+            int iter = i;
+            Labels targetLabels = ByteLabels.fromStrings("type", "target", "iter", String.valueOf(iter));
+            long targetRef = targetLabels.stableHash();
+
+            CountDownLatch callbackStarted = new CountDownLatch(1);
+            CountDownLatch allowCallback = new CountDownLatch(1);
+            CountDownLatch appendDone = new CountDownLatch(1);
+            CountDownLatch deleteDone = new CountDownLatch(1);
+            AtomicReference<Exception> appendFailure = new AtomicReference<>();
+            AtomicReference<Exception> deleteFailure = new AtomicReference<>();
+
+            Thread appendThread = new Thread(() -> {
+                try {
+                    Head.HeadAppender appender = head.newAppender();
+                    appender.preprocess(
+                        Engine.Operation.Origin.PRIMARY,
+                        1_000 + iter,
+                        targetRef,
+                        targetLabels,
+                        baseTimestamp + 1_000 + iter,
+                        42.0,
+                        () -> {}
+                    );
+                    appender.append(() -> {
+                        callbackStarted.countDown();
+                        try {
+                            if (!allowCallback.await(5, TimeUnit.SECONDS)) {
+                                throw new RuntimeException("Callback wait timed out");
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("Callback interrupted", e);
+                        }
+                        throw new RuntimeException("Simulated callback failure");
+                    }, () -> {});
+                } catch (Exception e) {
+                    appendFailure.set(e);
+                } finally {
+                    appendDone.countDown();
+                }
+            });
+
+            Thread deleteThread = new Thread(() -> {
+                try {
+                    if (!callbackStarted.await(5, TimeUnit.SECONDS)) {
+                        throw new RuntimeException("Callback did not start");
+                    }
+                    head.closeHeadChunks(true, 100);
+                } catch (Exception e) {
+                    deleteFailure.set(e);
+                } finally {
+                    deleteDone.countDown();
+                }
+            });
+
+            appendThread.start();
+            deleteThread.start();
+
+            assertTrue("Callback should start for iteration " + iter, callbackStarted.await(5, TimeUnit.SECONDS));
+            allowCallback.countDown();
+
+            assertTrue("Append should complete for iteration " + iter, appendDone.await(5, TimeUnit.SECONDS));
+            assertTrue("Delete should complete for iteration " + iter, deleteDone.await(5, TimeUnit.SECONDS));
+
+            assertNotNull("Append should throw for iteration " + iter, appendFailure.get());
+            assertNull("Delete should not throw for iteration " + iter, deleteFailure.get());
+        }
 
         head.close();
         closedChunkIndexManager.close();
