@@ -164,7 +164,7 @@ public class SliceStageTests extends AbstractWireSerializingTestCase<SliceStage>
         TimeSeriesProvider agg2 = new InternalTimeSeries("test", series2, Collections.emptyMap());
         List<TimeSeriesProvider> aggregations = List.of(agg1, agg2);
 
-        InternalAggregation result = stage.reduce(aggregations, true);
+        InternalAggregation result = stage.reduce(aggregations, true, null);
 
         assertTrue(result instanceof InternalTimeSeries);
         InternalTimeSeries reduced = (InternalTimeSeries) result;
@@ -188,7 +188,7 @@ public class SliceStageTests extends AbstractWireSerializingTestCase<SliceStage>
         TimeSeriesProvider agg2 = new InternalTimeSeries("test", series2, Collections.emptyMap());
         List<TimeSeriesProvider> aggregations = List.of(agg1, agg2);
 
-        InternalAggregation result = stage.reduce(aggregations, true);
+        InternalAggregation result = stage.reduce(aggregations, true, null);
 
         assertTrue(result instanceof InternalTimeSeries);
         InternalTimeSeries reduced = (InternalTimeSeries) result;
@@ -200,7 +200,7 @@ public class SliceStageTests extends AbstractWireSerializingTestCase<SliceStage>
 
     public void testReduceWithEmptyAggregations() {
         SliceStage stage = new SliceStage(5, HeadTailMode.HEAD);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> stage.reduce(Collections.emptyList(), true));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> stage.reduce(Collections.emptyList(), true, null));
         assertEquals("Aggregations list cannot be null or empty", e.getMessage());
     }
 

@@ -100,7 +100,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
 
         List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
-        InternalAggregation result = countStage.reduce(aggregations, true);
+        InternalAggregation result = countStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -112,7 +112,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
         // This is because we assume the first value in the input TS is the count
         assertSampleEqualsCount(reduced, 3, 39.0);
 
-        result = countStage.reduce(aggregations, false);
+        result = countStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -130,7 +130,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
         List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
         List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
-        InternalAggregation result = countStageWithLabels.reduce(aggregations, false);
+        InternalAggregation result = countStageWithLabels.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -159,14 +159,14 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
 
     public void testReduceWithEmptyAggregation() throws Exception {
         // Test Empty Aggregation
-        assertThrows(IllegalArgumentException.class, () -> countStageWithLabels.reduce(Collections.emptyList(), false));
+        assertThrows(IllegalArgumentException.class, () -> countStageWithLabels.reduce(Collections.emptyList(), false, null));
 
         // Test with 1 Aggregation with empty TS
         List<TimeSeries> series1 = Collections.emptyList();
         List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 5); // ts4, ts5
         List<TimeSeriesProvider> aggregations_1 = createMockAggregations(series1, series2);
 
-        InternalAggregation result = countStageWithLabels.reduce(aggregations_1, false);
+        InternalAggregation result = countStageWithLabels.reduce(aggregations_1, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -184,7 +184,7 @@ public class CountStageTests extends AbstractWireSerializingTestCase<CountStage>
         // Test with all Aggregation with empty TS
         List<TimeSeriesProvider> aggregations_2 = createMockAggregations(Collections.emptyList(), Collections.emptyList());
 
-        result = countStageWithLabels.reduce(aggregations_2, false);
+        result = countStageWithLabels.reduce(aggregations_2, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);

@@ -100,7 +100,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = avgStage.reduce(aggregations, true);
+        InternalAggregation result = avgStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -122,7 +122,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = avgStage.reduce(aggregations, false);
+        InternalAggregation result = avgStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -153,7 +153,7 @@ public class AvgStageTests extends AbstractWireSerializingTestCase<AvgStage> {
         List<TimeSeriesProvider> aggregations = List.of(provider1, provider2);
 
         // Perform final reduce (materializes to FloatSample)
-        InternalAggregation result = avgStage.reduce(aggregations, true);
+        InternalAggregation result = avgStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);

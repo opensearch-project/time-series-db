@@ -22,7 +22,8 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
-import org.apache.lucene.util.RamUsageEstimator;
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -104,9 +105,8 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             labelGroupToSeries.computeIfAbsent(groupLabels, k -> new ArrayList<>()).add(series);
 
             // Report memory overhead for new groups (batching handled by aggregator)
-            if (isNewGroup && circuitBreakerConsumer != null) {
-                long groupOverhead = RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + groupLabels.ramBytesUsed()
-                    + SampleList.ARRAYLIST_OVERHEAD;
+            if (isNewGroup) {
+                long groupOverhead = RamUsageConstants.groupEntryBaseOverhead(groupLabels) + SampleList.ARRAYLIST_OVERHEAD;
                 circuitBreakerConsumer.accept(groupOverhead);
             }
         }
@@ -264,17 +264,23 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
     }
 
     /**
-     * Common reduce implementation for all grouping stages.
+     * Common reduce implementation for all grouping stages with circuit breaker tracking.
      * Handles distributed aggregation by combining time series across multiple aggregations.
+     *
+     * <p>Circuit breaker tracking is performed to protect coordinator nodes (including
+     * data cluster coordinators in CCS setups) from OOM conditions.</p>
      *
      * @param aggregations List of aggregations to reduce
      * @param isFinalReduce Whether this is the final reduce phase
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
      * @return Reduced aggregation result
      */
-    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
+    @Override
+    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce, LongConsumer circuitBreakerConsumer) {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
+        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
 
         // we reuse firstAgg's metaData/name to create final aggregation
         TimeSeriesProvider firstAgg = aggregations.get(0);
@@ -284,24 +290,26 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             TimeSeriesProvider result = firstAgg.createReduced(Collections.emptyList());
             return (InternalAggregation) result;
         }
-        return reduceGrouped(aggregations, firstAgg, firstTimeSeries, isFinalReduce);
+        return reduceGrouped(aggregations, firstAgg, firstTimeSeries, isFinalReduce, cb);
     }
 
     /**
-     * Reduces a list of TimeSeriesProvider instances into a single InternalAggregation.
-     * This method is intended for distributed aggregation scenarios.
+     * Reduces a list of TimeSeriesProvider instances into a single InternalAggregation
+     * with circuit breaker tracking.
      *
      * @param aggregations List of aggregations to reduce.
      * @param firstAgg The first aggregation in the list, used as final aggregation meta reference.
-     * @param firstTimeSeries, first nonEmpty time series across aggregations, used as time series metadata reference
+     * @param firstTimeSeries first nonEmpty time series across aggregations, used as time series metadata reference
      * @param isFinalReduce True if this is the final reduction phase, false otherwise.
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
      * @return The reduced InternalAggregation result.
      */
     protected abstract InternalAggregation reduceGrouped(
         List<TimeSeriesProvider> aggregations,
         TimeSeriesProvider firstAgg,
         TimeSeries firstTimeSeries,
-        boolean isFinalReduce
+        boolean isFinalReduce,
+        LongConsumer circuitBreakerConsumer
     );
 
     /**
@@ -393,6 +401,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (input.isEmpty()) {
             return input;
         }
+        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
 
         List<TimeSeries> result;
         if (groupByLabels.isEmpty()) {
@@ -413,7 +422,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         } else {
             // Label grouping: group by specified labels and aggregate within each group
             // Pass circuit breaker consumer for granular tracking of cardinality
-            result = processWithLabelGrouping(input, coordinatorExecution, circuitBreakerConsumer);
+            result = processWithLabelGrouping(input, coordinatorExecution, cb);
             // Apply sample materialization if called from coordination aggregator
             if (coordinatorExecution && needsMaterialization()) {
                 result.replaceAll(this::materializeSamples);

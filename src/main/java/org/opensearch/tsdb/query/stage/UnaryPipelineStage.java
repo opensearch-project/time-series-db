@@ -54,23 +54,24 @@ public interface UnaryPipelineStage extends PipelineStage {
     List<TimeSeries> process(List<TimeSeries> input);
 
     /**
-     * Reduce multiple aggregations from different shards.
+     * Reduce multiple aggregations from different shards with circuit breaker tracking.
      *
      * <p>This method is called during the cross-shard reduce phase to combine results.
-     * For unary stages, this method should typically not be called unless the stage
-     * performs a global aggregation (as indicated by {@link #isGlobalAggregation()}).
-     * The default implementation throws an exception to indicate that this stage
-     * does not support reduce function.</p>
+     * For unary stages, it should typically not be called unless the stage performs a global
+     * aggregation (as indicated by {@link #isGlobalAggregation()}). The default implementation
+     * throws an exception to indicate that this stage does not support reduce.</p>
      *
-     * <p>If a unary stage needs to support reduce function, it should override
-     * this method and return the appropriate reduced aggregation.</p>
+     * <p>If a unary stage supports reduce, it must override this method and use the optional
+     * {@code circuitBreakerConsumer} to track memory allocations during reduce. This is critical
+     * for protecting coordinator nodes (including data cluster coordinators in CCS) from OOM.</p>
      *
      * @param aggregations List of TimeSeriesProvider aggregations to reduce
      * @param isFinalReduce Whether this is the final reduce phase
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
      * @return A new aggregation with the reduced results
      * @throws UnsupportedOperationException if this stage does not support reduce function
      */
-    default InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
+    default InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce, LongConsumer circuitBreakerConsumer) {
         throw new UnsupportedOperationException(
             "Unary pipeline stage '"
                 + getClass().getSimpleName()

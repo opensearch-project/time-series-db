@@ -116,7 +116,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = rangeStage.reduce(aggregations, true);
+        InternalAggregation result = rangeStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -143,7 +143,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = rangeStage.reduce(aggregations, false);
+        InternalAggregation result = rangeStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -178,7 +178,7 @@ public class RangeStageTests extends AbstractWireSerializingTestCase<RangeStage>
         List<TimeSeriesProvider> aggregations = List.of(provider1, provider2);
 
         // Perform final reduce (materializes to FloatSample)
-        InternalAggregation result = rangeStage.reduce(aggregations, true);
+        InternalAggregation result = rangeStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);

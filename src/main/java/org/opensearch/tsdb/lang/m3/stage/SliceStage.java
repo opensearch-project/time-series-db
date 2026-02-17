@@ -16,12 +16,16 @@ import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongConsumer;
+
+import org.opensearch.tsdb.core.model.SampleList;
 
 /**
  * Pipeline stage that implements M3QL's head and tail functions.
@@ -126,10 +130,14 @@ public class SliceStage implements UnaryPipelineStage {
      * are sorted before applying this stage.
      */
     @Override
-    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
+    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce, LongConsumer circuitBreakerConsumer) {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
+        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+
+        // Track result ArrayList allocation
+        cb.accept(SampleList.ARRAYLIST_OVERHEAD);
 
         // Keep existing head reduce logic unchanged for both modes
         List<TimeSeries> resultSeries = new ArrayList<>(limit);
