@@ -179,8 +179,9 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
      */
     @Override
     public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(reduceContext);
-        try {
+        try (
+            ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(reduceContext)
+        ) {
             // If we have a reduce stage, delegate directly to it (skip merging)
             if (reduceStage != null) {
                 // Track ArrayList allocation for providers list
@@ -254,8 +255,6 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
 
             // Return combined time series (no reduce stage)
             return new InternalTimeSeries(name, combinedTimeSeries, metadata, null);
-        } finally {
-            cbConsumer.release();
         }
     }
 

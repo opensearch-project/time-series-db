@@ -38,7 +38,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         // No-op should not throw
         consumer.accept(1000L);
         consumer.accept(-500L);
-        consumer.release();
+        consumer.close();
     }
 
     public void testCreateConsumerWithContextWithNullBigArraysReturnsNoOp() {
@@ -48,7 +48,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         assertNotNull(consumer);
         consumer.accept(1000L);
         consumer.accept(-500L);
-        consumer.release();
+        consumer.close();
     }
 
     /**
@@ -76,7 +76,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             consumer.accept(1000L);
             consumer.accept(500L);
             consumer.accept(-200L);
-            consumer.release();
+            consumer.close();
         } finally {
             Configurator.setLevel("org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper", Level.INFO);
         }
@@ -94,8 +94,8 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         );
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
         consumer.accept(0L);
-        consumer.release();
-        // No exception; zero is no-op; release when totalTracked==0 is no-op
+        consumer.close();
+        // No exception; zero is no-op; close when totalTracked==0 is no-op
     }
 
     public void testGetConsumerNullReturnsNoOp() {
@@ -121,7 +121,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             emptyTree
         );
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
-        consumer.release();
+        consumer.close();
         // no exception; totalTracked was 0
     }
 
@@ -138,7 +138,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
         consumer.accept(1000L);
         consumer.accept(-300L);
-        consumer.release();
+        consumer.close();
     }
 
     public void testCircuitBreakerTripThrowsAndIncrementsMetric() {
@@ -178,7 +178,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
         assertNotNull(consumer);
         consumer.accept(100L);
-        consumer.release();
+        consumer.close();
     }
 
     public void testCreateConsumerWhenBreakerIsNullReturnsNoOp() {
@@ -195,7 +195,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
         assertNotNull(consumer);
         consumer.accept(100L);
-        consumer.release();
+        consumer.close();
     }
 
 }

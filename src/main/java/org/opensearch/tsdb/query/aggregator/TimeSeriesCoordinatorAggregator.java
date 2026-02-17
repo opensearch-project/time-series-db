@@ -258,8 +258,7 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
 
     @Override
     public InternalAggregation doReduce(Aggregations aggregations, ReduceContext context) {
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(context);
-        try {
+        try (ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(context)) {
             // Execute the main pipeline stages, with macro support if macros are defined
             List<TimeSeries> result = processMainPipeline(aggregations, cbConsumer);
 
@@ -273,8 +272,6 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
             }
 
             return new InternalTimeSeries(name(), result, metadata());
-        } finally {
-            cbConsumer.release();
         }
     }
 
