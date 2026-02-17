@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.Mockito.mock;
+
 public class InternalTimeSeriesTests extends OpenSearchTestCase {
 
     private static final String TEST_NAME = "test-time-series";
@@ -508,6 +510,29 @@ public class InternalTimeSeriesTests extends OpenSearchTestCase {
         assertTrue("Result should be InternalTimeSeries", result instanceof InternalTimeSeries);
         InternalTimeSeries resultTimeSeries = (InternalTimeSeries) result;
         assertEquals("Should have empty time series list", 0, resultTimeSeries.getTimeSeries().size());
+    }
+
+    public void testReduceWithNonTimeSeriesProviderThrowsAndReleasesConsumer() {
+        // Use agg with reduce stage so we hit the path that throws IllegalArgumentException when building provider list
+        UnaryPipelineStage sumStage = new SumStage("service");
+        InternalTimeSeries agg = new InternalTimeSeries(TEST_NAME, createTestTimeSeries(), TEST_METADATA, sumStage);
+        InternalAggregation notProvider = mock(InternalAggregation.class);
+        List<InternalAggregation> aggregations = List.of(agg, notProvider);
+        PipelineAggregator.PipelineTree emptyTree = new PipelineAggregator.PipelineTree(Collections.emptyMap(), Collections.emptyList());
+        InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forFinalReduction(null, null, s -> {}, emptyTree);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> agg.reduce(aggregations, context));
+        assertTrue(e.getMessage().contains("is not a TimeSeriesProvider"));
+    }
+
+    public void testReduceMergePathWithNonTimeSeriesProviderThrows() {
+        // No reduce stage: merge path also validates and throws IllegalArgumentException for non-TimeSeriesProvider
+        InternalTimeSeries agg = new InternalTimeSeries(TEST_NAME, createTestTimeSeries(), TEST_METADATA);
+        InternalAggregation notProvider = mock(InternalAggregation.class);
+        List<InternalAggregation> aggregations = List.of(agg, notProvider);
+        PipelineAggregator.PipelineTree emptyTree = new PipelineAggregator.PipelineTree(Collections.emptyMap(), Collections.emptyList());
+        InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forFinalReduction(null, null, s -> {}, emptyTree);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> agg.reduce(aggregations, context));
+        assertTrue(e.getMessage().contains("is not a TimeSeriesProvider"));
     }
 
     public void testGetPropertyMultiplePathElements() {

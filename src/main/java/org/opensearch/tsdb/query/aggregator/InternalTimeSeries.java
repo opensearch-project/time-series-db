@@ -206,7 +206,9 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
             Map<Labels, TimeSeries> mergedSeriesByLabels = new HashMap<>();
 
             for (InternalAggregation aggregation : aggregations) {
-                assert aggregation instanceof TimeSeriesProvider;
+                if (!(aggregation instanceof TimeSeriesProvider)) {
+                    throw new IllegalArgumentException("aggregation: " + aggregation + " is not a TimeSeriesProvider");
+                }
                 TimeSeriesProvider provider = (TimeSeriesProvider) aggregation;
                 List<TimeSeries> timeSeries = provider.getTimeSeries();
 

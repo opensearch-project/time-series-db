@@ -158,15 +158,13 @@ public final class ReduceCircuitBreakerHelper {
                 breaker.addWithoutBreaking(bytes);
             }
 
-            if (logger.isTraceEnabled()) {
-                logger.trace(
-                    () -> new ParameterizedMessage(
-                        "Reduce phase circuit breaker: {} bytes, label={}",
-                        bytes > 0 ? "+" + bytes : bytes,
-                        REDUCE_LABEL
-                    )
-                );
-            }
+            logger.trace(
+                () -> new ParameterizedMessage(
+                    "Reduce phase circuit breaker: {} bytes, label={}",
+                    bytes > 0 ? "+" + bytes : bytes,
+                    REDUCE_LABEL
+                )
+            );
         } catch (CircuitBreakingException e) {
             // Log and increment metrics before rethrowing
             logger.warn(
