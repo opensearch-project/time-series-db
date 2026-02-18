@@ -7,11 +7,16 @@
  */
 package org.opensearch.tsdb.action;
 
+import java.util.UUID;
+import java.util.function.Supplier;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.action.bulk.BulkAction;
 import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkShardRequest;
+import org.opensearch.action.bulk.TransportShardBulkAction;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.support.ActionFilter;
 import org.opensearch.action.support.ActionFilterChain;
@@ -25,17 +30,18 @@ import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
-import java.util.UUID;
-import java.util.function.Supplier;
-
 /**
  * Captures ingestion lag metrics from client-provided HTTP headers on bulk requests.
  */
 public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
 
-    // HTTP header (copied to ThreadContext by RestController)
+    // HTTP headers (copied to ThreadContext by RestController)
     private static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
+
+    // Internal headers forwarded to data nodes
+    private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
+    private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
 
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
@@ -61,15 +67,17 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
             return;
         }
 
-        if (!BulkAction.NAME.equals(action) || !(request instanceof BulkRequest)) {
-            chain.proceed(task, action, request, listener);
-            return;
+        if (BulkAction.NAME.equals(action) && request instanceof BulkRequest) {
+            handleBulkAction((BulkRequest) request);
+        } else if (TransportShardBulkAction.ACTION_NAME.equals(action) && request instanceof BulkShardRequest) {
+            handleShardBulkAction((BulkShardRequest) request);
         }
 
-        BulkRequest bulkRequest = (BulkRequest) request;
+        chain.proceed(task, action, request, listener);
+    }
 
+    private void handleBulkAction(BulkRequest bulkRequest) {
         try {
-            // Read timestamps from HTTP headers (already copied to ThreadContext by RestController)
             String minSampleTimestampStr = threadContext.getHeader(HTTP_HEADER_MIN_SAMPLE_TIMESTAMP);
 
             if (minSampleTimestampStr != null) {
@@ -79,22 +87,34 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 String indexName = getPrimaryIndex(bulkRequest);
                 Tags tags = Tags.create().addTag("index", indexName);
 
-                // Coordinator lag (min sample timestamp → coordinator arrival)
                 long coordinatorLagMs = now - minSampleTimestamp;
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
 
-                // Forward headers to data nodes for searchable lag metric
                 String bulkRequestId = UUID.randomUUID().toString();
-                threadContext.putHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
-                threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
+                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
+                threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
 
                 logger.debug("Ingestion lag metrics - index: {}, coordinatorLag: {}ms", indexName, coordinatorLagMs);
             }
         } catch (Exception e) {
             logger.debug("Failed to process ingestion lag metrics from HTTP headers", e);
         }
+    }
 
-        chain.proceed(task, action, request, listener);
+    private void handleShardBulkAction(BulkShardRequest shardRequest) {
+        try {
+            String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);
+            if (bulkRequestId == null) {
+                return;
+            }
+
+            long docCount = shardRequest.items().length;
+            threadContext.putHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT, String.valueOf(docCount));
+
+            logger.debug("Shard bulk action - bulkId: {}, docCount: {}", bulkRequestId, docCount);
+        } catch (Exception e) {
+            logger.debug("Failed to set shard doc count header", e);
+        }
     }
 
     @Override

@@ -488,7 +488,12 @@ public class TSDBEngine extends Engine {
             failureResult.setTranslogLocation(context.translogLocation);
             return failureResult;
         } else {
-            IndexResult successResult = new IndexResult(indexOp.version(), indexOp.primaryTerm(), indexOp.seqNo(), true);
+            TSDBIndexResult successResult = new TSDBIndexResult(
+                indexOp.version(),
+                indexOp.primaryTerm(),
+                indexOp.seqNo(),
+                context.isNewSeriesCreated
+            );
             successResult.setTranslogLocation(context.translogLocation);
             TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesIngested, 1, head.getMetricTags());
             return successResult;

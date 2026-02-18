@@ -7,6 +7,14 @@
  */
 package org.opensearch.tsdb.action;
 
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.ReferenceManager;
@@ -16,6 +24,7 @@ import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.index.engine.TSDBEngine;
+import org.opensearch.index.engine.TSDBIndexResult;
 import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexingOperationListener;
@@ -25,21 +34,22 @@ import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
 /**
- * Tracks ingestion lag until data becomes searchable using per-shard refresh listeners.
+ * Tracks ingestion lag metrics using per-shard refresh listeners.
  *
- * <p>For each shard, a dedicated {@link ReferenceManager.RefreshListener} is registered
- * with the {@link TSDBEngine}. When a refresh occurs ({@code didRefresh=true}), the listener
- * checks whether all documents from a pending bulk request have been indexed before the refresh
- * via {@code isComplete()}, and if so, records the searchable lag metric.</p>
+ * <p>Emits two metrics based on whether the indexed document created a new time series:</p>
+ * <ul>
+ *   <li><b>Append lag</b> ({@code tsdb.ingestion.append.lag}): Emitted immediately for samples
+ *       appended to existing series, since the data is queryable as soon as it's appended to the
+ *       in-memory MemChunk (no refresh needed).</li>
+ *   <li><b>Refresh lag</b> ({@code tsdb.ingestion.refresh.lag}): Emitted after a refresh completes
+ *       for samples that created new series, since a LiveSeriesIndex refresh is required before
+ *       queries can discover the new series.</li>
+ * </ul>
+ *
+ * <p>Uses a two-gate completion check for refresh lag: (1) all documents from the bulk shard
+ * request must have been processed ({@code totalCalls >= expectedDocCount}), and (2) the
+ * new-series document count must be stable across the refresh cycle (snapshot heuristic).</p>
  */
 public class TSDBIngestionLagIndexingListener implements IndexingOperationListener, IndexEventListener {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagIndexingListener.class);
@@ -139,17 +149,39 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
         try {
             long minSampleTimestamp = Long.parseLong(minTimestampStr);
-            listener.trackRequest(bulkRequestId, minSampleTimestamp);
+            long expectedDocCount = parseExpectedDocCount();
+
+            boolean isNewSeries = (result instanceof TSDBIndexResult tsdbResult) ? tsdbResult.isNewSeriesCreated() : true;
+
+            if (!isNewSeries) {
+                Tags tags = Tags.create().addTag("index", shardId.getIndexName());
+                long appendLagMs = System.currentTimeMillis() - minSampleTimestamp;
+                TSDBMetrics.recordHistogram(metrics.appendLag, appendLagMs, tags);
+            }
+
+            listener.trackDoc(bulkRequestId, minSampleTimestamp, expectedDocCount, isNewSeries);
         } catch (Exception e) {
             logger.debug("Failed to track bulk request {}", bulkRequestId, e);
         }
     }
 
+    private long parseExpectedDocCount() {
+        String docCountStr = threadContext.getHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT);
+        if (docCountStr == null) {
+            return -1;
+        }
+        try {
+            return Long.parseLong(docCountStr);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
     /**
      * Per-shard refresh listener that tracks pending bulk requests and records metrics
-     * when they become searchable.
+     * when new series become discoverable after a refresh.
      */
-    private static class ShardRefreshListener implements ReferenceManager.RefreshListener {
+    static class ShardRefreshListener implements ReferenceManager.RefreshListener {
         private static final int MAX_PENDING_REQUESTS = 10_000;
         private static final long MAX_PENDING_AGE_MS = 60_000;
 
@@ -164,7 +196,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             this.enabledSupplier = enabledSupplier;
         }
 
-        void trackRequest(String bulkRequestId, long minTimestamp) {
+        void trackDoc(String bulkRequestId, long minTimestamp, long expectedDocCount, boolean isNewSeries) {
             if (pendingRequests.size() >= MAX_PENDING_REQUESTS) {
                 logger.debug("Pending requests map full for shard {}, skipping {}", shardId, bulkRequestId);
                 return;
@@ -172,9 +204,9 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
             pendingRequests.compute(bulkRequestId, (k, existing) -> {
                 if (existing == null) {
-                    return new PendingBulkRequest(bulkRequestId, minTimestamp);
+                    return new PendingBulkRequest(bulkRequestId, minTimestamp, expectedDocCount, isNewSeries);
                 } else {
-                    existing.trackAdditionalDoc();
+                    existing.trackAdditionalDoc(isNewSeries);
                     return existing;
                 }
             });
@@ -186,11 +218,8 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
         @Override
         public void beforeRefresh() throws IOException {
-            // Snapshot the document count for each pending request.
-            // This allows afterRefresh to detect if new documents arrived during the refresh,
-            // preventing premature metric recording for partially-indexed bulk requests.
             for (PendingBulkRequest pending : pendingRequests.values()) {
-                pending.snapshotDocsSeen();
+                pending.snapshotNewSeriesDocs();
             }
         }
 
@@ -207,31 +236,26 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
                 Map.Entry<String, PendingBulkRequest> entry = iter.next();
                 PendingBulkRequest pending = entry.getValue();
 
-                // TTL cleanup
                 if (now - pending.createdAt > MAX_PENDING_AGE_MS) {
                     iter.remove();
                     logger.debug("Evicted stale pending request {} for shard {}", pending.bulkRequestId, shardId);
                     continue;
                 }
 
-                // A bulk request is searchable when didRefresh=true (a new reader was opened) and
-                // isComplete() confirms all documents from this bulk were indexed before the refresh.
-                // Lucene's DirectoryReader.openIfChanged() captures everything in the IndexWriter at
-                // refresh time, so documents indexed before beforeRefresh() are guaranteed visible.
                 if (pending.isComplete()) {
-                    Tags tags = Tags.create().addTag("index", shardId.getIndexName());
+                    if (pending.newSeriesDocsSeen.get() > 0) {
+                        Tags tags = Tags.create().addTag("index", shardId.getIndexName());
+                        long refreshLagMs = now - pending.minSampleTimestamp;
+                        TSDBMetrics.recordHistogram(metrics.refreshLag, refreshLagMs, tags);
 
-                    long searchableLagMs = now - pending.minSampleTimestamp;
-
-                    TSDBMetrics.recordHistogram(metrics.searchableLag, searchableLagMs, tags);
-
-                    logger.debug(
-                        "Searchable metrics - shard: {}, bulkId: {}, searchableLag: {}ms",
-                        shardId,
-                        pending.bulkRequestId,
-                        searchableLagMs
-                    );
-
+                        logger.debug(
+                            "Refresh lag - shard: {}, bulkId: {}, refreshLag: {}ms, newSeriesDocs: {}",
+                            shardId,
+                            pending.bulkRequestId,
+                            refreshLagMs,
+                            pending.newSeriesDocsSeen.get()
+                        );
+                    }
                     iter.remove();
                 }
             }
@@ -239,48 +263,54 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
     }
 
     /**
-     * Stores state for a pending bulk request awaiting searchability.
+     * Stores state for a pending bulk request on a single shard.
      *
-     * <p>Uses a snapshot mechanism ({@code frozenDocsSeen}) to guard against a refresh firing
-     * in the middle of a bulk request's document processing. In {@code beforeRefresh}, the current
-     * {@code docsSeen} count is snapshotted. In {@code afterRefresh}, the entry is only considered
-     * complete if no new documents have arrived since the snapshot (i.e., the bulk is fully indexed).</p>
+     * <p>Uses a two-gate completion check:</p>
+     * <ol>
+     *   <li><b>Gate 1 (doc count)</b>: If {@code expectedDocCount} is available (from ThreadContext),
+     *       all {@code postIndex()} calls must be received before the bulk is considered complete.
+     *       This prevents premature completion when a refresh happens between {@code postIndex()} calls.</li>
+     *   <li><b>Gate 2 (snapshot stability)</b>: The new-series document count must be stable across
+     *       a refresh cycle ({@code frozenNewSeriesDocs == newSeriesDocsSeen}), confirming that no
+     *       additional new-series documents arrived during the refresh.</li>
+     * </ol>
      */
-    private static class PendingBulkRequest {
+    static class PendingBulkRequest {
         final String bulkRequestId;
         final long minSampleTimestamp;
+        final long expectedDocCount;
         final long createdAt;
-        final AtomicInteger docsSeen;
-        volatile int frozenDocsSeen;
+        final AtomicInteger totalCalls;
+        final AtomicInteger newSeriesDocsSeen;
+        volatile int frozenNewSeriesDocs;
 
-        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp) {
+        PendingBulkRequest(String bulkRequestId, long minSampleTimestamp, long expectedDocCount, boolean isNewSeries) {
             this.bulkRequestId = bulkRequestId;
             this.minSampleTimestamp = minSampleTimestamp;
+            this.expectedDocCount = expectedDocCount;
             this.createdAt = System.currentTimeMillis();
-            this.docsSeen = new AtomicInteger(1);
-            this.frozenDocsSeen = -1;
+            this.totalCalls = new AtomicInteger(1);
+            this.newSeriesDocsSeen = new AtomicInteger(isNewSeries ? 1 : 0);
+            this.frozenNewSeriesDocs = -1;
         }
 
-        void trackAdditionalDoc() {
-            docsSeen.incrementAndGet();
+        void trackAdditionalDoc(boolean isNewSeries) {
+            totalCalls.incrementAndGet();
+            if (isNewSeries) {
+                newSeriesDocsSeen.incrementAndGet();
+            }
         }
 
-        /**
-         * Snapshots the current document count. Called during {@code beforeRefresh} so that
-         * {@code afterRefresh} can detect if new documents arrived during the refresh.
-         */
-        void snapshotDocsSeen() {
-            frozenDocsSeen = docsSeen.get();
+        void snapshotNewSeriesDocs() {
+            frozenNewSeriesDocs = newSeriesDocsSeen.get();
         }
 
-        /**
-         * Returns true if a snapshot has been taken and no new documents have arrived since.
-         * This ensures we only declare a bulk request complete when all its documents on this
-         * shard have been indexed.
-         */
         boolean isComplete() {
-            int frozen = frozenDocsSeen;
-            return frozen >= 0 && frozen == docsSeen.get();
+            if (expectedDocCount > 0 && totalCalls.get() < expectedDocCount) {
+                return false;
+            }
+            int frozen = frozenNewSeriesDocs;
+            return frozen >= 0 && frozen == newSeriesDocsSeen.get();
         }
     }
 }

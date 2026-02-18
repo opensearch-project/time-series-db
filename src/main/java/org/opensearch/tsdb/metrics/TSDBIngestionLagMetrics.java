@@ -17,8 +17,11 @@ public class TSDBIngestionLagMetrics {
     /** Time from sample timestamp to coordinator arrival. */
     public Histogram coordinatorLag;
 
-    /** End-to-end time from sample timestamp to searchable. */
-    public Histogram searchableLag;
+    /** Time from sample timestamp to when a sample is appended and queryable (existing series). */
+    public Histogram appendLag;
+
+    /** Time from sample timestamp to when a new series becomes discoverable after refresh. */
+    public Histogram refreshLag;
 
     public void initialize(MetricsRegistry registry) {
         coordinatorLag = registry.createHistogram(
@@ -27,15 +30,22 @@ public class TSDBIngestionLagMetrics {
             TSDBMetricsConstants.UNIT_MILLISECONDS
         );
 
-        searchableLag = registry.createHistogram(
-            TSDBMetricsConstants.INGESTION_SEARCHABLE_LAG,
-            TSDBMetricsConstants.INGESTION_SEARCHABLE_LAG_DESC,
+        appendLag = registry.createHistogram(
+            TSDBMetricsConstants.INGESTION_APPEND_LAG,
+            TSDBMetricsConstants.INGESTION_APPEND_LAG_DESC,
+            TSDBMetricsConstants.UNIT_MILLISECONDS
+        );
+
+        refreshLag = registry.createHistogram(
+            TSDBMetricsConstants.INGESTION_REFRESH_LAG,
+            TSDBMetricsConstants.INGESTION_REFRESH_LAG_DESC,
             TSDBMetricsConstants.UNIT_MILLISECONDS
         );
     }
 
     public void cleanup() {
         coordinatorLag = null;
-        searchableLag = null;
+        appendLag = null;
+        refreshLag = null;
     }
 }

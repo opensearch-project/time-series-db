@@ -13,6 +13,7 @@ import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.engine.Engine;
 import org.opensearch.index.engine.TSDBEngine;
+import org.opensearch.index.engine.TSDBIndexResult;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
 import org.opensearch.telemetry.metrics.Histogram;
@@ -32,14 +33,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for TSDBIngestionLagIndexingListener which calculates searchable lag
+ * Tests for TSDBIngestionLagIndexingListener which calculates append lag and refresh lag
  * using per-shard refresh listeners.
  */
 public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
     private ThreadContext threadContext;
     private TSDBIngestionLagMetrics metrics;
     private TSDBIngestionLagIndexingListener listener;
-    private Histogram mockSearchableLagHistogram;
+    private Histogram mockAppendLagHistogram;
+    private Histogram mockRefreshLagHistogram;
     private IndexShard mockIndexShard;
     private TSDBEngine mockEngine;
     private ShardId shardId;
@@ -50,21 +52,21 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         super.setUp();
         threadContext = new ThreadContext(org.opensearch.common.settings.Settings.EMPTY);
         metrics = new TSDBIngestionLagMetrics();
-        mockSearchableLagHistogram = mock(Histogram.class);
-        metrics.searchableLag = mockSearchableLagHistogram;
+        mockAppendLagHistogram = mock(Histogram.class);
+        mockRefreshLagHistogram = mock(Histogram.class);
+        metrics.appendLag = mockAppendLagHistogram;
+        metrics.refreshLag = mockRefreshLagHistogram;
 
         mockIndexShard = mock(IndexShard.class);
         mockEngine = mock(TSDBEngine.class);
         shardId = new ShardId(randomAlphaOfLength(10), randomAlphaOfLength(10), randomIntBetween(0, 10));
         when(mockIndexShard.shardId()).thenReturn(shardId);
 
-        // Capture the refresh listener when addRefreshListener is called
         org.mockito.Mockito.doAnswer(invocation -> {
             capturedRefreshListener = invocation.getArgument(0);
             return null;
         }).when(mockEngine).addRefreshListener(any(ReferenceManager.RefreshListener.class));
 
-        // Create listener with mock engine lookup function
         listener = new TSDBIngestionLagIndexingListener(threadContext, metrics, () -> true, sid -> mockEngine);
 
         TSDBMetrics.initialize(mock(org.opensearch.telemetry.metrics.MetricsRegistry.class));
@@ -84,7 +86,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
     }
 
     public void testAfterIndexShardStartedSkipsWhenNoEngineRegistered() {
-        // Create listener with engine lookup that returns null
         TSDBIngestionLagIndexingListener noEngineListener = new TSDBIngestionLagIndexingListener(
             threadContext,
             metrics,
@@ -94,7 +95,6 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
 
         noEngineListener.afterIndexShardStarted(mockIndexShard);
 
-        // Should not call addRefreshListener since no engine is registered
         verify(mockEngine, never()).addRefreshListener(any(ReferenceManager.RefreshListener.class));
     }
 
@@ -102,51 +102,203 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         listener.afterIndexShardStarted(mockIndexShard);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        Engine.IndexResult result = createExistingSeriesResult();
 
         listener.postIndex(shardId, index, result);
 
-        // No metrics should be recorded without bulkRequestId
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
 
     public void testPostIndexWithoutMinTimestamp() {
         listener.afterIndexShardStarted(mockIndexShard);
 
-        String bulkRequestId = "test-bulk-request-id";
-        threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
+        threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, "test-bulk-id");
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        Engine.IndexResult result = createExistingSeriesResult();
 
         listener.postIndex(shardId, index, result);
 
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
     }
 
-    public void testPostIndexTracksRequestAndRecordsMetricsOnRefresh() throws IOException {
-        listener.afterIndexShardStarted(mockIndexShard);
+    // --- Existing series (append lag) tests ---
 
-        setupHeaders("test-bulk-request-id", 1000L);
+    public void testExistingSeriesEmitsAppendLagImmediately() {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        TSDBIndexResult result = createExistingSeriesResult();
 
         listener.postIndex(shardId, index, result);
 
-        // Simulate refresh (beforeRefresh snapshots doc count, afterRefresh evaluates)
-        assertNotNull("Refresh listener should be registered", capturedRefreshListener);
+        verify(mockAppendLagHistogram, times(1)).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
+    }
+
+    public void testExistingSeriesDoesNotEmitRefreshLag() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 1);
+
+        Engine.Index index = mock(Engine.Index.class);
+        TSDBIndexResult result = createExistingSeriesResult();
+
+        listener.postIndex(shardId, index, result);
+
         capturedRefreshListener.beforeRefresh();
         capturedRefreshListener.afterRefresh(true);
 
-        // Searchable lag metric should be recorded
-        verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
+        // append.lag emitted immediately, refresh.lag NOT emitted (no new series)
+        verify(mockAppendLagHistogram, times(1)).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
+
+    public void testMultipleExistingSeriesDocsEmitAppendLagEach() {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 3);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+
+        verify(mockAppendLagHistogram, times(3)).record(anyDouble(), any());
+    }
+
+    // --- New series (refresh lag) tests ---
+
+    public void testNewSeriesDoesNotEmitAppendLag() {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 1);
+
+        Engine.Index index = mock(Engine.Index.class);
+        TSDBIndexResult result = createNewSeriesResult();
+
+        listener.postIndex(shardId, index, result);
+
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
+    }
+
+    public void testNewSeriesEmitsRefreshLagAfterRefresh() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 1);
+
+        Engine.Index index = mock(Engine.Index.class);
+        TSDBIndexResult result = createNewSeriesResult();
+
+        listener.postIndex(shardId, index, result);
+
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+    }
+
+    public void testMultipleNewSeriesDocsEmitSingleRefreshLag() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 3000L, 3);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        listener.postIndex(shardId, index, createNewSeriesResult());
+        listener.postIndex(shardId, index, createNewSeriesResult());
+        listener.postIndex(shardId, index, createNewSeriesResult());
+
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        // One refresh.lag per bulk request (not per document)
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+    }
+
+    // --- Mixed bulk (new + existing series) tests ---
+
+    public void testMixedBulkEmitsBothMetrics() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 3);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+        listener.postIndex(shardId, index, createNewSeriesResult());
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+
+        // 2 existing-series docs → 2 append.lag emissions
+        verify(mockAppendLagHistogram, times(2)).record(anyDouble(), any());
+
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        // 1 new-series doc → 1 refresh.lag emission for the bulk
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+    }
+
+    // --- Gate 1 (expectedDocCount) tests ---
+
+    public void testGate1PreventsEarlyCompletionOnMidBulkRefresh() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 3);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        // First doc is new series
+        listener.postIndex(shardId, index, createNewSeriesResult());
+
+        // Refresh fires mid-bulk — only 1 of 3 docs processed
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        // Gate 1 blocks: totalCalls(1) < expectedDocCount(3)
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
+
+        // Remaining docs arrive
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+        listener.postIndex(shardId, index, createExistingSeriesResult());
+
+        // Next refresh — all 3 docs processed
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, times(2)).record(anyDouble(), any());
+    }
+
+    // --- Gate 2 (snapshot stability) tests ---
+
+    public void testGate2PreventsEarlyCompletionWhenNewSeriesArriveDuringRefresh() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        // No expectedDocCount — fallback to snapshot heuristic only
+        setupHeaders("test-bulk-id", 1000L, -1);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        listener.postIndex(shardId, index, createNewSeriesResult());
+
+        // beforeRefresh snapshots newSeriesDocsSeen=1
+        capturedRefreshListener.beforeRefresh();
+
+        // Another new-series doc arrives during refresh
+        listener.postIndex(shardId, index, createNewSeriesResult());
+
+        // afterRefresh: frozen(1) != newSeriesDocsSeen(2) → not complete
+        capturedRefreshListener.afterRefresh(true);
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
+
+        // Next refresh cycle — stable
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+    }
+
+    // --- Lifecycle tests ---
 
     public void testPostIndexSkipsOnFailure() {
         listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
         Engine.IndexResult result = mock(Engine.IndexResult.class);
@@ -154,111 +306,23 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
 
         listener.postIndex(shardId, index, result);
 
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
-    }
-
-    public void testRefreshRecordsMetricsWhenBulkIsComplete() throws IOException {
-        listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
-
-        Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
-
-        listener.postIndex(shardId, index, result);
-
-        // Simulate refresh — isComplete() should be true since all docs indexed before beforeRefresh
-        capturedRefreshListener.beforeRefresh();
-        capturedRefreshListener.afterRefresh(true);
-
-        // Metrics should be recorded immediately on the first refresh after all docs are indexed
-        verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
-    }
-
-    public void testMultipleDocumentsInBulkRequest() throws IOException {
-        listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
-
-        Engine.Index index = mock(Engine.Index.class);
-
-        // First document
-        Engine.IndexResult result1 = createSuccessResult(100L);
-        listener.postIndex(shardId, index, result1);
-
-        // Second document
-        Engine.IndexResult result2 = createSuccessResult(200L);
-        listener.postIndex(shardId, index, result2);
-
-        // Third document
-        Engine.IndexResult result3 = createSuccessResult(150L);
-        listener.postIndex(shardId, index, result3);
-
-        // All 3 documents indexed before refresh — isComplete() should be true
-        capturedRefreshListener.beforeRefresh();
-        capturedRefreshListener.afterRefresh(true);
-
-        // Metrics should be recorded once for the whole bulk request
-        verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
-    }
-
-    public void testMidBulkRefreshDoesNotRecordMetricsPremately() throws IOException {
-        listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
-
-        Engine.Index index = mock(Engine.Index.class);
-
-        // Simulate a bulk with 3 documents on this shard.
-        // First two documents arrive before the refresh.
-        Engine.IndexResult result1 = createSuccessResult(10L);
-        listener.postIndex(shardId, index, result1);
-
-        Engine.IndexResult result2 = createSuccessResult(11L);
-        listener.postIndex(shardId, index, result2);
-
-        // Refresh starts — snapshots docsSeen=2
-        capturedRefreshListener.beforeRefresh();
-
-        // Third document arrives DURING the refresh (between beforeRefresh and afterRefresh)
-        Engine.IndexResult result3 = createSuccessResult(12L);
-        listener.postIndex(shardId, index, result3);
-
-        // afterRefresh fires — should NOT record metrics because docsSeen changed during refresh
-        capturedRefreshListener.afterRefresh(true);
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
-
-        // Next refresh cycle — no new docs arrive, snapshot matches
-        capturedRefreshListener.beforeRefresh();
-        capturedRefreshListener.afterRefresh(true);
-
-        // Now metrics should be recorded exactly once
-        verify(mockSearchableLagHistogram, times(1)).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
 
     public void testBeforeIndexShardClosedCleansUpListener() throws IOException {
         listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        listener.postIndex(shardId, index, createNewSeriesResult());
 
-        listener.postIndex(shardId, index, result);
-
-        // Close the shard
         listener.beforeIndexShardClosed(shardId, mockIndexShard, org.opensearch.common.settings.Settings.EMPTY);
 
-        // After closing, posting to this shard should not track anything
-        threadContext = new ThreadContext(org.opensearch.common.settings.Settings.EMPTY);
-        setupHeaders("test-bulk-request-id-2", 2000L);
-
-        // The captured listener is still the same, but the shard listener was cleared
         capturedRefreshListener.beforeRefresh();
         capturedRefreshListener.afterRefresh(true);
 
-        // Metrics should not be recorded after shard is closed
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
 
     public void testAfterIndexRemovedCleansUpAllShardsForIndex() {
@@ -270,67 +334,84 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         Index removedIndex = new Index(indexName, indexUuid);
         listener.afterIndexRemoved(removedIndex, null, IndexRemovalReason.DELETED);
 
-        // Post index should not find the shard listener
-        setupHeaders("test-bulk-request-id", 1000L);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        listener.postIndex(shardId, index, createExistingSeriesResult());
 
-        listener.postIndex(shardId, index, result);
-
-        // No metrics should be tracked
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
     }
 
     public void testDisabledMetricsSkipsTracking() throws IOException {
-        // Create listener with metrics disabled
-        TSDBIngestionLagIndexingListener disabledListener = new TSDBIngestionLagIndexingListener(threadContext, metrics, () -> false);
+        TSDBIngestionLagIndexingListener disabledListener = new TSDBIngestionLagIndexingListener(
+            threadContext,
+            metrics,
+            () -> false,
+            sid -> mockEngine
+        );
 
         disabledListener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        disabledListener.postIndex(shardId, index, createExistingSeriesResult());
 
-        disabledListener.postIndex(shardId, index, result);
-
-        // Even with refresh, no metrics because disabled
         if (capturedRefreshListener != null) {
             capturedRefreshListener.beforeRefresh();
             capturedRefreshListener.afterRefresh(true);
         }
 
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
 
     public void testRefreshWithDidRefreshFalseDoesNothing() throws IOException {
         listener.afterIndexShardStarted(mockIndexShard);
-
-        setupHeaders("test-bulk-request-id", 1000L);
+        setupHeaders("test-bulk-id", 1000L, 1);
 
         Engine.Index index = mock(Engine.Index.class);
-        Engine.IndexResult result = createSuccessResult(100L);
+        listener.postIndex(shardId, index, createNewSeriesResult());
 
-        listener.postIndex(shardId, index, result);
-
-        // Simulate refresh with didRefresh=false
         capturedRefreshListener.beforeRefresh();
         capturedRefreshListener.afterRefresh(false);
 
-        // No metrics should be recorded
-        verify(mockSearchableLagHistogram, never()).record(anyDouble(), any());
+        verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
     }
 
-    private void setupHeaders(String bulkRequestId, long minTimestamp) {
+    public void testNonTSDBIndexResultDefaultsToNewSeries() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 1);
+
+        Engine.Index index = mock(Engine.Index.class);
+        Engine.IndexResult vanillaResult = mock(Engine.IndexResult.class);
+        when(vanillaResult.getFailure()).thenReturn(null);
+
+        listener.postIndex(shardId, index, vanillaResult);
+
+        // Non-TSDBIndexResult should default to new-series path (no append.lag)
+        verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
+
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
+    }
+
+    // --- Helper methods ---
+
+    private void setupHeaders(String bulkRequestId, long minTimestamp, long expectedDocCount) {
         threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
         threadContext.putHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minTimestamp));
+        if (expectedDocCount > 0) {
+            threadContext.putHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT, String.valueOf(expectedDocCount));
+        }
     }
 
-    private Engine.IndexResult createSuccessResult(long seqNo) {
-        Engine.IndexResult result = mock(Engine.IndexResult.class);
-        when(result.getFailure()).thenReturn(null);
-        when(result.getSeqNo()).thenReturn(seqNo);
-        return result;
+    private TSDBIndexResult createExistingSeriesResult() {
+        return new TSDBIndexResult(1L, 1L, 100L, false);
+    }
+
+    private TSDBIndexResult createNewSeriesResult() {
+        return new TSDBIndexResult(1L, 1L, 100L, true);
     }
 }

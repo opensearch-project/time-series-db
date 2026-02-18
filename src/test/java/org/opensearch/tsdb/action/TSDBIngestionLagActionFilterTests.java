@@ -9,15 +9,20 @@ package org.opensearch.tsdb.action;
 
 import org.opensearch.action.ActionRequest;
 import org.opensearch.action.bulk.BulkAction;
+import org.opensearch.action.bulk.BulkItemRequest;
 import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkShardRequest;
+import org.opensearch.action.bulk.TransportShardBulkAction;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.action.support.ActionRequestMetadata;
+import org.opensearch.action.support.WriteRequest;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.tasks.Task;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.action.ActionResponse;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.tasks.Task;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.test.OpenSearchTestCase;
@@ -33,7 +38,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Tests for TSDBIngestionLagActionFilter which reads timestamps from HTTP headers.
+ * Tests for TSDBIngestionLagActionFilter which reads timestamps from HTTP headers
+ * and sets shard-level doc count headers.
  */
 public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
     private ThreadContext threadContext;
@@ -80,17 +86,14 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        // Simulate HTTP headers being copied to ThreadContext by RestController
-        long minSampleTimestamp = System.currentTimeMillis() - 1000; // 1 second ago
+        long minSampleTimestamp = System.currentTimeMillis() - 1000;
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(minSampleTimestamp));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // Coordinator lag metric should be recorded
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
 
-        // Verify headers are forwarded to data nodes
         String minTimestamp = threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP);
         assertNotNull(minTimestamp);
         assertEquals(String.valueOf(minSampleTimestamp), minTimestamp);
@@ -105,12 +108,9 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        // No HTTP headers set - simulates client not providing timestamps
-
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // No metrics should be recorded without headers
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
         assertNull(threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP));
     }
@@ -121,13 +121,11 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        // Min sample timestamp header provided
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // Coordinator lag metric should be recorded
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
     }
 
@@ -137,12 +135,10 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        // Invalid timestamps (not numbers)
         threadContext.putHeader("X-Min-Sample-Timestamp-Ms", "not-a-number");
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
-        // Should not crash, chain should proceed
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
@@ -158,12 +154,10 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // Metrics should still be recorded even with empty bulk request (headers are valid)
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
     }
 
     public void testApplyWhenDisabled() {
-        // Create filter with disabled supplier
         filter = new TSDBIngestionLagActionFilter(threadContext, metrics, () -> false);
 
         ActionFilterChain<ActionRequest, ActionResponse> chain = mock(ActionFilterChain.class);
@@ -176,7 +170,6 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
-        // No metrics should be recorded when disabled
         verify(mockCoordinatorLagHistogram, never()).record(anyDouble(), any(Tags.class));
     }
 
@@ -192,6 +185,54 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
 
         verify(chain).proceed(task, BulkAction.NAME, bulkRequest, listener);
         verify(mockCoordinatorLagHistogram, times(1)).record(anyDouble(), any(Tags.class));
+    }
+
+    // --- Shard-level bulk action tests ---
+
+    public void testShardBulkActionSetsDocCountHeader() {
+        ActionFilterChain<ActionRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+
+        threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, "test-bulk-id");
+
+        ShardId testShardId = new ShardId("test-index", "uuid", 0);
+        BulkItemRequest[] items = new BulkItemRequest[5];
+        for (int i = 0; i < 5; i++) {
+            IndexRequest indexRequest = new IndexRequest("test-index");
+            indexRequest.source("{\"value\":42.0}", XContentType.JSON);
+            items[i] = new BulkItemRequest(i, indexRequest);
+        }
+        BulkShardRequest shardRequest = new BulkShardRequest(testShardId, WriteRequest.RefreshPolicy.NONE, items);
+
+        filter.apply(task, TransportShardBulkAction.ACTION_NAME, shardRequest, ActionRequestMetadata.empty(), listener, chain);
+
+        verify(chain).proceed(task, TransportShardBulkAction.ACTION_NAME, shardRequest, listener);
+
+        String docCount = threadContext.getHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT);
+        assertNotNull(docCount);
+        assertEquals("5", docCount);
+    }
+
+    public void testShardBulkActionSkipsWithoutBulkRequestId() {
+        ActionFilterChain<ActionRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+
+        ShardId testShardId = new ShardId("test-index", "uuid", 0);
+        BulkItemRequest[] items = new BulkItemRequest[3];
+        for (int i = 0; i < 3; i++) {
+            IndexRequest indexRequest = new IndexRequest("test-index");
+            indexRequest.source("{\"value\":42.0}", XContentType.JSON);
+            items[i] = new BulkItemRequest(i, indexRequest);
+        }
+        BulkShardRequest shardRequest = new BulkShardRequest(testShardId, WriteRequest.RefreshPolicy.NONE, items);
+
+        filter.apply(task, TransportShardBulkAction.ACTION_NAME, shardRequest, ActionRequestMetadata.empty(), listener, chain);
+
+        verify(chain).proceed(task, TransportShardBulkAction.ACTION_NAME, shardRequest, listener);
+
+        assertNull(threadContext.getHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT));
     }
 
     private BulkRequest createSimpleBulkRequest(String index) {

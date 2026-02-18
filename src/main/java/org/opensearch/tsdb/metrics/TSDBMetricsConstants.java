@@ -166,8 +166,11 @@ public final class TSDBMetricsConstants {
     /** Histogram: Latency from minimum sample timestamp to coordinator arrival (includes client batching + network) */
     public static final String INGESTION_COORDINATOR_LAG = "tsdb.ingestion.coordinator.lag";
 
-    /** Histogram: Latency from minimum sample timestamp to when data becomes searchable (end-to-end lag) */
-    public static final String INGESTION_SEARCHABLE_LAG = "tsdb.ingestion.searchable.lag";
+    /** Histogram: Latency from minimum sample timestamp to when a sample is appended and queryable (existing series) */
+    public static final String INGESTION_APPEND_LAG = "tsdb.ingestion.append.lag";
+
+    /** Histogram: Latency from minimum sample timestamp to when a new series becomes discoverable after refresh */
+    public static final String INGESTION_REFRESH_LAG = "tsdb.ingestion.refresh.lag";
 
     // ============================================
     // Search Metrics (Query Cache)
@@ -342,8 +345,10 @@ public final class TSDBMetricsConstants {
     // Ingestion Lag Metrics (Data Freshness)
     public static final String INGESTION_COORDINATOR_LAG_DESC =
         "Coordinator lag: time from minimum sample timestamp to coordinator arrival (includes client batching + network)";
-    public static final String INGESTION_SEARCHABLE_LAG_DESC =
-        "Searchable lag: end-to-end time from minimum sample timestamp to when data becomes searchable";
+    public static final String INGESTION_APPEND_LAG_DESC =
+        "Append lag: time from minimum sample timestamp to when a sample is appended to an existing series and queryable";
+    public static final String INGESTION_REFRESH_LAG_DESC =
+        "Refresh lag: time from minimum sample timestamp to when a new series becomes discoverable after LiveSeriesIndex refresh";
 
     // ============================================
     // Metric Tags
@@ -388,6 +393,9 @@ public final class TSDBMetricsConstants {
 
     /** Internal header: minimum sample timestamp (ms) in a bulk request, forwarded from coordinator to data nodes */
     public static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
+
+    /** Internal header: number of index requests in a BulkShardRequest, forwarded from coordinator to data nodes */
+    public static final String HEADER_SHARD_INDEX_DOC_COUNT = "tsdb.shard_index_doc_count";
 
     // ============================================
     // Conversion Constants
