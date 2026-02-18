@@ -172,6 +172,9 @@ public final class TSDBMetricsConstants {
     /** Histogram: Latency from minimum sample timestamp to when a new series becomes discoverable after refresh */
     public static final String INGESTION_REFRESH_LAG = "tsdb.ingestion.refresh.lag";
 
+    /** Counter: Pending bulk requests dropped because the per-shard tracking map was full */
+    public static final String INGESTION_LAG_PENDING_DROPPED_TOTAL = "tsdb.ingestion.lag.pending_dropped.total";
+
     // ============================================
     // Search Metrics (Query Cache)
     // ============================================
@@ -349,6 +352,8 @@ public final class TSDBMetricsConstants {
         "Append lag: time from minimum sample timestamp to when a sample is appended to an existing series and queryable";
     public static final String INGESTION_REFRESH_LAG_DESC =
         "Refresh lag: time from minimum sample timestamp to when a new series becomes discoverable after LiveSeriesIndex refresh";
+    public static final String INGESTION_LAG_PENDING_DROPPED_TOTAL_DESC =
+        "Pending bulk requests dropped because the per-shard tracking map was full";
 
     // ============================================
     // Metric Tags

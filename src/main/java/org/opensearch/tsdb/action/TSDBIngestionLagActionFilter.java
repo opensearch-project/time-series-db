@@ -32,6 +32,10 @@ import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
 /**
  * Captures ingestion lag metrics from client-provided HTTP headers on bulk requests.
+ *
+ * <p>Assumes each bulk request targets a single TSDB index. The index tag for coordinator lag
+ * is derived from the first {@link IndexRequest} in the bulk; multi-index bulks will be
+ * attributed to that first index only.</p>
  */
 public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
@@ -91,7 +95,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
 
                 String bulkRequestId = UUID.randomUUID().toString();
-                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
+                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, minSampleTimestampStr);
                 threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
 
                 logger.debug("Ingestion lag metrics - index: {}, coordinatorLag: {}ms", indexName, coordinatorLagMs);
@@ -101,6 +105,11 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
         }
     }
 
+    /**
+     * Forwards the shard-level document count via ThreadContext for the indexing listener's
+     * completion gate. Uses {@code items().length} which counts all item types; this assumes
+     * TSDB bulk requests contain only index operations (no deletes or updates).
+     */
     private void handleShardBulkAction(BulkShardRequest shardRequest) {
         try {
             String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);

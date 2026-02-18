@@ -154,9 +154,8 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             boolean isNewSeries = (result instanceof TSDBIndexResult tsdbResult) ? tsdbResult.isNewSeriesCreated() : true;
 
             if (!isNewSeries) {
-                Tags tags = Tags.create().addTag("index", shardId.getIndexName());
                 long appendLagMs = System.currentTimeMillis() - minSampleTimestamp;
-                TSDBMetrics.recordHistogram(metrics.appendLag, appendLagMs, tags);
+                TSDBMetrics.recordHistogram(metrics.appendLag, appendLagMs, listener.shardTags);
             }
 
             listener.trackDoc(bulkRequestId, minSampleTimestamp, expectedDocCount, isNewSeries);
@@ -188,17 +187,20 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
         private final ShardId shardId;
         private final TSDBIngestionLagMetrics metrics;
         private final Supplier<Boolean> enabledSupplier;
+        private final Tags shardTags;
         private final ConcurrentHashMap<String, PendingBulkRequest> pendingRequests = new ConcurrentHashMap<>();
 
         ShardRefreshListener(ShardId shardId, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
             this.shardId = shardId;
             this.metrics = metrics;
             this.enabledSupplier = enabledSupplier;
+            this.shardTags = Tags.create().addTag("index", shardId.getIndexName());
         }
 
         void trackDoc(String bulkRequestId, long minTimestamp, long expectedDocCount, boolean isNewSeries) {
             if (pendingRequests.size() >= MAX_PENDING_REQUESTS) {
                 logger.debug("Pending requests map full for shard {}, skipping {}", shardId, bulkRequestId);
+                TSDBMetrics.incrementCounter(metrics.pendingDropped, 1, shardTags);
                 return;
             }
 
@@ -244,9 +246,8 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
                 if (pending.isComplete()) {
                     if (pending.newSeriesDocsSeen.get() > 0) {
-                        Tags tags = Tags.create().addTag("index", shardId.getIndexName());
                         long refreshLagMs = now - pending.minSampleTimestamp;
-                        TSDBMetrics.recordHistogram(metrics.refreshLag, refreshLagMs, tags);
+                        TSDBMetrics.recordHistogram(metrics.refreshLag, refreshLagMs, shardTags);
 
                         logger.debug(
                             "Refresh lag - shard: {}, bulkId: {}, refreshLag: {}ms, newSeriesDocs: {}",
