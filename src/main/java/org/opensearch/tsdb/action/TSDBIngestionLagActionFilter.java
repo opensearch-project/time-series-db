@@ -40,13 +40,6 @@ import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
 
-    // HTTP headers (copied to ThreadContext by RestController)
-    private static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
-
-    // Internal headers forwarded to data nodes
-    private static final String HEADER_MIN_SAMPLE_TIMESTAMP = "tsdb.min_sample_timestamp_ms";
-    private static final String HEADER_BULK_REQUEST_ID = "tsdb.bulk_request_id";
-
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
     private final Supplier<Boolean> enabledSupplier;
@@ -82,7 +75,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
 
     private void handleBulkAction(BulkRequest bulkRequest) {
         try {
-            String minSampleTimestampStr = threadContext.getHeader(HTTP_HEADER_MIN_SAMPLE_TIMESTAMP);
+            String minSampleTimestampStr = threadContext.getHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP);
 
             if (minSampleTimestampStr != null) {
                 long minSampleTimestamp = Long.parseLong(minSampleTimestampStr);
@@ -95,8 +88,8 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
 
                 String bulkRequestId = UUID.randomUUID().toString();
-                threadContext.putHeader(HEADER_MIN_SAMPLE_TIMESTAMP, minSampleTimestampStr);
-                threadContext.putHeader(HEADER_BULK_REQUEST_ID, bulkRequestId);
+                threadContext.putHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, minSampleTimestampStr);
+                threadContext.putHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID, bulkRequestId);
 
                 logger.debug("Ingestion lag metrics - index: {}, coordinatorLag: {}ms", indexName, coordinatorLagMs);
             }
@@ -112,7 +105,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
      */
     private void handleShardBulkAction(BulkShardRequest shardRequest) {
         try {
-            String bulkRequestId = threadContext.getHeader(HEADER_BULK_REQUEST_ID);
+            String bulkRequestId = threadContext.getHeader(TSDBMetricsConstants.HEADER_BULK_REQUEST_ID);
             if (bulkRequestId == null) {
                 return;
             }

@@ -87,7 +87,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
         long minSampleTimestamp = System.currentTimeMillis() - 1000;
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(minSampleTimestamp));
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(minSampleTimestamp));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
@@ -121,7 +121,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis()));
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(System.currentTimeMillis()));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
@@ -135,7 +135,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", "not-a-number");
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, "not-a-number");
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
@@ -149,7 +149,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = new BulkRequest();
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
@@ -165,7 +165,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("test-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 
@@ -179,7 +179,7 @@ public class TSDBIngestionLagActionFilterTests extends OpenSearchTestCase {
         BulkRequest bulkRequest = createSimpleBulkRequest("my-custom-index");
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
-        threadContext.putHeader("X-Min-Sample-Timestamp-Ms", String.valueOf(System.currentTimeMillis() - 1000));
+        threadContext.putHeader(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, String.valueOf(System.currentTimeMillis() - 1000));
 
         filter.apply(task, BulkAction.NAME, bulkRequest, ActionRequestMetadata.empty(), listener, chain);
 

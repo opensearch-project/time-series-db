@@ -390,6 +390,13 @@ public final class TSDBMetricsConstants {
     public static final String TAG_LOCATION_COORDINATOR = "coordinator";
 
     // ============================================
+    // Ingestion Lag HTTP Headers
+    // ============================================
+
+    /** HTTP header: minimum sample timestamp (ms) sent by the client in bulk requests */
+    public static final String HTTP_HEADER_MIN_SAMPLE_TIMESTAMP = "X-Min-Sample-Timestamp-Ms";
+
+    // ============================================
     // Ingestion Lag Internal Headers
     // ============================================
 

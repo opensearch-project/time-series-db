@@ -59,6 +59,7 @@ import org.opensearch.tsdb.action.TSDBIngestionLagIndexingListener;
 import org.opensearch.tsdb.lang.m3.M3QLMetrics;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
+import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 import org.opensearch.tsdb.query.fetch.LabelsFetchBuilder;
 import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.tsdb.query.search.CachedWildcardQueryBuilder;
@@ -905,11 +906,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     @Override
     public Collection<RestHeaderDefinition> getRestHeaders() {
-        // Ingestion lag metric headers
-        return List.of(
-            new RestHeaderDefinition("X-Flush-Timestamp-Ms", false),
-            new RestHeaderDefinition("X-Min-Sample-Timestamp-Ms", false)
-        );
+        return List.of(new RestHeaderDefinition(TSDBMetricsConstants.HTTP_HEADER_MIN_SAMPLE_TIMESTAMP, false));
     }
 
     @Override

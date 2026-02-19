@@ -104,7 +104,7 @@ public class TSDBEngine extends Engine {
      * @param shardId the shard ID to look up
      * @return the TSDBEngine instance, or null if not registered
      */
-    public static TSDBEngine getEngine(org.opensearch.core.index.shard.ShardId shardId) {
+    public static TSDBEngine getEngine(ShardId shardId) {
         return ENGINE_REGISTRY.get(shardId);
     }
 

@@ -18,6 +18,7 @@ import java.util.function.Supplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.ReferenceManager;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
@@ -96,7 +97,7 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
     }
 
     @Override
-    public void beforeIndexShardClosed(ShardId shardId, IndexShard indexShard, org.opensearch.common.settings.Settings indexSettings) {
+    public void beforeIndexShardClosed(ShardId shardId, IndexShard indexShard, Settings indexSettings) {
         ShardRefreshListener listener = shardListeners.remove(shardId);
         if (listener != null) {
             listener.clear();
@@ -124,10 +125,6 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             return;
         }
 
-        if (result.getFailure() != null) {
-            return;
-        }
-
         if (index.origin() != null && index.origin().isFromTranslog()) {
             return;
         }
@@ -137,42 +134,26 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             return;
         }
 
-        String minTimestampStr = threadContext.getHeader(TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP);
-        if (minTimestampStr == null) {
-            return;
-        }
-
         ShardRefreshListener listener = shardListeners.get(shardId);
         if (listener == null) {
             return;
         }
 
+        boolean isFailed = result.getFailure() != null;
+        boolean isNewSeries = !isFailed && (result instanceof TSDBIndexResult tsdbResult ? tsdbResult.isNewSeriesCreated() : true);
+
         try {
-            long minSampleTimestamp = Long.parseLong(minTimestampStr);
-            long expectedDocCount = parseExpectedDocCount();
-
-            boolean isNewSeries = (result instanceof TSDBIndexResult tsdbResult) ? tsdbResult.isNewSeriesCreated() : true;
-
-            if (!isNewSeries) {
-                long appendLagMs = System.currentTimeMillis() - minSampleTimestamp;
-                TSDBMetrics.recordHistogram(metrics.appendLag, appendLagMs, listener.shardTags);
+            PendingBulkRequest pending = listener.trackDoc(bulkRequestId, isNewSeries, threadContext);
+            if (pending == null) {
+                return;
             }
 
-            listener.trackDoc(bulkRequestId, minSampleTimestamp, expectedDocCount, isNewSeries);
+            if (!isFailed && !isNewSeries) {
+                long appendLagMs = System.currentTimeMillis() - pending.minSampleTimestamp;
+                TSDBMetrics.recordHistogram(metrics.appendLag, appendLagMs, listener.shardTags);
+            }
         } catch (Exception e) {
             logger.debug("Failed to track bulk request {}", bulkRequestId, e);
-        }
-    }
-
-    private long parseExpectedDocCount() {
-        String docCountStr = threadContext.getHeader(TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT);
-        if (docCountStr == null) {
-            return -1;
-        }
-        try {
-            return Long.parseLong(docCountStr);
-        } catch (NumberFormatException e) {
-            return -1;
         }
     }
 
@@ -197,21 +178,43 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
             this.shardTags = Tags.create().addTag("index", shardId.getIndexName());
         }
 
-        void trackDoc(String bulkRequestId, long minTimestamp, long expectedDocCount, boolean isNewSeries) {
+        /**
+         * Tracks a document for the given bulk request. Parses ThreadContext headers only on the
+         * first call per bulk; subsequent documents reuse the cached {@link PendingBulkRequest}.
+         *
+         * @return the {@link PendingBulkRequest} for reading cached values, or {@code null} if dropped
+         */
+        PendingBulkRequest trackDoc(String bulkRequestId, boolean isNewSeries, ThreadContext threadContext) {
             if (pendingRequests.size() >= MAX_PENDING_REQUESTS) {
-                logger.debug("Pending requests map full for shard {}, skipping {}", shardId, bulkRequestId);
                 TSDBMetrics.incrementCounter(metrics.pendingDropped, 1, shardTags);
-                return;
+                return null;
             }
 
-            pendingRequests.compute(bulkRequestId, (k, existing) -> {
+            return pendingRequests.compute(bulkRequestId, (k, existing) -> {
                 if (existing == null) {
-                    return new PendingBulkRequest(bulkRequestId, minTimestamp, expectedDocCount, isNewSeries);
+                    long minTs = parseHeader(threadContext, TSDBMetricsConstants.HEADER_MIN_SAMPLE_TIMESTAMP, -1L);
+                    if (minTs < 0) {
+                        return null;
+                    }
+                    long docCount = parseHeader(threadContext, TSDBMetricsConstants.HEADER_SHARD_INDEX_DOC_COUNT, -1L);
+                    return new PendingBulkRequest(bulkRequestId, minTs, docCount, isNewSeries);
                 } else {
                     existing.trackAdditionalDoc(isNewSeries);
                     return existing;
                 }
             });
+        }
+
+        private static long parseHeader(ThreadContext threadContext, String header, long defaultValue) {
+            String value = threadContext.getHeader(header);
+            if (value == null) {
+                return defaultValue;
+            }
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
         }
 
         void clear() {
@@ -240,7 +243,9 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
 
                 if (now - pending.createdAt > MAX_PENDING_AGE_MS) {
                     iter.remove();
-                    logger.debug("Evicted stale pending request {} for shard {}", pending.bulkRequestId, shardId);
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Evicted stale pending request {} for shard {}", pending.bulkRequestId, shardId);
+                    }
                     continue;
                 }
 
@@ -249,13 +254,15 @@ public class TSDBIngestionLagIndexingListener implements IndexingOperationListen
                         long refreshLagMs = now - pending.minSampleTimestamp;
                         TSDBMetrics.recordHistogram(metrics.refreshLag, refreshLagMs, shardTags);
 
-                        logger.debug(
-                            "Refresh lag - shard: {}, bulkId: {}, refreshLag: {}ms, newSeriesDocs: {}",
-                            shardId,
-                            pending.bulkRequestId,
-                            refreshLagMs,
-                            pending.newSeriesDocsSeen.get()
-                        );
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(
+                                "Refresh lag - shard: {}, bulkId: {}, refreshLag: {}ms, newSeriesDocs: {}",
+                                shardId,
+                                pending.bulkRequestId,
+                                refreshLagMs,
+                                pending.newSeriesDocsSeen.get()
+                            );
+                        }
                     }
                     iter.remove();
                 }

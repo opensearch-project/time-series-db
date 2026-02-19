@@ -51,6 +51,7 @@ public class TSDBIngestionLagMetrics {
             TSDBMetricsConstants.INGESTION_LAG_PENDING_DROPPED_TOTAL_DESC,
             TSDBMetricsConstants.UNIT_COUNT
         );
+
     }
 
     public void cleanup() {

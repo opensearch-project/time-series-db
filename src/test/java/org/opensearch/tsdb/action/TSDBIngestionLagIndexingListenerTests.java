@@ -16,6 +16,7 @@ import org.opensearch.index.engine.TSDBEngine;
 import org.opensearch.index.engine.TSDBIndexResult;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
+import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.metrics.TSDBIngestionLagMetrics;
@@ -56,6 +57,7 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
         mockRefreshLagHistogram = mock(Histogram.class);
         metrics.appendLag = mockAppendLagHistogram;
         metrics.refreshLag = mockRefreshLagHistogram;
+        metrics.pendingDropped = mock(Counter.class);
 
         mockIndexShard = mock(IndexShard.class);
         mockEngine = mock(TSDBEngine.class);
@@ -296,7 +298,7 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
 
     // --- Lifecycle tests ---
 
-    public void testPostIndexSkipsOnFailure() {
+    public void testFailedDocDoesNotEmitMetrics() {
         listener.afterIndexShardStarted(mockIndexShard);
         setupHeaders("test-bulk-id", 1000L, 1);
 
@@ -308,6 +310,26 @@ public class TSDBIngestionLagIndexingListenerTests extends OpenSearchTestCase {
 
         verify(mockAppendLagHistogram, never()).record(anyDouble(), any());
         verify(mockRefreshLagHistogram, never()).record(anyDouble(), any());
+    }
+
+    public void testFailedDocsStillCountTowardCompletion() throws IOException {
+        listener.afterIndexShardStarted(mockIndexShard);
+        setupHeaders("test-bulk-id", 1000L, 3);
+
+        Engine.Index index = mock(Engine.Index.class);
+
+        Engine.IndexResult failedResult = mock(Engine.IndexResult.class);
+        when(failedResult.getFailure()).thenReturn(new RuntimeException("test failure"));
+
+        // 1 new-series success, 2 failures — all 3 should count toward expectedDocCount
+        listener.postIndex(shardId, index, createNewSeriesResult());
+        listener.postIndex(shardId, index, failedResult);
+        listener.postIndex(shardId, index, failedResult);
+
+        capturedRefreshListener.beforeRefresh();
+        capturedRefreshListener.afterRefresh(true);
+
+        verify(mockRefreshLagHistogram, times(1)).record(anyDouble(), any());
     }
 
     public void testBeforeIndexShardClosedCleansUpListener() throws IOException {
