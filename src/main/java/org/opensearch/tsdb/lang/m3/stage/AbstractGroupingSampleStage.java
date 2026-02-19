@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -108,8 +109,8 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
 
         for (TimeSeries series : groupSeries) {
             for (Sample sample : series.getSamples()) {
-                // Skip NaN values - treat them as null/missing
-                if (Double.isNaN(sample.getValue())) {
+                // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
+                if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
                     continue;
                 }
                 long timestamp = sample.getTimestamp();
@@ -229,8 +230,8 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
      */
     private void aggregateSamplesIntoMap(SampleList samples, Map<Long, A> timestampToSample, LongConsumer circuitBreakerConsumer) {
         for (Sample sample : samples) {
-            // Skip NaN values - treat them as null/missing
-            if (Double.isNaN(sample.getValue())) {
+            // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
+            if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
                 continue;
             }
             long timestamp = sample.getTimestamp();

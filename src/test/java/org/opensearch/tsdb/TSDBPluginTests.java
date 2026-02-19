@@ -42,6 +42,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuil
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
+import org.opensearch.tsdb.query.rest.RestTSDBStatsAction;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -411,9 +412,10 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         );
 
         assertNotNull("REST handlers list should not be null", restHandlers);
-        assertThat("Should have 2 REST handler", restHandlers, hasSize(2));
+        assertThat("Should have 3 REST handlers", restHandlers, hasSize(3));
         assertThat("REST handler should be RestM3QLAction", restHandlers.get(0), instanceOf(RestM3QLAction.class));
-        assertThat("REST handler should be RestM3QLAction", restHandlers.get(1), instanceOf(RestPromQLAction.class));
+        assertThat("REST handler should be RestPromQLAction", restHandlers.get(1), instanceOf(RestPromQLAction.class));
+        assertThat("REST handler should be RestTSDBStatsAction", restHandlers.get(2), instanceOf(RestTSDBStatsAction.class));
     }
 
     public void testRestM3QLActionRegistered() {
@@ -448,21 +450,38 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<NamedWriteableRegistry.Entry> namedWriteables = plugin.getNamedWriteables();
 
         assertNotNull("Named writeables list should not be null", namedWriteables);
-        assertThat("Should have 1 named writeable", namedWriteables, hasSize(1));
+        assertThat("Should have 2 named writeables", namedWriteables, hasSize(2));
     }
 
     public void testInternalTimeSeriesNamedWriteable() {
         List<NamedWriteableRegistry.Entry> namedWriteables = plugin.getNamedWriteables();
 
-        NamedWriteableRegistry.Entry entry = namedWriteables.get(0);
+        // Find the time_series entry
+        NamedWriteableRegistry.Entry entry = namedWriteables.stream().filter(e -> "time_series".equals(e.name)).findFirst().orElse(null);
+
+        assertNotNull("Should have time_series named writeable", entry);
         assertThat("Category should be InternalAggregation", entry.categoryClass, equalTo(InternalAggregation.class));
         assertThat("Name should be 'time_series'", entry.name, equalTo("time_series"));
     }
 
+    public void testInternalTSDBStatsNamedWriteable() {
+        List<NamedWriteableRegistry.Entry> namedWriteables = plugin.getNamedWriteables();
+
+        // Find the tsdb_stats entry
+        NamedWriteableRegistry.Entry entry = namedWriteables.stream().filter(e -> "tsdb_stats".equals(e.name)).findFirst().orElse(null);
+
+        assertNotNull("Should have tsdb_stats named writeable", entry);
+        assertThat("Category should be InternalAggregation", entry.categoryClass, equalTo(InternalAggregation.class));
+        assertThat("Name should be 'tsdb_stats'", entry.name, equalTo("tsdb_stats"));
+    }
+
     public void testNamedWriteableCanCreateInstance() throws Exception {
         List<NamedWriteableRegistry.Entry> namedWriteables = plugin.getNamedWriteables();
-        NamedWriteableRegistry.Entry entry = namedWriteables.get(0);
 
+        // Find the time_series entry
+        NamedWriteableRegistry.Entry entry = namedWriteables.stream().filter(e -> "time_series".equals(e.name)).findFirst().orElse(null);
+
+        assertNotNull("Should have time_series named writeable", entry);
         // Verify the reader can create instances
         assertNotNull("Reader should not be null", entry.reader);
 

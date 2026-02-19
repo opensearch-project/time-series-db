@@ -275,6 +275,11 @@
           {
             "type" : "transform_null",
             "fill_value" : 0.0
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -302,6 +307,11 @@
           {
             "type" : "transform_null",
             "fill_value" : 0.0
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -309,6 +319,22 @@
           "4" : "4>4_unfold"
         },
         "inputReference" : "0"
+      }
+    },
+    "9_coordinator" : {
+      "coordinator_pipeline" : {
+        "buckets_path" : [ ],
+        "stages" : [
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
+          }
+        ],
+        "references" : {
+          "9_unfold" : "9>9_unfold"
+        },
+        "inputReference" : "9_unfold"
       }
     },
     "13" : {
@@ -321,16 +347,11 @@
           },
           {
             "type" : "avg"
-          },
-          {
-            "type" : "truncate",
-            "truncate_start" : 1000000000,
-            "truncate_end" : 1001000000
           }
         ],
         "references" : {
           "8" : "8",
-          "9" : "9>9_unfold"
+          "9" : "9_coordinator"
         },
         "inputReference" : "8"
       }

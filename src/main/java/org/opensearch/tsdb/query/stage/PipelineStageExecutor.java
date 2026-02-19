@@ -11,6 +11,7 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
+import org.opensearch.tsdb.query.utils.StageProfiler;
 
 import java.util.List;
 import java.util.function.LongConsumer;
@@ -48,7 +49,16 @@ public final class PipelineStageExecutor {
      * @return The processed time series result
      */
     public static List<TimeSeries> executeUnaryStage(UnaryPipelineStage stage, List<TimeSeries> input, boolean coordinatorExecution) {
-        return executeUnaryStage(stage, input, coordinatorExecution, null);
+        return executeUnaryStage(stage, input, coordinatorExecution, null, null);
+    }
+
+    public static List<TimeSeries> executeUnaryStage(
+        UnaryPipelineStage stage,
+        List<TimeSeries> input,
+        boolean coordinatorExecution,
+        LongConsumer circuitBreakerBytesConsumer
+    ) {
+        return executeUnaryStage(stage, input, coordinatorExecution, circuitBreakerBytesConsumer, null);
     }
 
     /**
@@ -68,15 +78,24 @@ public final class PipelineStageExecutor {
      * @param input The input time series
      * @param coordinatorExecution true if executing at coordinator level, false if at shard level
      * @param circuitBreakerBytesConsumer Optional consumer for circuit breaker bytes tracking (can be null)
+     * @param stageProfiler Optional profiler for stages
      * @return The processed time series result
      */
     public static List<TimeSeries> executeUnaryStage(
         UnaryPipelineStage stage,
         List<TimeSeries> input,
         boolean coordinatorExecution,
-        LongConsumer circuitBreakerBytesConsumer
+        LongConsumer circuitBreakerBytesConsumer,
+        StageProfiler stageProfiler
     ) {
         long startNanos = System.nanoTime();
+        long sampleCounts = 0; // only populated when profiling is enabled
+
+        if (stageProfiler != null) {
+            for (TimeSeries series : input) {
+                sampleCounts += series.getSamples().size();
+            }
+        }
 
         // Track temporary stage overhead - this will be released after stage completes
         // Delegate to the stage itself to report its memory requirements (Open/Closed principle)
@@ -95,7 +114,11 @@ public final class PipelineStageExecutor {
             }
         }
 
-        double latencyMs = (System.nanoTime() - startNanos) / TSDBMetricsConstants.NANOS_PER_MILLI;
+        long latencyNs = System.nanoTime() - startNanos;
+        if (stageProfiler != null) {
+            stageProfiler.record(stage.getName(), latencyNs, sampleCounts, stageOverhead);
+        }
+        double latencyMs = latencyNs / TSDBMetricsConstants.NANOS_PER_MILLI;
         String locationTag = coordinatorExecution ? TSDBMetricsConstants.TAG_LOCATION_COORDINATOR : TSDBMetricsConstants.TAG_LOCATION_SHARD;
         Tags tags = Tags.create()
             .addTag(TSDBMetricsConstants.TAG_STAGE_NAME, stage.getName())

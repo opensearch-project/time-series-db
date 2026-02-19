@@ -11,14 +11,19 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.test.AbstractWireSerializingTestCase;
+import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
+import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -711,5 +716,137 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         // Verify round-trip preserves all fields
         assertEquals("Stage names should match", original.getName(), deserialized.getName());
         assertEquals("Stages should be equal after round-trip", original, deserialized);
+    }
+
+    /**
+     * Test process with coordinatorExecution=false returns grouped series (MultiValueSample) without percentile expansion.
+     */
+    public void testProcessAsNonCoordinator() {
+        PercentileOfSeriesStage stage = new PercentileOfSeriesStage(List.of(50.0f, 95.0f), false);
+
+        List<Sample> s1 = List.of(new FloatSample(1000L, 10.0), new FloatSample(2000L, 20.0));
+        List<Sample> s2 = List.of(new FloatSample(1000L, 30.0), new FloatSample(2000L, 40.0));
+        TimeSeries ts1 = new TimeSeries(s1, ByteLabels.fromStrings("host", "h1"), 1000L, 2000L, 1000L, null);
+        TimeSeries ts2 = new TimeSeries(s2, ByteLabels.fromStrings("host", "h2"), 1000L, 2000L, 1000L, null);
+
+        List<TimeSeries> result = stage.processWithContext(List.of(ts1, ts2), false, null);
+
+        assertEquals(1, result.size());
+        TimeSeries grouped = result.get(0);
+        List<Sample> samples = grouped.getSamples().toList();
+        assertEquals(2, samples.size());
+        assertTrue(samples.get(0) instanceof MultiValueSample);
+        assertTrue(samples.get(1) instanceof MultiValueSample);
+    }
+
+    /**
+     * Test reduce with null or empty aggregations throws.
+     */
+    public void testReduceEmptyOrNullAggregations() {
+        PercentileOfSeriesStage stage = new PercentileOfSeriesStage(List.of(50.0f), false);
+
+        assertThrows(IllegalArgumentException.class, () -> stage.reduce(Collections.emptyList(), true));
+        assertThrows(IllegalArgumentException.class, () -> stage.reduce(null, true));
+    }
+
+    /**
+     * Test reduce with isFinalReduce=false returns merged MultiValueSample series without expansion.
+     */
+    public void testReduceIntermediate() {
+        PercentileOfSeriesStage stage = new PercentileOfSeriesStage(List.of(50.0f, 95.0f), false);
+
+        List<Sample> shard1 = List.of(new MultiValueSample(1000L, List.of(10.0, 20.0)), new MultiValueSample(2000L, List.of(30.0, 40.0)));
+        List<Sample> shard2 = List.of(new MultiValueSample(1000L, List.of(50.0)), new MultiValueSample(2000L, List.of(60.0)));
+        TimeSeries ts1 = new TimeSeries(shard1, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        TimeSeries ts2 = new TimeSeries(shard2, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        List<TimeSeriesProvider> aggregations = List.of(
+            new InternalTimeSeries("a", List.of(ts1), Map.of()),
+            new InternalTimeSeries("b", List.of(ts2), Map.of())
+        );
+
+        InternalAggregation result = stage.reduce(aggregations, false);
+
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        List<TimeSeries> series = ((TimeSeriesProvider) result).getTimeSeries();
+        assertEquals(1, series.size());
+        List<Sample> samples = series.get(0).getSamples().toList();
+        assertEquals(2, samples.size());
+        assertTrue(samples.get(0) instanceof MultiValueSample);
+        assertEquals(List.of(10.0, 20.0, 50.0), ((MultiValueSample) samples.get(0)).getValueList());
+    }
+
+    /**
+     * Test reduce with isFinalReduce=true expands to percentile series.
+     */
+    public void testReduceFinal() {
+        PercentileOfSeriesStage stage = new PercentileOfSeriesStage(List.of(50.0f, 100.0f), false);
+
+        List<Sample> shard1 = List.of(new MultiValueSample(1000L, List.of(10.0, 30.0)), new MultiValueSample(2000L, List.of(20.0, 40.0)));
+        List<Sample> shard2 = List.of(new MultiValueSample(1000L, List.of(50.0)), new MultiValueSample(2000L, List.of(60.0)));
+        TimeSeries ts1 = new TimeSeries(shard1, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        TimeSeries ts2 = new TimeSeries(shard2, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        List<TimeSeriesProvider> aggregations = List.of(
+            new InternalTimeSeries("a", List.of(ts1), Map.of()),
+            new InternalTimeSeries("b", List.of(ts2), Map.of())
+        );
+
+        InternalAggregation result = stage.reduce(aggregations, true);
+
+        assertNotNull(result);
+        assertTrue(result instanceof TimeSeriesProvider);
+        List<TimeSeries> series = ((TimeSeriesProvider) result).getTimeSeries();
+        assertEquals(2, series.size()); // 50th and 100th percentile
+        TimeSeries p50 = findSeriesByLabel(series, "__percentile", "50");
+        TimeSeries p100 = findSeriesByLabel(series, "__percentile", "100");
+        assertSamplesEqual("P50", List.of(new FloatSample(1000L, 30.0f), new FloatSample(2000L, 40.0f)), p50.getSamples().toList());
+        assertSamplesEqual("P100", List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 60.0f)), p100.getSamples().toList());
+    }
+
+    /**
+     * Test that NaN values in MultiValueSample are filtered out during aggregation (both when
+     * creating the first bucket and when merging into an existing bucket). Percentiles are
+     * computed only from non-NaN values.
+     */
+    public void testPercentileOfSeriesFiltersNaNInMultiValueSample() {
+        PercentileOfSeriesStage stage = new PercentileOfSeriesStage(List.of(50.0f, 100.0f), false);
+
+        // Shard1: t=1000 has [10, NaN, 30], t=2000 has [20, 40]
+        List<Sample> shard1 = List.of(
+            new MultiValueSample(1000L, List.of(10.0, Double.NaN, 30.0)),
+            new MultiValueSample(2000L, List.of(20.0, 40.0))
+        );
+        // Shard2: t=1000 has [NaN, 50] (only 50 should count), t=2000 has [60]
+        List<Sample> shard2 = List.of(new MultiValueSample(1000L, List.of(Double.NaN, 50.0)), new MultiValueSample(2000L, List.of(60.0)));
+        TimeSeries ts1 = new TimeSeries(shard1, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        TimeSeries ts2 = new TimeSeries(shard2, ByteLabels.emptyLabels(), 1000L, 2000L, 1000L, null);
+        List<TimeSeriesProvider> aggregations = List.of(
+            new InternalTimeSeries("a", List.of(ts1), Map.of()),
+            new InternalTimeSeries("b", List.of(ts2), Map.of())
+        );
+
+        // Intermediate reduce: merged values at t=1000 should be [10, 30, 50], at t=2000 [20, 40, 60]
+        InternalAggregation intermediate = stage.reduce(aggregations, false);
+        List<TimeSeries> mergedSeries = ((TimeSeriesProvider) intermediate).getTimeSeries();
+        assertEquals(1, mergedSeries.size());
+        List<Sample> mergedSamples = mergedSeries.get(0).getSamples().toList();
+        assertEquals(List.of(10.0, 30.0, 50.0), ((MultiValueSample) mergedSamples.get(0)).getSortedValueList());
+        assertEquals(List.of(20.0, 40.0, 60.0), ((MultiValueSample) mergedSamples.get(1)).getSortedValueList());
+
+        // Final reduce: P50 at t=1000 = median(10,30,50) = 30, at t=2000 = 40; P100 = 50 and 60
+        InternalAggregation result = stage.reduce(aggregations, true);
+        List<TimeSeries> series = ((TimeSeriesProvider) result).getTimeSeries();
+        TimeSeries p50 = findSeriesByLabel(series, "__percentile", "50");
+        TimeSeries p100 = findSeriesByLabel(series, "__percentile", "100");
+        assertSamplesEqual(
+            "P50 excludes NaN",
+            List.of(new FloatSample(1000L, 30.0f), new FloatSample(2000L, 40.0f)),
+            p50.getSamples().toList()
+        );
+        assertSamplesEqual(
+            "P100 excludes NaN",
+            List.of(new FloatSample(1000L, 50.0f), new FloatSample(2000L, 60.0f)),
+            p100.getSamples().toList()
+        );
     }
 }

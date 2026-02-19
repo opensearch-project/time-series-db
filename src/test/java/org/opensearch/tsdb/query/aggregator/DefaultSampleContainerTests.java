@@ -11,7 +11,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleType;
-import org.opensearch.tsdb.core.model.SortedValuesSample;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.core.model.SumCountSample;
 
 import java.util.ArrayList;
@@ -157,45 +157,45 @@ public class DefaultSampleContainerTests extends OpenSearchTestCase {
         expectThrows(IllegalArgumentException.class, () -> container.updateSampleFor(2500L, new SumCountSample(2500L, 25.0, 1)));
     }
 
-    public void testSortedValuesSample_Append() {
-        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.SORTED_VALUES_SAMPLE, 1000L);
-        var expected = createSamples(1000, 1000, 1000, SampleType.SORTED_VALUES_SAMPLE);
+    public void testMultiValueSample_Append() {
+        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.MULTI_VALUE_SAMPLE, 1000L);
+        var expected = createSamples(1000, 1000, 1000, SampleType.MULTI_VALUE_SAMPLE);
         expected.forEach(sample -> container.append(sample.getTimestamp(), sample));
 
         assertEquals(expected, container.iterator());
     }
 
-    public void testSortedValuesSample_GetSampleFor() {
-        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.SORTED_VALUES_SAMPLE, 1000L);
-        var expected = createSamples(1000, 1000, 1000, SampleType.SORTED_VALUES_SAMPLE);
+    public void testMultiValueSample_GetSampleFor() {
+        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.MULTI_VALUE_SAMPLE, 1000L);
+        var expected = createSamples(1000, 1000, 1000, SampleType.MULTI_VALUE_SAMPLE);
         expected.forEach(sample -> container.append(sample.getTimestamp(), sample));
         Sample sample = container.getSampleFor(2000L);
-        assertTrue(sample instanceof SortedValuesSample);
-        SortedValuesSample sortedSample = (SortedValuesSample) sample;
-        assertEquals(2000L, sortedSample.getTimestamp());
-        assertEquals(Arrays.asList(1.0, 2.0, 3.0, 4.0, 5.0), sortedSample.getSortedValueList());
+        assertTrue(sample instanceof MultiValueSample);
+        MultiValueSample multiValueSample = (MultiValueSample) sample;
+        assertEquals(2000L, multiValueSample.getTimestamp());
+        assertEquals(Arrays.asList(1.0, 2.0, 3.0, 4.0, 5.0), multiValueSample.getSortedValueList());
     }
 
-    public void testSortedValuesSample_UpdateSampleFor() {
-        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.SORTED_VALUES_SAMPLE, 1000L);
-        var expected = createSamples(1000, 1000, 1000, SampleType.SORTED_VALUES_SAMPLE);
+    public void testMultiValueSample_UpdateSampleFor() {
+        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.MULTI_VALUE_SAMPLE, 1000L);
+        var expected = createSamples(1000, 1000, 1000, SampleType.MULTI_VALUE_SAMPLE);
         expected.forEach(sample -> container.append(sample.getTimestamp(), sample));
-        container.updateSampleFor(2000L, new SortedValuesSample(2000L, Arrays.asList(10.0, 11.0, 12.0)));
+        container.updateSampleFor(2000L, new MultiValueSample(2000L, Arrays.asList(10.0, 11.0, 12.0)));
 
         Sample sample = container.getSampleFor(2000L);
-        SortedValuesSample sortedSample = (SortedValuesSample) sample;
-        assertEquals(Arrays.asList(10.0, 11.0, 12.0), sortedSample.getSortedValueList());
+        MultiValueSample multiValueSample = (MultiValueSample) sample;
+        assertEquals(Arrays.asList(10.0, 11.0, 12.0), multiValueSample.getSortedValueList());
     }
 
-    public void testSortedValuesSample_UpdateSampleForThrowsExceptionOnInvalidTimestamp() {
-        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.SORTED_VALUES_SAMPLE, 1000L);
-        var expected = createSamples(1000, 1000, 1000, SampleType.SORTED_VALUES_SAMPLE);
+    public void testMultiValueSample_UpdateSampleForThrowsExceptionOnInvalidTimestamp() {
+        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.MULTI_VALUE_SAMPLE, 1000L);
+        var expected = createSamples(1000, 1000, 1000, SampleType.MULTI_VALUE_SAMPLE);
         expected.forEach(sample -> container.append(sample.getTimestamp(), sample));
-        container.updateSampleFor(2000L, new SortedValuesSample(2000L, Arrays.asList(10.0, 11.0, 12.0)));
+        container.updateSampleFor(2000L, new MultiValueSample(2000L, Arrays.asList(10.0, 11.0, 12.0)));
 
         expectThrows(
             IllegalArgumentException.class,
-            () -> container.updateSampleFor(2500L, new SortedValuesSample(2500L, Arrays.asList(10.0, 11.0, 12.0)))
+            () -> container.updateSampleFor(2500L, new MultiValueSample(2500L, Arrays.asList(10.0, 11.0, 12.0)))
         );
     }
 
@@ -240,15 +240,15 @@ public class DefaultSampleContainerTests extends OpenSearchTestCase {
         assertEquals(2L, container.size());
     }
 
-    public void testSize_SortedValuesSample() {
-        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.SORTED_VALUES_SAMPLE, 1000L);
+    public void testSize_MultiValueSample() {
+        DefaultSampleContainer container = new DefaultSampleContainer(SampleType.MULTI_VALUE_SAMPLE, 1000L);
 
         assertEquals(0L, container.size());
 
-        container.append(1000L, new SortedValuesSample(1000L, Arrays.asList(1.0, 2.0, 3.0)));
+        container.append(1000L, new MultiValueSample(1000L, Arrays.asList(1.0, 2.0, 3.0)));
         assertEquals(1L, container.size());
 
-        container.append(2000L, new SortedValuesSample(2000L, Arrays.asList(4.0, 5.0, 6.0)));
+        container.append(2000L, new MultiValueSample(2000L, Arrays.asList(4.0, 5.0, 6.0)));
         assertEquals(2L, container.size());
     }
 
@@ -308,8 +308,8 @@ public class DefaultSampleContainerTests extends OpenSearchTestCase {
             switch (sampleType) {
                 case FLOAT_SAMPLE -> samples.add(new FloatSample(timestamp, 100.0 + i));
                 case SUM_COUNT_SAMPLE -> samples.add(new SumCountSample(timestamp, 100.0 + i, 10 + i));
-                case SORTED_VALUES_SAMPLE -> samples.add(
-                    new SortedValuesSample(timestamp, List.of((double) i, (double) i + 1, (double) i + 2, (double) i + 3, (double) i + 4))
+                case MULTI_VALUE_SAMPLE -> samples.add(
+                    new MultiValueSample(timestamp, List.of((double) i, (double) i + 1, (double) i + 2, (double) i + 3, (double) i + 4))
                 );
             }
             timestamp = timestamp + step;
@@ -331,8 +331,11 @@ public class DefaultSampleContainerTests extends OpenSearchTestCase {
                 } else if (expectedSample.getSampleType() == SampleType.SUM_COUNT_SAMPLE) {
                     assertEquals(((SumCountSample) expectedSample).sum(), ((SumCountSample) actuaSample).sum(), 0.001);
                     assertEquals(((SumCountSample) expectedSample).count(), ((SumCountSample) actuaSample).count());
-                } else if (expectedSample.getSampleType() == SampleType.SORTED_VALUES_SAMPLE) {
-                    assertEquals(expectedSample.getValue(), actuaSample.getValue(), 0.001);
+                } else if (expectedSample.getSampleType() == SampleType.MULTI_VALUE_SAMPLE) {
+                    assertEquals(
+                        ((MultiValueSample) expectedSample).getSortedValueList(),
+                        ((MultiValueSample) actuaSample).getSortedValueList()
+                    );
                 }
                 actualSize++;
             }

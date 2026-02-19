@@ -16,11 +16,10 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.lang.m3.common.WindowAggregationType;
-import org.opensearch.tsdb.lang.m3.stage.moving.AvgCircularBuffer;
-import org.opensearch.tsdb.lang.m3.stage.moving.MaxCircularBuffer;
-import org.opensearch.tsdb.lang.m3.stage.moving.MinCircularBuffer;
-import org.opensearch.tsdb.lang.m3.stage.moving.RunningMedian;
-import org.opensearch.tsdb.lang.m3.stage.moving.SumCircularBuffer;
+import org.opensearch.tsdb.lang.m3.stage.moving.AvgWindow;
+import org.opensearch.tsdb.lang.m3.stage.moving.MinMaxQueue;
+import org.opensearch.tsdb.lang.m3.stage.moving.SumWindow;
+import org.opensearch.tsdb.lang.m3.stage.moving.RunningMedianV2;
 import org.opensearch.tsdb.lang.m3.stage.moving.WindowTransformer;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
@@ -30,6 +29,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -100,8 +100,11 @@ public class MovingStage implements UnaryPipelineStage {
 
             WindowTransformer windowTransformer = createTransformer(windowPoints);
 
+            Iterator<Sample> left = samples.iterator();
+            Iterator<Sample> right = samples.iterator();
+            Sample leftSample = left.next();
+            Sample rightSample = right.next();
             List<Sample> movingSamples = new ArrayList<>();
-            int sampleIndex = 0;
 
             // Iterate through all timestamps in the time grid
             for (long timestamp = ts.getMinTimestamp(); timestamp <= ts.getMaxTimestamp(); timestamp += stepSize) {
@@ -116,13 +119,28 @@ public class MovingStage implements UnaryPipelineStage {
 
                 // Step 2: Update the window with the current data point
                 // Check if current timestamp matches the next sample in the input series
-                if (sampleIndex < samples.size() && samples.getTimestamp(sampleIndex) == timestamp) {
+                long leftBoundary = timestamp - interval;
+                if (rightSample != null && rightSample.getTimestamp() == timestamp) {
                     // Add actual value to window
-                    windowTransformer.add(samples.getValue(sampleIndex));
-                    sampleIndex++;
+                    windowTransformer.add(rightSample.getValue());
+                    if (right.hasNext()) {
+                        rightSample = right.next();
+                    } else {
+                        rightSample = null;
+                    }
                 } else {
                     // Add null placeholder to window for missing data point
                     windowTransformer.addNull();
+                }
+                if (leftSample != null && leftSample.getTimestamp() <= leftBoundary) {
+                    windowTransformer.remove(leftSample.getValue());
+                    if (left.hasNext()) {
+                        leftSample = left.next();
+                    } else {
+                        leftSample = null;
+                    }
+                } else {
+                    windowTransformer.removeNull();
                 }
             }
 
@@ -136,11 +154,11 @@ public class MovingStage implements UnaryPipelineStage {
 
     private WindowTransformer createTransformer(int windowPoints) {
         return switch (function.getType()) {
-            case AVG -> new AvgCircularBuffer(windowPoints);
-            case MAX -> new MaxCircularBuffer(windowPoints);
-            case MEDIAN -> new RunningMedian(windowPoints);
-            case MIN -> new MinCircularBuffer(windowPoints);
-            case SUM -> new SumCircularBuffer(windowPoints);
+            case AVG -> new AvgWindow();
+            case MAX -> new MinMaxQueue();
+            case MEDIAN -> new RunningMedianV2();
+            case MIN -> new MinMaxQueue(true);
+            case SUM -> new SumWindow();
             default -> throw new IllegalArgumentException("Unsupported function for moving window: " + function);
         };
     }
@@ -240,17 +258,20 @@ public class MovingStage implements UnaryPipelineStage {
             estimatedWindowSize = Math.max(1, (int) (interval / first.getStep()));
         }
 
+        // The window transformer is created/recycled per time series, so we only need to count it once
         long totalOverhead = 0;
+        // TreeMap overhead only for MEDIAN (RunningMedian uses TreeMap)
+        if (function.getType() == WindowAggregationType.Type.MEDIAN) {
+            totalOverhead += estimatedWindowSize * TREEMAP_ENTRY_OVERHEAD;
+        }
+
+        if (function.getType() == WindowAggregationType.Type.MAX || function.getType() == WindowAggregationType.Type.MIN) {
+            // MIN/MAX can have additional memory usage upto window size
+            totalOverhead += (long) estimatedWindowSize * Double.BYTES + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER;
+        }
+
+        // New TimeSeries with result samples (delegated estimation)
         for (TimeSeries ts : input) {
-            // Circular buffer for window values (stage-specific)
-            totalOverhead += RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + (estimatedWindowSize * Double.BYTES);
-
-            // TreeMap overhead only for MEDIAN (RunningMedian uses TreeMap)
-            if (function.getType() == WindowAggregationType.Type.MEDIAN) {
-                totalOverhead += estimatedWindowSize * TREEMAP_ENTRY_OVERHEAD;
-            }
-
-            // New TimeSeries with result samples (delegated estimation)
             totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().ramBytesUsed();
         }
 

@@ -20,6 +20,7 @@ import org.opensearch.tsdb.query.stage.PipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -59,17 +60,30 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty series: no data points
         List<Sample> emptySamples = List.of();
 
+        // Series with NaN: all data points present [1,2,NaN,4,NaN,6,7] at [0,10,20,30,40,50,60]
+        List<Sample> samplesWithNaN = List.of(
+            new FloatSample(0L, 1.0),
+            new FloatSample(10L, 2.0),
+            new FloatSample(20L, Double.NaN),
+            new FloatSample(30L, 4.0),
+            new FloatSample(40L, Double.NaN),
+            new FloatSample(50L, 6.0),
+            new FloatSample(60L, 7.0)
+        );
+
         ByteLabels labels1 = ByteLabels.fromStrings("type", "dense");
         ByteLabels labels2 = ByteLabels.fromStrings("type", "sparse");
         ByteLabels labels3 = ByteLabels.fromStrings("type", "empty");
+        ByteLabels labels4 = ByteLabels.fromStrings("type", "withNaN");
 
         TimeSeries denseSeries = new TimeSeries(denseSamples, labels1, 0L, 60L, 10L, null);
         TimeSeries sparseSeries = new TimeSeries(sparseSamples, labels2, 0L, 60L, 10L, null);
         TimeSeries emptySeries = new TimeSeries(emptySamples, labels3, 0L, 60L, 10L, null);
+        TimeSeries withNaNSeries = new TimeSeries(samplesWithNaN, labels4, 0L, 60L, 10L, null);
 
-        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries));
+        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries, withNaNSeries));
 
-        assertEquals(3, result.size());
+        assertEquals(4, result.size());
 
         // Dense result: sum of window before each timestamp
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
@@ -98,6 +112,18 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty result: no samples
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
         assertEquals(0, emptyResult.getSamples().size());
+
+        // With NaN result
+        TimeSeries withNaNResult = findSeriesByLabel(result, "type", "withNaN");
+        List<Sample> expectedWithNaN = List.of(
+            new FloatSample(10L, 1.0),   // sum([1])
+            new FloatSample(20L, 3.0),   // sum([1,2])
+            new FloatSample(30L, 3.0),   // sum([1,2,NaN])
+            new FloatSample(40L, 6.0),   // sum([2,NaN,4])
+            new FloatSample(50L, 4.0),  // sum([NaN,4,NaN])
+            new FloatSample(60L, 10.0)   // sum([4,NaN,6])
+        );
+        assertSamplesEqual("Sum With NaN", expectedWithNaN, withNaNResult.getSamples().toList());
     }
 
     /**
@@ -128,17 +154,30 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty series
         List<Sample> emptySamples = List.of();
 
+        // Series with NaN: all data points present [1,2,NaN,4,NaN,6,7] at [0,10,20,30,40,50,60]
+        List<Sample> samplesWithNaN = List.of(
+            new FloatSample(0L, 1.0),
+            new FloatSample(10L, 2.0),
+            new FloatSample(20L, Double.NaN),
+            new FloatSample(30L, 4.0),
+            new FloatSample(40L, Double.NaN),
+            new FloatSample(50L, 6.0),
+            new FloatSample(60L, 7.0)
+        );
+
         ByteLabels labels1 = ByteLabels.fromStrings("type", "dense");
         ByteLabels labels2 = ByteLabels.fromStrings("type", "sparse");
         ByteLabels labels3 = ByteLabels.fromStrings("type", "empty");
+        ByteLabels labels4 = ByteLabels.fromStrings("type", "withNaN");
 
         TimeSeries denseSeries = new TimeSeries(denseSamples, labels1, 0L, 60L, 10L, null);
         TimeSeries sparseSeries = new TimeSeries(sparseSamples, labels2, 0L, 60L, 10L, null);
         TimeSeries emptySeries = new TimeSeries(emptySamples, labels3, 0L, 60L, 10L, null);
+        TimeSeries withNaNSeries = new TimeSeries(samplesWithNaN, labels4, 0L, 60L, 10L, null);
 
-        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries));
+        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries, withNaNSeries));
 
-        assertEquals(3, result.size());
+        assertEquals(4, result.size());
 
         // Dense result
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
@@ -167,6 +206,18 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
         assertEquals(0, emptyResult.getSamples().size());
+
+        // With NaN result
+        TimeSeries withNaNResult = findSeriesByLabel(result, "type", "withNaN");
+        List<Sample> expectedWithNaN = List.of(
+            new FloatSample(10L, 1.0),   // avg([1])
+            new FloatSample(20L, 1.5),   // avg([1,2])
+            new FloatSample(30L, 1.5),   // avg([1,2,NaN])
+            new FloatSample(40L, 3.0),   // avg([2,NaN,4])
+            new FloatSample(50L, 4.0),  // avg([NaN,4,NaN])
+            new FloatSample(60L, 5.0)   // min([4,NaN,6])
+        );
+        assertSamplesEqual("Avg With NaN", expectedWithNaN, withNaNResult.getSamples().toList());
     }
 
     /**
@@ -197,17 +248,30 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty series
         List<Sample> emptySamples = List.of();
 
+        // Series with NaN: all data points present [1,2,NaN,4,NaN,6,7] at [0,10,20,30,40,50,60]
+        List<Sample> samplesWithNaN = List.of(
+            new FloatSample(0L, 1.0),
+            new FloatSample(10L, 2.0),
+            new FloatSample(20L, Double.NaN),
+            new FloatSample(30L, Double.NaN),
+            new FloatSample(40L, Double.NaN),
+            new FloatSample(50L, 6.0),
+            new FloatSample(60L, 7.0)
+        );
+
         ByteLabels labels1 = ByteLabels.fromStrings("type", "dense");
         ByteLabels labels2 = ByteLabels.fromStrings("type", "sparse");
         ByteLabels labels3 = ByteLabels.fromStrings("type", "empty");
+        ByteLabels labels4 = ByteLabels.fromStrings("type", "withNaN");
 
         TimeSeries denseSeries = new TimeSeries(denseSamples, labels1, 0L, 60L, 10L, null);
         TimeSeries sparseSeries = new TimeSeries(sparseSamples, labels2, 0L, 60L, 10L, null);
         TimeSeries emptySeries = new TimeSeries(emptySamples, labels3, 0L, 60L, 10L, null);
+        TimeSeries withNaNSeries = new TimeSeries(samplesWithNaN, labels4, 0L, 60L, 10L, null);
 
-        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries));
+        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries, withNaNSeries));
 
-        assertEquals(3, result.size());
+        assertEquals(4, result.size());
 
         // Dense result
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
@@ -236,6 +300,17 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
         assertEquals(0, emptyResult.getSamples().size());
+
+        // With NaN result
+        TimeSeries withNaNResult = findSeriesByLabel(result, "type", "withNaN");
+        List<Sample> expectedWithNaN = List.of(
+            new FloatSample(10L, 1.0),   // min([1])
+            new FloatSample(20L, 1.0),   // min([1,2])
+            new FloatSample(30L, 1.0),   // min([1,2,NaN])
+            new FloatSample(40L, 2.0),   // min([2,NaN,NaN])
+            new FloatSample(60L, 6.0)   // min([NaN,NaN,6])
+        );
+        assertSamplesEqual("Min With NaN", expectedWithNaN, withNaNResult.getSamples().toList());
     }
 
     /**
@@ -335,17 +410,34 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty series
         List<Sample> emptySamples = List.of();
 
+        List<Sample> complexSamples = List.of(
+            new FloatSample(0, 1.0),
+            new FloatSample(5, 1.0),
+            new FloatSample(10, 2.0),
+            new FloatSample(15, 2.0),
+            new FloatSample(20, 3.0),
+            new FloatSample(25, 3.0),
+            new FloatSample(30, 4.0),
+            new FloatSample(35, 3.0),
+            new FloatSample(40, 3.0),
+            new FloatSample(45, 2.0),
+            new FloatSample(50, 2.0),
+            new FloatSample(60, 1.0)
+        );
+
         ByteLabels labels1 = ByteLabels.fromStrings("type", "dense");
         ByteLabels labels2 = ByteLabels.fromStrings("type", "sparse");
         ByteLabels labels3 = ByteLabels.fromStrings("type", "empty");
+        ByteLabels labels4 = ByteLabels.fromStrings("type", "complex");
 
         TimeSeries denseSeries = new TimeSeries(denseSamples, labels1, 0L, 60L, 10L, null);
         TimeSeries sparseSeries = new TimeSeries(sparseSamples, labels2, 0L, 60L, 10L, null);
         TimeSeries emptySeries = new TimeSeries(emptySamples, labels3, 0L, 60L, 10L, null);
+        TimeSeries complexSeries = new TimeSeries(complexSamples, labels4, 0L, 60L, 5L, null);
 
-        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries));
+        List<TimeSeries> result = stage.process(List.of(denseSeries, sparseSeries, emptySeries, complexSeries));
 
-        assertEquals(3, result.size());
+        assertEquals(4, result.size());
 
         // Dense result
         TimeSeries denseResult = findSeriesByLabel(result, "type", "dense");
@@ -374,6 +466,24 @@ public class MovingStageTests extends AbstractWireSerializingTestCase<MovingStag
         // Empty result
         TimeSeries emptyResult = findSeriesByLabel(result, "type", "empty");
         assertEquals(0, emptyResult.getSamples().size());
+
+        // Complex result
+        TimeSeries complexResult = findSeriesByLabel(result, "type", "complex");
+        List<Sample> expectedComplex = new ArrayList<>();
+        expectedComplex.add(new FloatSample(5L, 1.0));
+        expectedComplex.add(new FloatSample(10L, 1.0));
+        expectedComplex.add(new FloatSample(15L, 1.0));
+        expectedComplex.add(new FloatSample(20L, 1.0));
+        expectedComplex.add(new FloatSample(25L, 2.0));
+        expectedComplex.add(new FloatSample(30L, 2.0));
+        expectedComplex.add(new FloatSample(35L, 2.0));
+        expectedComplex.add(new FloatSample(40L, 3.0));
+        expectedComplex.add(new FloatSample(45L, 3.0));
+        expectedComplex.add(new FloatSample(50L, 3.0));
+        expectedComplex.add(new FloatSample(55L, 3.0));
+        expectedComplex.add(new FloatSample(60L, 3.0));
+
+        assertSamplesEqual("Median Complex", expectedComplex, complexResult.getSamples().toList());
     }
 
     /**

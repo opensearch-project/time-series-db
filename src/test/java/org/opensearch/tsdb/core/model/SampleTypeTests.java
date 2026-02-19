@@ -12,6 +12,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
+import java.util.List;
 
 public class SampleTypeTests extends OpenSearchTestCase {
 
@@ -69,6 +70,20 @@ public class SampleTypeTests extends OpenSearchTestCase {
                 assertEquals(2000L, readSample.getTimestamp());
                 assertEquals(20.0, readSample.getValue(), 0.001); // 100.0 / 5
                 assertEquals(SampleType.SUM_COUNT_SAMPLE, readSample.getSampleType());
+            }
+        }
+
+        // Test MultiValueSample serialization via Sample.readFrom (covers MULTI_VALUE_SAMPLE case)
+        MultiValueSample multiValueSample = new MultiValueSample(3000L, List.of(10.0, 20.0, 30.0));
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            multiValueSample.writeTo(out);
+            try (StreamInput in = out.bytes().streamInput()) {
+                Sample readSample = Sample.readFrom(in);
+                assertTrue(readSample instanceof MultiValueSample);
+                assertEquals(3000L, readSample.getTimestamp());
+                assertEquals(SampleType.MULTI_VALUE_SAMPLE, readSample.getSampleType());
+                assertEquals(List.of(10.0, 20.0, 30.0), ((MultiValueSample) readSample).getValueList());
+                expectThrows(UnsupportedOperationException.class, readSample::getValue);
             }
         }
     }

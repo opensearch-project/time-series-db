@@ -387,10 +387,17 @@ public class Head implements Closeable {
     /**
      * Calculates the cutoff timestamp for determining which chunks are closeable.
      * Chunks with max timestamp before this cutoff are eligible for closing.
+     * <p>
+     * If no samples have been ingested yet (maxTime == Long.MIN_VALUE), returns Long.MIN_VALUE
+     * to avoid underflow when subtracting oooCutoffWindow.
      *
-     * @return the cutoff timestamp (maxTime - oooCutoffWindow)
+     * @return the cutoff timestamp (maxTime - oooCutoffWindow), or Long.MIN_VALUE if no samples ingested
      */
-    private long getCutoffTimestamp() {
+    long getCutoffTimestamp() {
+        if (maxTime == Long.MIN_VALUE) {
+            // No samples ingested yet, return Long.MIN_VALUE to avoid underflow
+            return Long.MIN_VALUE;
+        }
         return maxTime - oooCutoffWindow;
     }
 
@@ -480,19 +487,32 @@ public class Head implements Closeable {
         int deferredChunks = 0;
 
         if (maxCloseableChunksPerFlushPercentage < 100 && !allCloseableChunks.isEmpty()) {
-            // Recalculate target if new chunk boundary crossed or no cached value exists
-            if (cachedChunksToProcess == 0 || boundaryJustCrossed) {
-                cachedChunksToProcess = Math.max(1, (allCloseableChunks.size() * maxCloseableChunksPerFlushPercentage) / 100);
+            // Always compute the new closeable chunk target based on current closeable chunks count
+            int newChunksToProcess = Math.max(1, (allCloseableChunks.size() * maxCloseableChunksPerFlushPercentage) / 100);
 
-                if (boundaryJustCrossed) {
+            if (boundaryJustCrossed) {
+                // Boundary crossed: always use the new value
+                cachedChunksToProcess = newChunksToProcess;
+                lastProcessedChunkBoundary = currentBoundary;
+                log.debug(
+                    "Chunk boundary crossed (boundary timestamp: {}). Recalculated chunk close target: {} chunks per flush ({}% of {} closeable chunks)",
+                    currentBoundary,
+                    cachedChunksToProcess,
+                    maxCloseableChunksPerFlushPercentage,
+                    allCloseableChunks.size()
+                );
+            } else {
+                // Same boundary: use max of existing and new value to handle growth in closeable chunks
+                int previousCachedValue = cachedChunksToProcess;
+                cachedChunksToProcess = Math.max(cachedChunksToProcess, newChunksToProcess);
+                if (cachedChunksToProcess > previousCachedValue) {
                     log.debug(
-                        "Chunk boundary crossed (boundary timestamp: {}). Recalculated chunk close target: {} chunks per flush ({}% of {} closeable chunks)",
-                        currentBoundary,
+                        "Closeable chunks increased within boundary. Updated chunk close target: {} -> {} chunks per flush ({}% of {} closeable chunks)",
+                        previousCachedValue,
                         cachedChunksToProcess,
                         maxCloseableChunksPerFlushPercentage,
                         allCloseableChunks.size()
                     );
-                    lastProcessedChunkBoundary = currentBoundary;
                 }
             }
 

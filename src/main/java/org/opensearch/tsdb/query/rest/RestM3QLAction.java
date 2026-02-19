@@ -288,6 +288,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                 public void onFailure(Exception e) {
                     if (e instanceof IndexSettingsResolutionException) {
                         tags.put("reached_step", "error__index_settings_resolution");
+                        logger.error("Failed to resolve index settings {}", e.getMessage(), e);
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
                     } else {
@@ -644,21 +645,28 @@ public class RestM3QLAction extends BaseTSDBAction {
                                 validateAndReturnStepSize(stepSizeToIndices, partitionIds, listener);
 
                             } catch (Exception e) {
+                                // For any remote index settings processing errors AFTER we have fetched the setting
                                 TSDBMetrics.incrementCounter(METRICS.indexSettingsErrors, 1, Metrics.TAGS_SOURCE_REMOTE);
-                                logger.error("Failed to process remote settings: {}", e.getMessage());
                                 listener.onFailure(
-                                    new IndexSettingsResolutionException("Failed to process remote settings: " + e.getMessage(), e)
+                                    new IndexSettingsResolutionException(
+                                        "Failed to process remote index settings for partitions "
+                                            + remotePartitionIds
+                                            + ": "
+                                            + e.getMessage(),
+                                        e
+                                    )
                                 );
                             }
                         }
 
                         @Override
                         public void onFailure(Exception e) {
+                            // For any remote index settings fetch errors, this will be propagated from RemoteIndexSettingsCache via
+                            // ActionListener.onFailure
                             TSDBMetrics.incrementCounter(METRICS.indexSettingsErrors, 1, Metrics.TAGS_SOURCE_REMOTE);
-                            logger.error("Failed to fetch settings from remote partitions: {}", e.getMessage());
                             listener.onFailure(
                                 new IndexSettingsResolutionException(
-                                    "Failed to fetch settings from remote partitions: " + e.getMessage(),
+                                    "Failed to fetch settings from remote partitions " + remotePartitionIds + ": " + e.getMessage(),
                                     e
                                 )
                             );

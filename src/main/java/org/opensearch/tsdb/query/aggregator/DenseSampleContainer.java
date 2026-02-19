@@ -11,8 +11,8 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.MinMaxSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleType;
-import org.opensearch.tsdb.core.model.SortedValuesSample;
 import org.opensearch.tsdb.core.model.SumCountSample;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 
 import java.util.Arrays;
 import java.util.BitSet;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>FloatSample:</b> {@code double[] fixedValues} - one value per sample</li>
  *   <li><b>SumCountSample:</b> {@code double[] fixedValues} - two values per sample (sum, count)</li>
- *   <li><b>SortedValuesSample:</b> {@code double[][] variableValues} - variable-length arrays</li>
+ *   <li><b>MultiValueSample:</b> {@code double[][] variableValues} - variable-length arrays</li>
  * </ul>
  *
  * <h2>Performance Characteristics:</h2>
@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>FloatSample:</b> 8 bytes per sample + 0.125 bits for null tracking</li>
  *   <li><b>SumCountSample:</b> 16 bytes per sample + 0.125 bits for null tracking</li>
- *   <li><b>SortedValuesSample:</b> Variable + 0.125 bits for null tracking</li>
+ *   <li><b>MultiValueSample:</b> Variable + 0.125 bits for null tracking</li>
  * </ul>
  *
  * <h2>Null Handling:</h2>
@@ -133,7 +133,7 @@ public class DenseSampleContainer implements SampleContainer {
 
     /**
      * Array-of-arrays storage for variable-size samples.
-     * - SortedValuesSample: each element is a double[] of sorted values
+     * - MultiValueSample: each element is a double[] of values
      */
     private double[][] variableValues;
 
@@ -145,7 +145,7 @@ public class DenseSampleContainer implements SampleContainer {
      * <ul>
      *   <li>{@link SampleType#FLOAT_SAMPLE}: Single {@code double[]} array</li>
      *   <li>{@link SampleType#SUM_COUNT_SAMPLE}: Single {@code double[]} with interleaved sum/count pairs</li>
-     *   <li>{@link SampleType#SORTED_VALUES_SAMPLE}: {@code double[][]} with variable-length arrays</li>
+     *   <li>{@link SampleType#MULTI_VALUE_SAMPLE}: {@code double[][]} with variable-length arrays</li>
      * </ul>
      *
      * @param sampleType the type of samples to store (determines storage layout)
@@ -170,7 +170,7 @@ public class DenseSampleContainer implements SampleContainer {
      * <ul>
      *   <li>{@link SampleType#FLOAT_SAMPLE}: Single {@code double[]} array</li>
      *   <li>{@link SampleType#SUM_COUNT_SAMPLE}: Single {@code double[]} with interleaved sum/count pairs</li>
-     *   <li>{@link SampleType#SORTED_VALUES_SAMPLE}: {@code double[][]} with variable-length arrays</li>
+     *   <li>{@link SampleType#MULTI_VALUE_SAMPLE}: {@code double[][]} with variable-length arrays</li>
      * </ul>
      *
      * @param sampleType      the type of samples to store (determines storage layout)
@@ -194,7 +194,7 @@ public class DenseSampleContainer implements SampleContainer {
      */
     private void initializeStorage(int initialCapacity) {
         switch (sampleType) {
-            case SORTED_VALUES_SAMPLE:
+            case MULTI_VALUE_SAMPLE:
                 this.variableValues = new double[initialCapacity][];
                 break;
             case FLOAT_SAMPLE:
@@ -202,6 +202,10 @@ public class DenseSampleContainer implements SampleContainer {
                 break;
             case SUM_COUNT_SAMPLE:
                 // For SumCountSample, we need 2 doubles per sample
+                this.fixedValues = new double[initialCapacity * 2];
+                break;
+            case MIN_MAX_SAMPLE:
+                // For MinMaxSample, we need 2 doubles per sample (min, max)
                 this.fixedValues = new double[initialCapacity * 2];
                 break;
         }
@@ -231,7 +235,7 @@ public class DenseSampleContainer implements SampleContainer {
                 (long) fixedValues[index * 2 + 1]
             );
             case MIN_MAX_SAMPLE -> new MinMaxSample(minTimestamp + index * step, fixedValues[index * 2], fixedValues[index * 2 + 1]);
-            case SORTED_VALUES_SAMPLE -> new SortedValuesSample(
+            case MULTI_VALUE_SAMPLE -> new MultiValueSample(
                 minTimestamp + index * step,
                 Arrays.stream(variableValues[index]).boxed().collect(Collectors.toList())
             );
@@ -299,10 +303,17 @@ public class DenseSampleContainer implements SampleContainer {
                 fixedValues[offset + 1] = (double) ((SumCountSample) sample).count();
                 break;
 
-            case SORTED_VALUES_SAMPLE:
+            case MIN_MAX_SAMPLE:
+                ensureCapacityForIndex(index, 2);
+                int minMaxOffset = index * 2;
+                fixedValues[minMaxOffset] = ((MinMaxSample) sample).min();
+                fixedValues[minMaxOffset + 1] = ((MinMaxSample) sample).max();
+                break;
+
+            case MULTI_VALUE_SAMPLE:
                 ensureVariableCapacityForIndex(index);
-                List<Double> values = ((SortedValuesSample) sample).getSortedValueList();
-                variableValues[index] = values.stream().mapToDouble(Double::doubleValue).toArray();
+                List<Double> valueList = ((MultiValueSample) sample).getValueList();
+                variableValues[index] = valueList.stream().mapToDouble(Double::doubleValue).toArray();
                 break;
         }
     }
@@ -351,9 +362,9 @@ public class DenseSampleContainer implements SampleContainer {
 
             case MIN_MAX_SAMPLE -> new MinMaxSample(timestamp, fixedValues[index * 2], fixedValues[index * 2 + 1]);
 
-            case SORTED_VALUES_SAMPLE -> variableValues[index] == null
+            case MULTI_VALUE_SAMPLE -> variableValues[index] == null
                 ? null
-                : new SortedValuesSample(timestamp, Arrays.stream(variableValues[index]).boxed().collect(Collectors.toList()));
+                : new MultiValueSample(timestamp, Arrays.stream(variableValues[index]).boxed().collect(Collectors.toList()));
         };
     }
 

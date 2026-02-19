@@ -48,9 +48,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 import org.opensearch.tsdb.query.utils.ProfileInfoMapper;
+import org.opensearch.tsdb.query.utils.StageProfiler;
 
 import static org.opensearch.tsdb.metrics.TSDBMetricsConstants.NANOS_PER_MILLI;
 
@@ -122,6 +122,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     private final long maxTimestamp;
     private final long step;
     private final long theoreticalMaxTimestamp; // Theoretical maximum aligned timestamp for time series
+    private final StageProfiler stageProfiler;
 
     // Aggregator execution stats - single source of truth for all metrics
     private final ExecutionStats executionStats = new ExecutionStats();
@@ -173,6 +174,12 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         // Calculate theoretical maximum aligned timestamp
         // This is the largest timestamp aligned to (minTimestamp + N * step) that is < maxTimestamp
         this.theoreticalMaxTimestamp = TimeSeries.calculateAlignedMaxTimestamp(minTimestamp, maxTimestamp, step);
+
+        if (context.getProfilers() != null) {
+            this.stageProfiler = new StageProfiler();
+        } else {
+            this.stageProfiler = null;
+        }
     }
 
     @Override
@@ -429,7 +436,8 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
                     stage,
                     processedTimeSeries,
                     false, // shard-level execution
-                    this::trackCircuitBreakerBytes // pass circuit breaker consumer for stage overhead tracking
+                    this::trackCircuitBreakerBytes, // pass circuit breaker consumer for stage overhead tracking,
+                    this.stageProfiler
                 );
             }
         }
@@ -684,7 +692,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     public void collectDebugInfo(BiConsumer<String, Object> add) {
         super.collectDebugInfo(add);
         executionStats.add(add);
-        add.accept("stages", stages == null ? "" : stages.stream().map(UnaryPipelineStage::getName).collect(Collectors.joining(",")));
+        add.accept("stages", stageProfiler == null ? "" : stageProfiler.getResults());
     }
 
     /**
@@ -736,6 +744,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         /**
          * Add debug info to profiler output.
          * Uses maxCircuitBreakerBytes (kept up to date by aggregator when circuit breaker changes).
+         * TODO Execution Stats will be exposed with another param
          */
         void add(BiConsumer<String, Object> add) {
             add.accept(ProfileInfoMapper.TOTAL_DOCS, totalDocCount);

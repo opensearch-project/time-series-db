@@ -475,6 +475,11 @@
             "type" : "moving",
             "interval" : 300000,
             "function" : "avg"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
