@@ -36,6 +36,7 @@ import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
+import org.opensearch.tsdb.query.utils.CircuitBreakerBatcher;
 import org.opensearch.tsdb.query.utils.SampleMerger;
 import org.opensearch.tsdb.query.stage.PipelineStageExecutor;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -125,22 +126,14 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     // Aggregator execution stats - single source of truth for all metrics
     private final ExecutionStats executionStats = new ExecutionStats();
 
-    // Batched circuit breaker bytes - accumulated locally before flushing to actual circuit breaker.
-    // This reduces the overhead of frequent circuit breaker calls during tight loops (e.g., group creation).
-    private long pendingCircuitBreakerBytes = 0;
-
     /**
      * Total bytes committed to the circuit breaker by this aggregator.
      * Used for logging (doClose, commitToCircuitBreaker), error reporting on trip, and metrics (passed to ExecutionStats at report time).
      */
     private long circuitBreakerBytes = 0;
 
-    /**
-     * Circuit breaker batch threshold in bytes (5 MB).
-     * When tracking memory in tight loops (e.g., group creation), bytes are accumulated locally
-     * and only flushed to the circuit breaker when this threshold is exceeded.
-     */
-    private static final long CIRCUIT_BREAKER_BATCH_THRESHOLD = 5 * 1024 * 1024;
+    /** Batches circuit breaker updates at {@link CircuitBreakerBatcher#BATCH_THRESHOLD_BYTES} (5 MB). */
+    private final CircuitBreakerBatcher circuitBreakerBatcher;
 
     /**
      * Create a time series unfold aggregator.
@@ -175,6 +168,7 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.step = step;
+        this.circuitBreakerBatcher = new CircuitBreakerBatcher(this::commitToCircuitBreaker);
 
         // Calculate theoretical maximum aligned timestamp
         // This is the largest timestamp aligned to (minTimestamp + N * step) that is < maxTimestamp
@@ -574,55 +568,20 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
     // ==================== Circuit Breaker Tracking ====================
 
     /**
-     * Flush pending bytes to the circuit breaker.
-     *
-     * <p>Commits any accumulated {@code pendingCircuitBreakerBytes} to the parent's
-     * circuit breaker via {@link #commitToCircuitBreaker(long)}. Resets pending bytes
-     * to 0 before calling commit to prevent double-flush if an exception occurs.</p>
+     * Flush pending batched bytes to the circuit breaker.
+     * Call at phase boundaries (e.g. before post-processing) so all allocations are committed.
      */
     private void flushPendingCircuitBreakerBytes() {
-        if (pendingCircuitBreakerBytes > 0) {
-            long bytesToFlush = pendingCircuitBreakerBytes;
-            pendingCircuitBreakerBytes = 0; // Reset before call to avoid double-flush on exception
-            commitToCircuitBreaker(bytesToFlush);
-        }
+        circuitBreakerBatcher.flush();
     }
 
     /**
-     * Track memory allocation or release with batching for efficiency.
-     *
-     * <p>Batches small allocations locally and only commits to the circuit breaker when the
-     * threshold ({@link #CIRCUIT_BREAKER_BATCH_THRESHOLD}) is exceeded.</p>
-     *
-     * <ul>
-     *   <li><b>Positive bytes (allocation):</b> Accumulated in {@code pendingCircuitBreakerBytes},
-     *       flushed when threshold exceeded</li>
-     *   <li><b>Negative bytes (release):</b> Pending bytes flushed first (for accurate peak tracking),
-     *       then release committed immediately</li>
-     * </ul>
+     * Track memory allocation or release with batching at {@link CircuitBreakerBatcher#BATCH_THRESHOLD_BYTES}.
      *
      * @param bytes the number of bytes to allocate (positive) or release (negative)
      */
     private void trackCircuitBreakerBytes(long bytes) {
-        if (bytes == 0) {
-            return;
-        }
-
-        if (bytes > 0) {
-            // Allocation - batch for efficiency
-            pendingCircuitBreakerBytes += bytes;
-
-            // Flush when threshold exceeded
-            if (pendingCircuitBreakerBytes >= CIRCUIT_BREAKER_BATCH_THRESHOLD) {
-                flushPendingCircuitBreakerBytes();
-            }
-        } else {
-            // Release: flush pending allocations first to ensure accurate high-water mark tracking,
-            // then release immediately. Without this, pending +4MB and release -1MB would incorrectly
-            // net to +3MB, missing the actual peak allocation.
-            flushPendingCircuitBreakerBytes();
-            commitToCircuitBreaker(bytes);
-        }
+        circuitBreakerBatcher.accept(bytes);
     }
 
     /**

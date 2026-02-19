@@ -141,6 +141,9 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
         consumer.close();
     }
 
+    /**
+     * When batched bytes reach the threshold, flush hits the breaker; if it throws, we get the exception.
+     */
     public void testCircuitBreakerTripThrowsAndIncrementsMetric() {
         CircuitBreaker breaker = mock(CircuitBreaker.class);
         try {
@@ -161,7 +164,11 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             emptyTree
         );
         ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
-        CircuitBreakingException e = expectThrows(CircuitBreakingException.class, () -> consumer.accept(100L));
+        // Batch threshold must be reached so the batcher flushes to the breaker (which then throws)
+        CircuitBreakingException e = expectThrows(
+            CircuitBreakingException.class,
+            () -> consumer.accept(CircuitBreakerBatcher.BATCH_THRESHOLD_BYTES)
+        );
         assertEquals("tripped", e.getMessage());
     }
 

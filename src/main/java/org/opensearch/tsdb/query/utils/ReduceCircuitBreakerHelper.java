@@ -52,6 +52,14 @@ import java.util.function.LongConsumer;
  * <h2>Thread Safety:</h2>
  * <p>The underlying BigArrays circuit breaker is thread-safe. However, the total bytes tracked
  * by a single consumer instance is not synchronized across threads.</p>
+ *
+ * <h2>Batching:</h2>
+ * <p>The consumer returned by {@link #createConsumer(ReduceContext)} batches all
+ * {@code accept(bytes)} calls via {@link CircuitBreakerBatcher} at
+ * {@link CircuitBreakerBatcher#BATCH_THRESHOLD_BYTES} (5 MB). Call sites (stages,
+ * {@link org.opensearch.tsdb.query.aggregator.InternalTimeSeries}, coordinator) just call
+ * {@code accept(bytes)} on the consumer; no extra wrapping is needed. Pending bytes are
+ * flushed on release (negative bytes) and on {@link ReduceCircuitBreakerConsumer#close()}.</p>
  */
 public final class ReduceCircuitBreakerHelper {
 
@@ -128,7 +136,31 @@ public final class ReduceCircuitBreakerHelper {
             return NO_OP;
         }
 
-        return new TrackedReduceCircuitBreakerConsumer(breaker);
+        TrackedReduceCircuitBreakerConsumer inner = new TrackedReduceCircuitBreakerConsumer(breaker);
+        CircuitBreakerBatcher batcher = new CircuitBreakerBatcher(inner);
+        return new BatchingReduceCircuitBreakerConsumer(batcher, inner);
+    }
+
+    /** Wraps a batcher and delegates to the inner consumer; flushes on close. */
+    private static class BatchingReduceCircuitBreakerConsumer implements ReduceCircuitBreakerConsumer {
+        private final CircuitBreakerBatcher batcher;
+        private final TrackedReduceCircuitBreakerConsumer inner;
+
+        BatchingReduceCircuitBreakerConsumer(CircuitBreakerBatcher batcher, TrackedReduceCircuitBreakerConsumer inner) {
+            this.batcher = batcher;
+            this.inner = inner;
+        }
+
+        @Override
+        public void accept(long bytes) {
+            batcher.accept(bytes);
+        }
+
+        @Override
+        public void close() {
+            batcher.flush();
+            inner.close();
+        }
     }
 
     /** Tracks bytes and releases them on {@link #close()}. */
