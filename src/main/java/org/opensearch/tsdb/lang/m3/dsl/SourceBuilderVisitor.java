@@ -342,7 +342,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         List<UnaryPipelineStage> unfoldStages = new ArrayList<>();
 
         if (!shouldDisablePushdown(params)) {
-            TSDBMetrics.incrementCounter(METRICS.pushdownRequestsTotal, 1, Tags.create().addTag("mode", "enabled"));
+            TSDBMetrics.incrementCounter(METRICS.pushdownRequestsTotal, 1, Metrics.TAGS_MODE_ENABLED);
 
             // Normal pushdown behavior: add stages until we hit a coordinator-only or global aggregation
             while (!stageStack.isEmpty() && !stageStack.peek().isCoordinatorOnly() && !stageStack.peek().isGlobalAggregation()) {
@@ -356,7 +356,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             }
         } else {
             // emit metric
-            TSDBMetrics.incrementCounter(METRICS.pushdownRequestsTotal, 1, Tags.create().addTag("mode", "disabled"));
+            TSDBMetrics.incrementCounter(METRICS.pushdownRequestsTotal, 1, Metrics.TAGS_MODE_DISABLED);
         }
 
         ComponentHolder holder = new ComponentHolder(planNode.getId());
@@ -1166,6 +1166,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
      */
     static class Metrics implements TSDBMetrics.MetricsInitializer {
         static final String PUSHDOWN_REQUESTS_TOTAL_METRIC_NAME = "tsdb.lang.m3ql.source_builder_visitor.pushdown.total";
+        private static final Tags TAGS_MODE_ENABLED = Tags.create().addTag("mode", "enabled");
+        private static final Tags TAGS_MODE_DISABLED = Tags.create().addTag("mode", "disabled");
         Counter pushdownRequestsTotal;
 
         @Override

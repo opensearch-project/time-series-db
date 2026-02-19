@@ -14,6 +14,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.utils.StageProfiler;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongConsumer;
 
 /**
@@ -36,8 +37,18 @@ import java.util.function.LongConsumer;
  */
 public final class PipelineStageExecutor {
 
+    private static final ConcurrentHashMap<String, Tags> stageTagsCache = new ConcurrentHashMap<>();
+
     private PipelineStageExecutor() {
         // Utility class, no instantiation
+    }
+
+    private static Tags getOrCreateStageTags(String stageName, String stageType, String location) {
+        String key = stageName + "|" + stageType + "|" + location;
+        return stageTagsCache.computeIfAbsent(key, k -> Tags.create()
+            .addTag(TSDBMetricsConstants.TAG_STAGE_NAME, stageName)
+            .addTag(TSDBMetricsConstants.TAG_STAGE_TYPE, stageType)
+            .addTag(TSDBMetricsConstants.TAG_LOCATION, location));
     }
 
     /**
@@ -120,10 +131,7 @@ public final class PipelineStageExecutor {
         }
         double latencyMs = latencyNs / TSDBMetricsConstants.NANOS_PER_MILLI;
         String locationTag = coordinatorExecution ? TSDBMetricsConstants.TAG_LOCATION_COORDINATOR : TSDBMetricsConstants.TAG_LOCATION_SHARD;
-        Tags tags = Tags.create()
-            .addTag(TSDBMetricsConstants.TAG_STAGE_NAME, stage.getName())
-            .addTag(TSDBMetricsConstants.TAG_STAGE_TYPE, TSDBMetricsConstants.TAG_STAGE_TYPE_UNARY)
-            .addTag(TSDBMetricsConstants.TAG_LOCATION, locationTag);
+        Tags tags = getOrCreateStageTags(stage.getName(), TSDBMetricsConstants.TAG_STAGE_TYPE_UNARY, locationTag);
         TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.pipelineStageLatency, latencyMs, tags);
 
         return result;
@@ -173,10 +181,7 @@ public final class PipelineStageExecutor {
         double latencyMs = (System.nanoTime() - startNanos) / TSDBMetricsConstants.NANOS_PER_MILLI;
 
         String locationTag = coordinatorExecution ? TSDBMetricsConstants.TAG_LOCATION_COORDINATOR : TSDBMetricsConstants.TAG_LOCATION_SHARD;
-        Tags tags = Tags.create()
-            .addTag(TSDBMetricsConstants.TAG_STAGE_NAME, stage.getName())
-            .addTag(TSDBMetricsConstants.TAG_STAGE_TYPE, TSDBMetricsConstants.TAG_STAGE_TYPE_BINARY)
-            .addTag(TSDBMetricsConstants.TAG_LOCATION, locationTag);
+        Tags tags = getOrCreateStageTags(stage.getName(), TSDBMetricsConstants.TAG_STAGE_TYPE_BINARY, locationTag);
         TSDBMetrics.recordHistogram(TSDBMetrics.AGGREGATION.pipelineStageLatency, latencyMs, tags);
 
         return result;

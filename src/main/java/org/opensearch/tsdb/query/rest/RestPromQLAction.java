@@ -26,6 +26,7 @@ import org.opensearch.transport.client.node.NodeClient;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.opensearch.tsdb.core.utils.Constants;
 import org.opensearch.tsdb.lang.prom.dsl.PromOSTranslator;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -98,6 +99,7 @@ public class RestPromQLAction extends BaseTSDBAction {
     public static final String NAME = "promql_action";
 
     private static final Logger logger = LogManager.getLogger(RestPromQLAction.class);
+    private static final ConcurrentHashMap<Map<String, String>, Tags> requestTagsCache = new ConcurrentHashMap<>();
 
     // Route paths
     private static final String INSTANT_QUERY_PATH = "/_promql/query";
@@ -268,10 +270,16 @@ public class RestPromQLAction extends BaseTSDBAction {
                 };
             }
         } finally {
-            Tags finalTags = Tags.create();
-            tags.forEach(finalTags::addTag);
-            TSDBMetrics.incrementCounter(METRICS.requestsTotal, 1, finalTags);
+            TSDBMetrics.incrementCounter(METRICS.requestsTotal, 1, getOrCreateTags(tags));
         }
+    }
+
+    private static Tags getOrCreateTags(Map<String, String> tags) {
+        return requestTagsCache.computeIfAbsent(tags, m -> {
+            Tags t = Tags.create();
+            m.forEach(t::addTag);
+            return t;
+        });
     }
 
     /**
