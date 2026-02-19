@@ -21,6 +21,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -75,6 +76,13 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
 
     /** Label name added to output series to indicate percentile value. */
     private static final String PERCENTILE_LABEL = "__percentile";
+
+    /**
+     * Cached shallow size of MultiValueSample used as aggregation state.
+     * Composed of: MultiValueSample shallow size + ArrayList overhead + initial Double.
+     */
+    private static final long STATE_SIZE = MultiValueSample.SHALLOW_SIZE + SampleList.ARRAYLIST_OVERHEAD
+        + RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /** List of percentiles to calculate (0-100), sorted and deduplicated. */
     private final List<Float> percentiles;
@@ -284,6 +292,11 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
     @Override
     protected boolean needsMaterialization() {
         return true;
+    }
+
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
     }
 
     /**

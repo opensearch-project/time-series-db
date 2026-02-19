@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,7 +21,10 @@ import java.io.IOException;
  * @param min the minimum value
  * @param max the maximum value
  */
-public record MinMaxSample(long getTimestamp, double min, double max) implements Sample {
+public record MinMaxSample(long getTimestamp, double min, double max) implements Sample, Accountable {
+
+    /** Shallow size of a MinMaxSample record (object header + timestamp + min + max). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(MinMaxSample.class);
 
     @Override
     public ValueType valueType() {
@@ -142,6 +147,11 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     @Override
     public String toString() {
         return "MinMaxSample{" + "timestamp=" + getTimestamp + ", min=" + min + ", max=" + max + ", range=" + getRange() + '}';
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return SHALLOW_SIZE;
     }
 
     @Override

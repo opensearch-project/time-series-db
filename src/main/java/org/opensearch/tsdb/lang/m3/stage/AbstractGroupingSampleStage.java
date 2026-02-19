@@ -83,6 +83,14 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
     protected abstract Sample bucketToSample(long timestamp, A bucket);
 
     /**
+     * Estimate the memory size of a single aggregation state value.
+     * Used for circuit breaker tracking during reduce operations.
+     *
+     * @return Estimated bytes for one state value (e.g., Double, SumCountSample)
+     */
+    protected abstract long estimateStateSize();
+
+    /**
      * Process a group of time series using the template method pattern.
      * This method handles the common aggregation logic while delegating
      * operation-specific behavior to abstract methods.
@@ -242,8 +250,8 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
             timestampToSample.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
 
             if (isNewTimestamp) {
-                // Track HashMap entry overhead for new timestamp
-                circuitBreakerConsumer.accept(RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + Long.BYTES);
+                // Track HashMap entry overhead for new timestamp (key + value)
+                circuitBreakerConsumer.accept(RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + Long.BYTES + estimateStateSize());
             }
         }
     }

@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
@@ -25,7 +27,11 @@ import java.util.Objects;
  * <p>Note: This is primarily an internal sample type used during aggregation. The final
  * results are typically materialized to {@link FloatSample} instances.</p>
  */
-public class MultiValueSample implements Sample, Writeable {
+public class MultiValueSample implements Sample, Writeable, Accountable {
+
+    /** Shallow size of a MultiValueSample instance (object header + timestamp field + ArrayList reference). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(MultiValueSample.class);
+
     private final long timestamp;
     private final List<Double> values;
 
@@ -171,6 +177,13 @@ public class MultiValueSample implements Sample, Writeable {
     @Override
     public int hashCode() {
         return Objects.hash(timestamp, values);
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        // Shallow size + ArrayList overhead + boxed Double objects
+        return SHALLOW_SIZE + SampleList.ARRAYLIST_OVERHEAD + (values.size() * RamUsageEstimator.NUM_BYTES_OBJECT_REF)  // Array references
+            + (values.size() * RamUsageEstimator.shallowSizeOfInstance(Double.class)); // Boxed Doubles
     }
 
     @Override

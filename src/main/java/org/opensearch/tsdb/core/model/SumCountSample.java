@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,7 +21,10 @@ import java.io.IOException;
  * @param sum the sum of all values
  * @param count the number of values
  */
-public record SumCountSample(long getTimestamp, double sum, long count) implements Sample {
+public record SumCountSample(long getTimestamp, double sum, long count) implements Sample, Accountable {
+
+    /** Shallow size of a SumCountSample record (object header + timestamp + sum + count). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(SumCountSample.class);
 
     @Override
     public ValueType valueType() {
@@ -129,6 +134,11 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     @Override
     public String toString() {
         return "SumCountSample{" + "timestamp=" + getTimestamp + ", sum=" + sum + ", count=" + count + ", avg=" + getAverage() + '}';
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return SHALLOW_SIZE;
     }
 
     @Override

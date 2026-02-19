@@ -241,8 +241,8 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
                         );
                         mergedSeriesByLabels.put(seriesLabels, mergedSeries);
                     } else {
-                        // First occurrence of this time series - track HashMap entry overhead
-                        cbConsumer.accept(RamUsageConstants.groupEntryBaseOverhead(seriesLabels));
+                        // First occurrence of this time series - track HashMap entry + full series (labels + samples)
+                        cbConsumer.accept(RamUsageConstants.groupEntryBaseOverhead(seriesLabels) + series.ramBytesUsed());
                         mergedSeriesByLabels.put(seriesLabels, series);
                     }
                 }

@@ -62,6 +62,9 @@ public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
     /** The name identifier for this stage type. */
     public static final String NAME = "avg";
 
+    /** Cached shallow size of SumCountSample record used as aggregation state. */
+    private static final long STATE_SIZE = SumCountSample.SHALLOW_SIZE;
+
     /**
      * Constructor for average without label grouping (averages all time series together).
      */
@@ -137,6 +140,11 @@ public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
      */
     public static AvgStage fromArgs(Map<String, Object> args) {
         return fromArgs(args, groupByLabels -> groupByLabels.isEmpty() ? new AvgStage() : new AvgStage(groupByLabels));
+    }
+
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
     }
 
     /**

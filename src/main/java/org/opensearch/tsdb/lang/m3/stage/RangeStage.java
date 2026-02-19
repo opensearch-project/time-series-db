@@ -62,6 +62,9 @@ public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
     /** The name identifier for this stage type. */
     public static final String NAME = "range";
 
+    /** Cached shallow size of MinMaxSample record used as aggregation state. */
+    private static final long STATE_SIZE = MinMaxSample.SHALLOW_SIZE;
+
     /**
      * Constructor for range without label grouping (calculates range across all time series together).
      */
@@ -137,6 +140,11 @@ public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
      */
     public static RangeStage fromArgs(Map<String, Object> args) {
         return fromArgs(args, groupByLabels -> groupByLabels.isEmpty() ? new RangeStage() : new RangeStage(groupByLabels));
+    }
+
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
     }
 
     /**

@@ -158,4 +158,49 @@ public class MultiValueSampleTests extends AbstractWireSerializingTestCase<Multi
         sample.insert(30.0);
         assertEquals(List.of(10.0, 20.0, 30.0), sample.getValueList());
     }
+
+    public void testRamBytesUsed() {
+        // Test empty sample (created with withCapacity)
+        MultiValueSample emptySample = MultiValueSample.withCapacity(1000L, 5);
+        long emptySize = emptySample.ramBytesUsed();
+
+        // Should be shallow size + ArrayList overhead + no values
+        assertTrue(emptySize > 0);
+        assertTrue(emptySize >= MultiValueSample.SHALLOW_SIZE);
+
+        // Test single value sample
+        MultiValueSample singleValue = new MultiValueSample(1000L, 42.0);
+        long singleValueSize = singleValue.ramBytesUsed();
+
+        // Should be larger than empty (has one Double)
+        assertTrue(singleValueSize > emptySize);
+
+        // Test multiple values
+        MultiValueSample multiValue = new MultiValueSample(1000L, List.of(10.0, 20.0, 30.0, 40.0, 50.0));
+        long multiValueSize = multiValue.ramBytesUsed();
+
+        // Should be larger than single value (has 5 Doubles)
+        assertTrue(multiValueSize > singleValueSize);
+
+        // Adding more values should increase size
+        multiValue.insert(60.0);
+        long afterInsertSize = multiValue.ramBytesUsed();
+        assertTrue(afterInsertSize > multiValueSize);
+
+        // SHALLOW_SIZE should be a positive constant
+        assertTrue(MultiValueSample.SHALLOW_SIZE > 0);
+    }
+
+    public void testRamBytesUsedFormula() {
+        // Test that the formula is correct: SHALLOW_SIZE + ArrayList overhead + array refs + boxed Doubles
+        MultiValueSample sample = new MultiValueSample(1000L, List.of(10.0, 20.0, 30.0));
+        long actualSize = sample.ramBytesUsed();
+
+        // Expected: SHALLOW_SIZE + ARRAYLIST_OVERHEAD + (3 refs) + (3 boxed Doubles)
+        long expectedSize = MultiValueSample.SHALLOW_SIZE + SampleList.ARRAYLIST_OVERHEAD + (3
+            * org.apache.lucene.util.RamUsageEstimator.NUM_BYTES_OBJECT_REF) + (3 * org.apache.lucene.util.RamUsageEstimator
+                .shallowSizeOfInstance(Double.class));
+
+        assertEquals(expectedSize, actualSize);
+    }
 }
