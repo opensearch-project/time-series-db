@@ -23,7 +23,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -280,7 +280,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // we reuse firstAgg's metaData/name to create final aggregation
         TimeSeriesProvider firstAgg = aggregations.get(0);
@@ -401,7 +401,7 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (input.isEmpty()) {
             return input;
         }
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         List<TimeSeries> result;
         if (groupByLabels.isEmpty()) {

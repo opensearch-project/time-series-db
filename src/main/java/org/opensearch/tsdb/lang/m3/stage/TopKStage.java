@@ -18,7 +18,7 @@ import org.opensearch.tsdb.lang.m3.stage.util.SortComparatorUtil;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
@@ -173,7 +173,7 @@ public class TopKStage implements UnaryPipelineStage {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // Track ArrayList allocation for collecting all series
         cb.accept(SampleList.ARRAYLIST_OVERHEAD);

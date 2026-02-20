@@ -16,7 +16,7 @@ import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
@@ -134,7 +134,7 @@ public class SliceStage implements UnaryPipelineStage {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // Track result ArrayList allocation
         cb.accept(SampleList.ARRAYLIST_OVERHEAD);

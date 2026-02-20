@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.LongConsumer;
 
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 
 /**
  * Coordinator pipeline aggregator that handles a list of pipeline stages at the coordinator.
@@ -258,7 +258,7 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
 
     @Override
     public InternalAggregation doReduce(Aggregations aggregations, ReduceContext context) {
-        try (ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(context)) {
+        try (ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerConsumer.createConsumer(context)) {
             // Execute the main pipeline stages, with macro support if macros are defined
             List<TimeSeries> result = processMainPipeline(aggregations, cbConsumer);
 

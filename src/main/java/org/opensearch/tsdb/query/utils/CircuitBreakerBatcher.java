@@ -16,7 +16,7 @@ import java.util.function.LongConsumer;
  * (releases) trigger an immediate flush of any pending allocation, then the release is
  * forwarded so the breaker's high-water mark stays accurate.
  *
- * <p>Shared by reduce-phase tracking ({@link ReduceCircuitBreakerHelper}) and by
+ * <p>Shared by reduce-phase tracking ({@link ReduceCircuitBreakerConsumer}) and by
  * {@link org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregator} during collection.
  */
 public final class CircuitBreakerBatcher implements LongConsumer {

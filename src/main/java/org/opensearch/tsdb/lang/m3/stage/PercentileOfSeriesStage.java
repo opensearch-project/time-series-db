@@ -20,7 +20,7 @@ import org.opensearch.tsdb.query.utils.PercentileUtils;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
@@ -335,7 +335,7 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(circuitBreakerConsumer);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // Get the merged grouped series from parent (without materialization)
         // We temporarily disable materialization by calling with isFinalReduce=false

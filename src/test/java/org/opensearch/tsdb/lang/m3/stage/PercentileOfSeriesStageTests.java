@@ -21,7 +21,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -748,9 +748,9 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
 
         assertThrows(
             IllegalArgumentException.class,
-            () -> stage.reduce(Collections.emptyList(), true, ReduceCircuitBreakerHelper.getConsumer(null))
+            () -> stage.reduce(Collections.emptyList(), true, ReduceCircuitBreakerConsumer.getConsumer(null))
         );
-        assertThrows(IllegalArgumentException.class, () -> stage.reduce(null, true, ReduceCircuitBreakerHelper.getConsumer(null)));
+        assertThrows(IllegalArgumentException.class, () -> stage.reduce(null, true, ReduceCircuitBreakerConsumer.getConsumer(null)));
     }
 
     /**
@@ -768,7 +768,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
             new InternalTimeSeries("b", List.of(ts2), Map.of())
         );
 
-        InternalAggregation result = stage.reduce(aggregations, false, ReduceCircuitBreakerHelper.getConsumer(null));
+        InternalAggregation result = stage.reduce(aggregations, false, ReduceCircuitBreakerConsumer.getConsumer(null));
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -795,7 +795,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
             new InternalTimeSeries("b", List.of(ts2), Map.of())
         );
 
-        InternalAggregation result = stage.reduce(aggregations, true, ReduceCircuitBreakerHelper.getConsumer(null));
+        InternalAggregation result = stage.reduce(aggregations, true, ReduceCircuitBreakerConsumer.getConsumer(null));
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -830,7 +830,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         );
 
         // Intermediate reduce: merged values at t=1000 should be [10, 30, 50], at t=2000 [20, 40, 60]
-        InternalAggregation intermediate = stage.reduce(aggregations, false, ReduceCircuitBreakerHelper.getConsumer(null));
+        InternalAggregation intermediate = stage.reduce(aggregations, false, ReduceCircuitBreakerConsumer.getConsumer(null));
         List<TimeSeries> mergedSeries = ((TimeSeriesProvider) intermediate).getTimeSeries();
         assertEquals(1, mergedSeries.size());
         List<Sample> mergedSamples = mergedSeries.get(0).getSamples().toList();
@@ -838,7 +838,7 @@ public class PercentileOfSeriesStageTests extends AbstractWireSerializingTestCas
         assertEquals(List.of(20.0, 40.0, 60.0), ((MultiValueSample) mergedSamples.get(1)).getSortedValueList());
 
         // Final reduce: P50 at t=1000 = median(10,30,50) = 30, at t=2000 = 40; P100 = 50 and 60
-        InternalAggregation result = stage.reduce(aggregations, true, ReduceCircuitBreakerHelper.getConsumer(null));
+        InternalAggregation result = stage.reduce(aggregations, true, ReduceCircuitBreakerConsumer.getConsumer(null));
         List<TimeSeries> series = ((TimeSeriesProvider) result).getTimeSeries();
         TimeSeries p50 = findSeriesByLabel(series, "__percentile", "50");
         TimeSeries p100 = findSeriesByLabel(series, "__percentile", "100");

@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper;
+import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
 
 /**
  * Internal aggregation result for time series pipeline aggregators.
@@ -179,9 +179,7 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
      */
     @Override
     public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        try (
-            ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerHelper.createConsumer(reduceContext)
-        ) {
+        try (ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerConsumer.createConsumer(reduceContext)) {
             // If we have a reduce stage, delegate directly to it (skip merging)
             if (reduceStage != null) {
                 // Track ArrayList allocation for providers list

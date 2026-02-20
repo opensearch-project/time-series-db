@@ -28,12 +28,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link ReduceCircuitBreakerHelper}.
+ * Unit tests for {@link ReduceCircuitBreakerConsumer}.
  */
-public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
+public class ReduceCircuitBreakerConsumerTests extends OpenSearchTestCase {
 
     public void testCreateConsumerWithNullContextReturnsNoOp() {
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(null);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(null);
         assertNotNull(consumer);
         // No-op should not throw
         consumer.accept(1000L);
@@ -44,7 +44,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
     public void testCreateConsumerWithContextWithNullBigArraysReturnsNoOp() {
         PipelineAggregator.PipelineTree emptyTree = new PipelineAggregator.PipelineTree(Collections.emptyMap(), Collections.emptyList());
         InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forFinalReduction(null, null, s -> {}, emptyTree);
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         assertNotNull(consumer);
         consumer.accept(1000L);
         consumer.accept(-500L);
@@ -56,7 +56,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
      * in adjustBreaker is invoked for coverage.
      */
     public void testCreateConsumerWithBigArraysTracksBytes() {
-        Configurator.setLevel("org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper", Level.TRACE);
+        Configurator.setLevel("org.opensearch.tsdb.query.utils.BatchingReduceCircuitBreakerConsumer", Level.TRACE);
         try {
             CircuitBreakerService circuitBreakerService = new NoneCircuitBreakerService();
             BigArrays bigArrays = new BigArrays(null, circuitBreakerService, "request");
@@ -70,7 +70,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
                 s -> {},
                 emptyTree
             );
-            ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+            ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
             assertNotNull(consumer);
             // NoneCircuitBreakerService does not break; accept should not throw
             consumer.accept(1000L);
@@ -78,7 +78,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             consumer.accept(-200L);
             consumer.close();
         } finally {
-            Configurator.setLevel("org.opensearch.tsdb.query.utils.ReduceCircuitBreakerHelper", Level.INFO);
+            Configurator.setLevel("org.opensearch.tsdb.query.utils.BatchingReduceCircuitBreakerConsumer", Level.INFO);
         }
     }
 
@@ -92,21 +92,21 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         consumer.accept(0L);
         consumer.close();
         // No exception; zero is no-op; close when totalTracked==0 is no-op
     }
 
     public void testGetConsumerNullReturnsNoOp() {
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(null);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(null);
         assertNotNull(cb);
         cb.accept(100L);
     }
 
     public void testGetConsumerNonNullReturnsSame() {
-        LongConsumer original = ReduceCircuitBreakerHelper.createConsumer(null);
-        LongConsumer cb = ReduceCircuitBreakerHelper.getConsumer(original);
+        LongConsumer original = ReduceCircuitBreakerConsumer.createConsumer(null);
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(original);
         assertSame(original, cb);
     }
 
@@ -120,7 +120,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         consumer.close();
         // no exception; totalTracked was 0
     }
@@ -135,7 +135,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         consumer.accept(1000L);
         consumer.accept(-300L);
         consumer.close();
@@ -163,7 +163,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         // Batch threshold must be reached so the batcher flushes to the breaker (which then throws)
         CircuitBreakingException e = expectThrows(
             CircuitBreakingException.class,
@@ -182,7 +182,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         assertNotNull(consumer);
         consumer.accept(100L);
         consumer.close();
@@ -199,7 +199,7 @@ public class ReduceCircuitBreakerHelperTests extends OpenSearchTestCase {
             s -> {},
             emptyTree
         );
-        ReduceCircuitBreakerHelper.ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerHelper.createConsumer(context);
+        ReduceCircuitBreakerConsumer consumer = ReduceCircuitBreakerConsumer.createConsumer(context);
         assertNotNull(consumer);
         consumer.accept(100L);
         consumer.close();
