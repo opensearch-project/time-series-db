@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.action;
 
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +44,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
     private final Supplier<Boolean> enabledSupplier;
+    private final ConcurrentHashMap<String, Tags> indexTagsCache = new ConcurrentHashMap<>();
 
     public TSDBIngestionLagActionFilter(ThreadContext threadContext, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
         this.threadContext = threadContext;
@@ -82,7 +84,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 long now = System.currentTimeMillis();
 
                 String indexName = getPrimaryIndex(bulkRequest);
-                Tags tags = Tags.create().addTag("index", indexName);
+                Tags tags = indexTagsCache.computeIfAbsent(indexName, idx -> Tags.create().addTag("index", idx));
 
                 long coordinatorLagMs = now - minSampleTimestamp;
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
