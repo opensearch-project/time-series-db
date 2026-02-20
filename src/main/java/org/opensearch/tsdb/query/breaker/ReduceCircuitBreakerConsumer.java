@@ -5,7 +5,7 @@
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */
-package org.opensearch.tsdb.query.utils;
+package org.opensearch.tsdb.query.breaker;
 
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.core.common.breaker.CircuitBreaker;
@@ -117,6 +117,6 @@ public interface ReduceCircuitBreakerConsumer extends LongConsumer, AutoCloseabl
             return NO_OP;
         }
 
-        return new BatchingReduceCircuitBreakerConsumer(breaker);
+        return new BatchingReduceCircuitBreakerConsumer(breaker, REDUCE_LABEL);
     }
 }

@@ -36,7 +36,7 @@ import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
-import org.opensearch.tsdb.query.utils.CircuitBreakerBatcher;
+import org.opensearch.tsdb.query.breaker.CircuitBreakerBatcher;
 import org.opensearch.tsdb.query.utils.SampleMerger;
 import org.opensearch.tsdb.query.stage.PipelineStageExecutor;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;

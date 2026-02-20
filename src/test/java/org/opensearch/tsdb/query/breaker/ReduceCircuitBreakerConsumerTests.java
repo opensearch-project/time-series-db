@@ -5,7 +5,7 @@
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */
-package org.opensearch.tsdb.query.utils;
+package org.opensearch.tsdb.query.breaker;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.config.Configurator;
@@ -56,7 +56,7 @@ public class ReduceCircuitBreakerConsumerTests extends OpenSearchTestCase {
      * in adjustBreaker is invoked for coverage.
      */
     public void testCreateConsumerWithBigArraysTracksBytes() {
-        Configurator.setLevel("org.opensearch.tsdb.query.utils.BatchingReduceCircuitBreakerConsumer", Level.TRACE);
+        Configurator.setLevel("org.opensearch.tsdb.query.breaker.BatchingReduceCircuitBreakerConsumer", Level.TRACE);
         try {
             CircuitBreakerService circuitBreakerService = new NoneCircuitBreakerService();
             BigArrays bigArrays = new BigArrays(null, circuitBreakerService, "request");
@@ -78,7 +78,7 @@ public class ReduceCircuitBreakerConsumerTests extends OpenSearchTestCase {
             consumer.accept(-200L);
             consumer.close();
         } finally {
-            Configurator.setLevel("org.opensearch.tsdb.query.utils.BatchingReduceCircuitBreakerConsumer", Level.INFO);
+            Configurator.setLevel("org.opensearch.tsdb.query.breaker.BatchingReduceCircuitBreakerConsumer", Level.INFO);
         }
     }
 

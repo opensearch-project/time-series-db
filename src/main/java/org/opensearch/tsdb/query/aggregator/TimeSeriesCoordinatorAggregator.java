@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.LongConsumer;
 
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
 
 /**
  * Coordinator pipeline aggregator that handles a list of pipeline stages at the coordinator.

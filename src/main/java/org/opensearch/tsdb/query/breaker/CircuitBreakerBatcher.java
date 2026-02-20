@@ -5,7 +5,7 @@
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */
-package org.opensearch.tsdb.query.utils;
+package org.opensearch.tsdb.query.breaker;
 
 import java.util.function.LongConsumer;
 

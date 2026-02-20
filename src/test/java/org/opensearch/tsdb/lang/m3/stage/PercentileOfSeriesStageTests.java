@@ -21,7 +21,7 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStage;
 import org.opensearch.tsdb.query.stage.PipelineStageFactory;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
 
 import java.io.IOException;
 import java.util.Collections;

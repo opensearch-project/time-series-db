@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
 
 /**
  * Internal aggregation result for time series pipeline aggregators.

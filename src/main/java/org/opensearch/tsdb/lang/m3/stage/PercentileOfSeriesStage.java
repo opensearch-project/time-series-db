@@ -20,7 +20,7 @@ import org.opensearch.tsdb.query.utils.PercentileUtils;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.utils.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;

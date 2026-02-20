@@ -853,7 +853,7 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
 
     /**
      * Tests that circuit breaker bytes are automatically flushed when the batch threshold (5MB) is exceeded.
-     * Uses {@link org.opensearch.tsdb.query.utils.CircuitBreakerBatcher#BATCH_THRESHOLD_BYTES}.
+     * Uses {@link org.opensearch.tsdb.query.breaker.CircuitBreakerBatcher#BATCH_THRESHOLD_BYTES}.
      */
     public void testCircuitBreakerAutoFlushOnThresholdExceeded() throws IOException {
         long minTimestamp = 1000L;

@@ -5,7 +5,7 @@
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */
-package org.opensearch.tsdb.query.utils;
+package org.opensearch.tsdb.query.breaker;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,16 +18,22 @@ import org.opensearch.tsdb.metrics.TSDBMetrics;
 /**
  * Batches circuit breaker calls and tracks total bytes; releases on close.
  * Package-private implementation of {@link ReduceCircuitBreakerConsumer}.
+ *
+ * <p>This class combines {@link CircuitBreakerBatcher} for efficient batching with
+ * circuit breaker tracking and automatic cleanup on close. The label parameter is
+ * used for debugging and identifying which operations are consuming memory.</p>
  */
 class BatchingReduceCircuitBreakerConsumer implements ReduceCircuitBreakerConsumer {
     private static final Logger logger = LogManager.getLogger(BatchingReduceCircuitBreakerConsumer.class);
 
     private final CircuitBreakerBatcher batcher;
     private final CircuitBreaker breaker;
+    private final String label;
     private long totalTracked = 0;
 
-    BatchingReduceCircuitBreakerConsumer(CircuitBreaker breaker) {
+    BatchingReduceCircuitBreakerConsumer(CircuitBreaker breaker, String label) {
         this.breaker = breaker;
+        this.label = label;
         // Pass this::trackBytes as the consumer that batcher will eventually call
         this.batcher = new CircuitBreakerBatcher(this::trackBytes);
     }
@@ -55,40 +61,33 @@ class BatchingReduceCircuitBreakerConsumer implements ReduceCircuitBreakerConsum
         if (bytes == 0) {
             return;
         }
-        adjustBreaker(breaker, bytes);
+        adjustBreaker(bytes);
         totalTracked += bytes;
     }
 
     /**
      * Adjusts the circuit breaker by the specified number of bytes.
      *
-     * @param breaker the CircuitBreaker to adjust
      * @param bytes the number of bytes to adjust (positive for allocation, negative for release)
      */
-    private static void adjustBreaker(CircuitBreaker breaker, long bytes) {
+    private void adjustBreaker(long bytes) {
         try {
             if (bytes > 0) {
                 // Allocation - may throw CircuitBreakingException
-                breaker.addEstimateBytesAndMaybeBreak(bytes, REDUCE_LABEL);
+                breaker.addEstimateBytesAndMaybeBreak(bytes, label);
             } else {
                 // Release - never throws
                 breaker.addWithoutBreaking(bytes);
             }
 
-            logger.trace(
-                () -> new ParameterizedMessage(
-                    "Reduce phase circuit breaker: {} bytes, label={}",
-                    bytes > 0 ? "+" + bytes : bytes,
-                    REDUCE_LABEL
-                )
-            );
+            logger.trace(() -> new ParameterizedMessage("Circuit breaker [{}]: {} bytes", label, bytes > 0 ? "+" + bytes : bytes));
         } catch (CircuitBreakingException e) {
             // Log and increment metrics before rethrowing
             logger.warn(
                 () -> new ParameterizedMessage(
-                    "[request] Reduce phase circuit breaker tripped: attempted {} bytes, label={}",
-                    RamUsageEstimator.humanReadableUnits(bytes),
-                    REDUCE_LABEL
+                    "[request] Circuit breaker [{}] tripped: attempted {} bytes",
+                    label,
+                    RamUsageEstimator.humanReadableUnits(bytes)
                 )
             );
 
