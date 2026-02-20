@@ -104,7 +104,18 @@ public class TSDBMetrics {
 
     /**
      * Safely increment a counter by a specific amount with tags.
-     * Provides null safety and initialization checks.
+     *
+     * <p><b>Performance contract:</b> the {@code tags} argument should be a
+     * <em>reused instance</em> (static field, instance field, or
+     * {@link java.util.concurrent.ConcurrentHashMap} cache) rather than a
+     * freshly-created {@link Tags} object. The downstream M3 bridge caches
+     * the {@link Tags}&nbsp;&rarr;&nbsp;{@code Map<String,String>} conversion
+     * and the resolved Tally metric handle using <b>object identity</b>
+     * (OpenSearch's {@link Tags} does not override {@code equals}/{@code hashCode}).
+     * Passing the same instance on every call keeps the hot path allocation-free;
+     * a new instance with identical content will still work correctly but will
+     * bypass both caches, re-allocating a {@code HashMap} and re-resolving the
+     * Tally scope on every call.</p>
      */
     public static void incrementCounter(Counter counter, long value, Tags tags) {
         if (isInitialized() && counter != null) {
@@ -122,7 +133,10 @@ public class TSDBMetrics {
 
     /**
      * Safely record a histogram value with tags.
-     * Provides null safety and initialization checks.
+     *
+     * <p><b>Performance contract:</b> same as
+     * {@link #incrementCounter(Counter, long, Tags)} — reuse {@link Tags}
+     * instances to keep the hot path allocation-free.</p>
      */
     public static void recordHistogram(Histogram histogram, double value, Tags tags) {
         if (isInitialized() && histogram != null) {
