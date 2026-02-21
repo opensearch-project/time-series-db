@@ -834,6 +834,8 @@ public class Head implements Closeable {
 
             if (callbackFailure != null) {
                 if (seriesCreated) {
+                    // Important: markSeriesAsFailed acquires refLock then series.lock (SeriesStore);
+                    // only call it after releasing series.lock to preserve lock order and avoid deadlocks.
                     head.markSeriesAsFailed(this.series);
                 }
                 throw callbackFailure;

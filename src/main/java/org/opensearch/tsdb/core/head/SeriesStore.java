@@ -200,7 +200,7 @@ public final class SeriesStore {
                 liveSeriesIndex.removeSeries(List.of(ref));
                 dropped++;
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                throw new TSDBTragicException("Failed to remove empty series from live series index: ref=" + ref, e);
             } finally {
                 lock.unlock();
             }
