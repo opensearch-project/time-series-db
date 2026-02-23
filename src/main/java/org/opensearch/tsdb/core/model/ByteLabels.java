@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.core.model;
 
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.common.hash.MurmurHash3;
 
 import java.io.ByteArrayOutputStream;
@@ -50,22 +51,8 @@ public class ByteLabels implements Labels {
 
     private long hash = Long.MIN_VALUE;
 
-    /**
-     * Base memory overhead for a ByteLabels instance in bytes.
-     * <p>
-     * <strong>IMPORTANT:</strong> Update this constant whenever fields are added or removed from ByteLabels.
-     * </p>
-     * <p>Memory breakdown:
-     * <ul>
-     *   <li>Object header: 16 bytes (mark word + class pointer)</li>
-     *   <li>Field: byte[] data reference: 8 bytes</li>
-     *   <li>Field: long hash: 8 bytes</li>
-     *   <li>byte[] array object header: 16 bytes (array metadata + length)</li>
-     * </ul>
-     * Total: 48 bytes + data.length
-     * </p>
-     */
-    private static final long ESTIMATED_MEMORY_OVERHEAD = 48;
+    /** Shallow size of a ByteLabels instance (object header + fields). */
+    private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ByteLabels.class);
 
     private static final ByteLabels EMPTY = new ByteLabels(new byte[0]);
 
@@ -819,25 +806,23 @@ public class ByteLabels implements Labels {
     }
 
     /**
-     * Estimate the memory footprint of this ByteLabels instance in bytes.
-     * Uses the {@link #ESTIMATED_MEMORY_OVERHEAD} constant which should be updated
-     * whenever fields are added or removed from this class.
+     * Return the memory usage of this ByteLabels instance in bytes.
+     * Includes the shallow size of the object plus the byte array contents.
      *
-     * @return estimated size in bytes (ESTIMATED_MEMORY_OVERHEAD + data.length)
+     * @return memory usage in bytes
      */
     @Override
-    public long estimateBytes() {
-        return ESTIMATED_MEMORY_OVERHEAD + data.length;
+    public long ramBytesUsed() {
+        // SHALLOW_SIZE includes the data reference, so add the array's full size
+        return SHALLOW_SIZE + RamUsageEstimator.sizeOf(data);
     }
 
     /**
-     * Get the estimated memory overhead constant for testing.
-     * Package-private for test validation.
-     *
-     * @return the ESTIMATED_MEMORY_OVERHEAD constant
+     * Get the shallow size for testing.
+     * @return bytes for ByteLabels object overhead (excluding data)
      */
-    static long getEstimatedMemoryOverhead() {
-        return ESTIMATED_MEMORY_OVERHEAD;
+    static long getShallowSize() {
+        return SHALLOW_SIZE;
     }
 
     /**

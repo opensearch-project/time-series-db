@@ -95,7 +95,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = maxStage.reduce(aggregations, true);
+        InternalAggregation result = maxStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -117,7 +117,7 @@ public class MaxStageTests extends AbstractWireSerializingTestCase<MaxStage> {
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = maxStage.reduce(aggregations, false);
+        InternalAggregation result = maxStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);

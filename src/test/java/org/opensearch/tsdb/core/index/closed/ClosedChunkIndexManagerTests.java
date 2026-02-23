@@ -24,6 +24,7 @@ import org.opensearch.tsdb.core.chunk.ChunkIterator;
 import org.opensearch.tsdb.core.compaction.NoopCompaction;
 import org.opensearch.tsdb.core.compaction.SizeTieredCompaction;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.index.ReaderManagerWithMetadata;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
@@ -85,7 +86,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
 
         // first chunk should trigger an index creation on commit
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
@@ -127,7 +128,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         var blockDirs = new ArrayList<Path>();
         // Add chunk and verify first index is created
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 1600, 2500));
         addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
@@ -191,8 +192,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         Labels labels2 = ByteLabels.fromStrings("label2", "value2");
-        MemSeries series1 = new MemSeries(100, labels1);
-        MemSeries series2 = new MemSeries(200, labels2);
+        MemSeries series1 = new MemSeries(100, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(200, labels2, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         manager.addMemChunk(series2, TestUtils.getMemChunk(5, 1600, 3000));
@@ -228,8 +229,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         Labels labels2 = ByteLabels.fromStrings("label2", "value2");
-        MemSeries series1 = new MemSeries(100, labels1);
-        MemSeries series2 = new MemSeries(200, labels2);
+        MemSeries series1 = new MemSeries(100, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(200, labels2, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
@@ -278,7 +279,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         assertEquals("Initially no reader managers", 0, manager.getReaderManagersWithMetadata().size());
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         assertEquals("One reader manager after first chunk", 1, manager.getReaderManagersWithMetadata().size());
@@ -312,8 +313,8 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         Labels labels2 = ByteLabels.fromStrings("label2", "value2");
-        MemSeries series1 = new MemSeries(100, labels1);
-        MemSeries series2 = new MemSeries(200, labels2);
+        MemSeries series1 = new MemSeries(100, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(200, labels2, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         manager.addMemChunk(series2, TestUtils.getMemChunk(5, 1600, 3000));
@@ -394,7 +395,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         // Add chunk and verify first index is created
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 0, 1500));
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 1600, 2500));
         addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
@@ -496,7 +497,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         // Add chunk and verify first index is created
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         // Add chunk and verify second index is created
         manager.addMemChunk(series1, TestUtils.getMemChunk(5, 7200000, 7800000));
         addIndexDirectories(tempDir.resolve("blocks"), blockDirs);
@@ -587,7 +588,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
         manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
 
         CountDownLatch commitStartLatch = new CountDownLatch(1);
@@ -648,7 +649,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
         // Create first index with multiple segments
         manager.addMemChunk(series, TestUtils.getMemChunk(10, 0, 1000));
@@ -738,7 +739,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
         // Create 3 indexes with multiple segments each
         for (int i = 0; i < 3; i++) {

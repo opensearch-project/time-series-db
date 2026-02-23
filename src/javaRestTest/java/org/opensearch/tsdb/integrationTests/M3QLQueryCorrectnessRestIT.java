@@ -35,6 +35,7 @@ public class M3QLQueryCorrectnessRestIT extends RestTimeSeriesTestFramework {
     private static final String STEP_SIZE_FROM_INDEX_SETTINGS_REST_IT = "test_cases/m3ql_step_size_from_index_settings_rest_it.yaml";
     private static final String RESOLVED_PARTITIONS_INDEX_PARSING_REST_IT =
         "test_cases/m3ql_resolved_partitions_index_parsing_rest_it.yaml";
+    private static final String GOLDEN_DATASET_REST_IT = "test_cases/golden_dataset_rest_it.yaml";
 
     /**
      * Runs the E2E M3QL query execution test suite via REST API.
@@ -90,6 +91,16 @@ public class M3QLQueryCorrectnessRestIT extends RestTimeSeriesTestFramework {
      */
     public void testIndexNameParsingFromResolvedPartitions() throws Exception {
         initializeTest(RESOLVED_PARTITIONS_INDEX_PARSING_REST_IT);
+        runBasicTest();
+    }
+
+    /**
+     * Runs the complete golden dataset test suite via REST API.
+     *
+     * @throws Exception if any test fails
+     */
+    public void testGoldenDataset() throws Exception {
+        initializeTest(GOLDEN_DATASET_REST_IT);
         runBasicTest();
     }
 }

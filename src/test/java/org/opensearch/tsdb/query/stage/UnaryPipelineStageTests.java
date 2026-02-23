@@ -101,7 +101,7 @@ public class UnaryPipelineStageTests extends OpenSearchTestCase {
         // Test the reduce method - should throw UnsupportedOperationException for unary stages
         UnsupportedOperationException exception = assertThrows(
             UnsupportedOperationException.class,
-            () -> stage.reduce(aggregations, false)
+            () -> stage.reduce(aggregations, false, null)
         );
 
         assertTrue("Exception message should contain class name", exception.getMessage().contains("TestUnaryPipelineStage"));

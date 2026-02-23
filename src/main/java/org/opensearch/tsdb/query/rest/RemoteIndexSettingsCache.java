@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.query.rest;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -562,10 +563,9 @@ public class RemoteIndexSettingsCache {
         Map<String, CacheKey> partitionToCacheKey,
         ActionListener<Map<String, IndexSettingsEntry>> listener
     ) {
+        // Extract index names from pre-computed cache keys (in scope for try and catch)
+        String[] indexNames = partitionToCacheKey.values().stream().map(CacheKey::indexName).toArray(String[]::new);
         try {
-            // Extract index names from pre-computed cache keys (avoiding recreation)
-            String[] indexNames = partitionToCacheKey.values().stream().map(CacheKey::indexName).toArray(String[]::new);
-
             logger.debug("Fetching settings from remote cluster '{}', indices: {}", clusterAlias, (Object) indexNames);
 
             // Get remote cluster client
@@ -593,15 +593,23 @@ public class RemoteIndexSettingsCache {
 
                 @Override
                 public void onFailure(Exception e) {
-                    String errorMsg = "Failed to fetch settings from remote cluster: " + clusterAlias;
-                    logger.error(errorMsg, e);
+                    String errorMsg = "Failed to fetch settings from remote cluster: "
+                        + clusterAlias
+                        + " indices "
+                        + Arrays.toString(indexNames)
+                        + ": "
+                        + e.getMessage();
                     listener.onFailure(new RuntimeException(errorMsg, e));
                 }
             });
 
         } catch (Exception e) {
-            String errorMsg = "Failed to fetch settings from remote cluster: " + clusterAlias;
-            logger.error(errorMsg, e);
+            String errorMsg = "Failed to fetch settings from remote cluster: "
+                + clusterAlias
+                + " indices "
+                + Arrays.toString(indexNames)
+                + ": "
+                + e.getMessage();
             listener.onFailure(new RuntimeException(errorMsg, e));
         }
     }

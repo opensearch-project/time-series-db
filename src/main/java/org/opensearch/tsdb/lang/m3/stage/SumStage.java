@@ -11,6 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.List;
@@ -49,9 +50,12 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "sum")
-public class SumStage extends AbstractGroupingSampleStage {
+public class SumStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "sum";
+
+    /** Cached shallow size of Double object used as aggregation state. */
+    private static final long STATE_SIZE = RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /**
      * Constructor for sum without label grouping (sums all time series together).
@@ -77,14 +81,16 @@ public class SumStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for sum
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return bucket + newSample.getValue();
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double sum = existing.getValue() + newSample.getValue();
-        return new FloatSample(existing.getTimestamp(), sum);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override
@@ -106,6 +112,11 @@ public class SumStage extends AbstractGroupingSampleStage {
     @Override
     protected boolean needsMaterialization() {
         return false; // Sum already works with FloatSample, no materialization needed
+    }
+
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
     }
 
     /**

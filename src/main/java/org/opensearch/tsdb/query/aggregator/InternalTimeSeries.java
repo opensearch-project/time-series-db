@@ -26,6 +26,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
+
 /**
  * Internal aggregation result for time series pipeline aggregators.
  *
@@ -166,6 +169,9 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
      * <li><strong>Without reduce stage:</strong> Merges time series by labels using {@link SampleMerger}</li>
      * </ul>
      *
+     * <p>Circuit breaker tracking is performed to protect coordinator nodes (including
+     * data cluster coordinators in CCS setups) from OOM conditions.</p>
+     *
      * @param aggregations the list of aggregations to reduce
      * @param reduceContext the context for the reduce operation
      * @return the reduced aggregation result
@@ -173,65 +179,81 @@ public class InternalTimeSeries extends InternalAggregation implements TimeSerie
      */
     @Override
     public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+        try (ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerConsumer.createConsumer(reduceContext)) {
+            // If we have a reduce stage, delegate directly to it (skip merging)
+            if (reduceStage != null) {
+                // Track ArrayList allocation for providers list
+                cbConsumer.accept(SampleList.ARRAYLIST_OVERHEAD);
 
-        // If we have a reduce stage, delegate directly to it (skip merging)
-        if (reduceStage != null) {
-            // Convert aggregations to TimeSeriesProvider list for the stage's reduce method
-            List<TimeSeriesProvider> timeSeriesProviders = new ArrayList<>();
-            for (InternalAggregation agg : aggregations) {
-                if (!(agg instanceof TimeSeriesProvider)) {
-                    throw new IllegalArgumentException("aggregation: " + agg + " is not a TimeSeriesProvider");
+                // Convert aggregations to TimeSeriesProvider list for the stage's reduce method
+                List<TimeSeriesProvider> timeSeriesProviders = new ArrayList<>(aggregations.size());
+                for (InternalAggregation agg : aggregations) {
+                    if (!(agg instanceof TimeSeriesProvider)) {
+                        throw new IllegalArgumentException("aggregation: " + agg + " is not a TimeSeriesProvider");
+                    }
+                    timeSeriesProviders.add((TimeSeriesProvider) agg);
                 }
-                timeSeriesProviders.add((TimeSeriesProvider) agg);
+
+                // Use the stage's own reduce method with circuit breaker tracking
+                return reduceStage.reduce(timeSeriesProviders, reduceContext.isFinalReduce(), cbConsumer);
             }
 
-            // Use the stage's own reduce method (each stage knows how to reduce its own results)
-            return reduceStage.reduce(timeSeriesProviders, reduceContext.isFinalReduce());
-        }
+            // No reduce stage - collect all time series from all aggregations and merge by labels
+            // Track HashMap base overhead
+            cbConsumer.accept(RamUsageConstants.HASHMAP_SHALLOW_SIZE);
 
-        // No reduce stage - collect all time series from all aggregations and merge by labels
-        Map<Labels, TimeSeries> mergedSeriesByLabels = new HashMap<>();
+            Map<Labels, TimeSeries> mergedSeriesByLabels = new HashMap<>();
 
-        for (InternalAggregation aggregation : aggregations) {
-            assert aggregation instanceof TimeSeriesProvider;
-            TimeSeriesProvider provider = (TimeSeriesProvider) aggregation;
-            List<TimeSeries> timeSeries = provider.getTimeSeries();
+            for (InternalAggregation aggregation : aggregations) {
+                if (!(aggregation instanceof TimeSeriesProvider)) {
+                    throw new IllegalArgumentException("aggregation: " + aggregation + " is not a TimeSeriesProvider");
+                }
+                TimeSeriesProvider provider = (TimeSeriesProvider) aggregation;
+                List<TimeSeries> timeSeries = provider.getTimeSeries();
 
-            for (TimeSeries series : timeSeries) {
-                // Use direct Labels comparison for better performance (no string conversion)
-                Labels seriesLabels = series.getLabels();
+                for (TimeSeries series : timeSeries) {
+                    // Use direct Labels comparison for better performance (no string conversion)
+                    Labels seriesLabels = series.getLabels();
 
-                TimeSeries existingSeries = mergedSeriesByLabels.get(seriesLabels);
-                if (existingSeries != null) {
-                    // Merge samples from same time series across segments using helper
-                    // Use assumeSorted=true for reduce operations as samples should be sorted
-                    SampleList mergedSamples = MERGE_HELPER.merge(
-                        existingSeries.getSamples(),
-                        series.getSamples(),
-                        true // assumeSorted - samples should be sorted in reduce phase
-                    );
+                    TimeSeries existingSeries = mergedSeriesByLabels.get(seriesLabels);
+                    if (existingSeries != null) {
+                        // Merge samples from same time series across segments using helper
+                        // Use assumeSorted=true for reduce operations as samples should be sorted
+                        SampleList mergedSamples = MERGE_HELPER.merge(
+                            existingSeries.getSamples(),
+                            series.getSamples(),
+                            true // assumeSorted - samples should be sorted in reduce phase
+                        );
 
-                    // Create new merged time series (reuse existing labels and metadata)
-                    TimeSeries mergedSeries = new TimeSeries(
-                        mergedSamples,
-                        existingSeries.getLabels(),
-                        existingSeries.getMinTimestamp(),
-                        existingSeries.getMaxTimestamp(),
-                        existingSeries.getStep(),
-                        existingSeries.getAlias()
-                    );
-                    mergedSeriesByLabels.put(seriesLabels, mergedSeries);
-                } else {
-                    // First occurrence of this time series
-                    mergedSeriesByLabels.put(seriesLabels, series);
+                        // Track merged samples memory
+                        cbConsumer.accept(mergedSamples.ramBytesUsed());
+
+                        // Create new merged time series (reuse existing labels and metadata)
+                        TimeSeries mergedSeries = new TimeSeries(
+                            mergedSamples,
+                            existingSeries.getLabels(),
+                            existingSeries.getMinTimestamp(),
+                            existingSeries.getMaxTimestamp(),
+                            existingSeries.getStep(),
+                            existingSeries.getAlias()
+                        );
+                        mergedSeriesByLabels.put(seriesLabels, mergedSeries);
+                    } else {
+                        // First occurrence of this time series - track HashMap entry + full series (labels + samples)
+                        cbConsumer.accept(RamUsageConstants.groupEntryBaseOverhead(seriesLabels) + series.ramBytesUsed());
+                        mergedSeriesByLabels.put(seriesLabels, series);
+                    }
                 }
             }
+
+            // Track result ArrayList allocation
+            cbConsumer.accept(SampleList.ARRAYLIST_OVERHEAD);
+
+            List<TimeSeries> combinedTimeSeries = new ArrayList<>(mergedSeriesByLabels.values());
+
+            // Return combined time series (no reduce stage)
+            return new InternalTimeSeries(name, combinedTimeSeries, metadata, null);
         }
-
-        List<TimeSeries> combinedTimeSeries = new ArrayList<>(mergedSeriesByLabels.values());
-
-        // Return combined time series (no reduce stage)
-        return new InternalTimeSeries(name, combinedTimeSeries, metadata, null);
     }
 
     /**

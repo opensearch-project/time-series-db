@@ -12,6 +12,7 @@ import org.opensearch.tsdb.core.head.ChunkOptions;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.head.MemSeriesReader;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.ByteLabels;
 
@@ -65,7 +66,7 @@ public class MMappedChunksManagerTests extends OpenSearchTestCase {
 
     private MemSeries createMemSeries(int chunkCount, long reference, String key, String labelValue) {
         Labels labels = ByteLabels.fromStrings(key, labelValue);
-        MemSeries series = new MemSeries(reference, labels);
+        MemSeries series = new MemSeries(reference, labels, SeriesEventListener.NOOP);
 
         ChunkOptions options = new ChunkOptions(8000, 8);
 

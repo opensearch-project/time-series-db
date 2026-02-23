@@ -205,4 +205,19 @@ public class IntegralStage implements UnaryPipelineStage {
     public int hashCode() {
         return Boolean.hashCode(resetOnNull);
     }
+
+    /**
+     * Estimate temporary memory overhead for integral (cumulative sum) calculations.
+     * IntegralStage creates new TimeSeries with new sample lists (reusing labels).
+     *
+     * <p>Delegates to {@link SampleList#ramBytesUsed()} for sample estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        return UnaryPipelineStage.estimateSampleReuseOverhead(input);
+    }
 }

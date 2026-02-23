@@ -287,6 +287,11 @@
             "type" : "moving",
             "interval" : 3600000,
             "function" : "sum"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -307,6 +312,11 @@
             "type" : "moving",
             "interval" : 3600000,
             "function" : "sum"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -331,6 +341,11 @@
           {
             "type" : "timeshift",
             "shift_amount" : "86400000ms"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -355,6 +370,11 @@
           {
             "type" : "timeshift",
             "shift_amount" : "172800000ms"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {

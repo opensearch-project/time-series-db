@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,7 +21,10 @@ import java.io.IOException;
  * @param min the minimum value
  * @param max the maximum value
  */
-public record MinMaxSample(long getTimestamp, double min, double max) implements Sample {
+public record MinMaxSample(long getTimestamp, double min, double max) implements Sample, Accountable {
+
+    /** Shallow size of a MinMaxSample record (object header + timestamp + min + max). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(MinMaxSample.class);
 
     @Override
     public ValueType valueType() {
@@ -93,11 +98,14 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     }
 
     @Override
-    public Sample merge(Sample other) {
-        if (!(other instanceof MinMaxSample otherMinMax)) {
-            throw new IllegalArgumentException("Cannot merge MinMaxSample with " + other.getClass().getSimpleName());
+    public MinMaxSample merge(Sample other) {
+        if (other instanceof MinMaxSample otherMinMax) {
+            return add(otherMinMax);
         }
-        return this.add(otherMinMax);
+        if (other.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return add(other.getValue());
+        }
+        throw new IllegalArgumentException("Cannot merge MinMaxSample with " + other.getClass().getSimpleName());
     }
 
     /**
@@ -121,9 +129,8 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     public static MinMaxSample fromSample(Sample sample) {
         if (sample instanceof MinMaxSample) {
             return (MinMaxSample) sample;
-        } else if (sample instanceof FloatSample) {
-            double value = ((FloatSample) sample).getValue();
-            return fromValue(sample.getTimestamp(), value);
+        } else if (sample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return fromValue(sample.getTimestamp(), sample.getValue());
         } else {
             throw new IllegalArgumentException("Unsupported sample type [" + sample.getClass() + "]");
         }
@@ -140,6 +147,11 @@ public record MinMaxSample(long getTimestamp, double min, double max) implements
     @Override
     public String toString() {
         return "MinMaxSample{" + "timestamp=" + getTimestamp + ", min=" + min + ", max=" + max + ", range=" + getRange() + '}';
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return SHALLOW_SIZE;
     }
 
     @Override

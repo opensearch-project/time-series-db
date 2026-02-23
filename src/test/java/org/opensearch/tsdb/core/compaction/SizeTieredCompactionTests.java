@@ -20,6 +20,7 @@ import org.opensearch.tsdb.MetadataStore;
 import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.TestUtils;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.core.model.ByteLabels;
@@ -102,7 +103,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0, 1, 2 }, new long[] { 1, 2, 3 });
         List<ClosedChunkIndex> result = compaction.plan(indexes);
         assertTrue(result.isEmpty());
@@ -128,7 +129,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0 }, new long[] { 1 });
 
         List<ClosedChunkIndex> result = compaction.plan(indexes);
@@ -156,7 +157,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
 
         // Three indexes within the first 6 hours (21600000 ms) where max - min = 6 hours
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0, 1, 2 }, new long[] { 1, 2, 3 });
 
         List<ClosedChunkIndex> result = compaction.plan(indexes);
@@ -184,7 +185,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
 
         // One index spans beyond the 6 time unit boundary
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { -11, 0, 1, 5 }, new long[] { -4, 1, 2, 6 });
         List<ClosedChunkIndex> result = compaction.plan(indexes);
         assertEquals(2, result.size()); // Should compact first two indexes, third index is out of range.
@@ -212,7 +213,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
         // Create indexes where the last one has a higher min time
         // First two span 0-4 hours (not exactly 6 hours), third is at 20-24 hours
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0, 1, 20 }, new long[] { 1, 2, 22 });
 
         List<ClosedChunkIndex> result = compaction.plan(indexes);
@@ -241,7 +242,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
             defaultSettings
         );
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { -10, -6, 0 }, new long[] { -9, -5, 1 });
 
         List<ClosedChunkIndex> result = compaction.plan(indexes);
@@ -270,7 +271,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
 
         // First range (18) has only one index, second range should be checked
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0, 20, 23 }, new long[] { 9, 23, 26 });
         List<ClosedChunkIndex> result = compaction.plan(indexes);
         // Since first index alone spans 0-18 (exactly 18), and others are in different range
@@ -298,7 +299,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
 
         // Indexes in completely different time ranges
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         List<ClosedChunkIndex> indexes = createIndexes(manager, series1, new long[] { 0, 6, 12 }, new long[] { 2, 8, 14 });
 
         List<ClosedChunkIndex> result = compaction.plan(indexes);
@@ -324,7 +325,7 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
             defaultSettings
         );
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
-        MemSeries series1 = new MemSeries(0, labels1);
+        MemSeries series1 = new MemSeries(0, labels1, SeriesEventListener.NOOP);
         var indexes = createIndexes(manager, series1, new long[] { 0, 1, 2 }, new long[] { 1, 2, 3 });
         manager.commitChangedIndexes(List.of(series1));
 
@@ -392,8 +393,8 @@ public class SizeTieredCompactionTests extends OpenSearchTestCase {
         // Create multiple series to test metadata handling
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         Labels labels2 = ByteLabels.fromStrings("label2", "value2");
-        MemSeries series1 = new MemSeries(100L, labels1);
-        MemSeries series2 = new MemSeries(200L, labels2);
+        MemSeries series1 = new MemSeries(100L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(200L, labels2, SeriesEventListener.NOOP);
 
         // Create indexes with chunks from both series
         for (int i = 0; i < 3; i++) {

@@ -19,6 +19,7 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.LabelConstants;
 import org.opensearch.tsdb.lang.m3.common.AggregationType;
+import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
@@ -47,6 +48,7 @@ import org.opensearch.tsdb.lang.m3.stage.HistogramPercentileStage;
 import org.opensearch.tsdb.lang.m3.stage.IntersectStage;
 import org.opensearch.tsdb.lang.m3.stage.KeepLastValueStage;
 import org.opensearch.tsdb.lang.m3.stage.LogarithmStage;
+import org.opensearch.tsdb.lang.m3.stage.MapKeyStage;
 import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
 import org.opensearch.tsdb.lang.m3.stage.OffsetStage;
@@ -61,12 +63,13 @@ import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
 import org.opensearch.tsdb.lang.m3.stage.IntegralStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
-import org.opensearch.tsdb.lang.m3.stage.HeadStage;
+import org.opensearch.tsdb.lang.m3.stage.SliceStage;
 import org.opensearch.tsdb.lang.m3.stage.ShowTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.SortStage;
 import org.opensearch.tsdb.lang.m3.stage.SqrtStage;
 import org.opensearch.tsdb.lang.m3.stage.SustainStage;
 import org.opensearch.tsdb.lang.m3.stage.SubtractStage;
+import org.opensearch.tsdb.lang.m3.stage.TagCompareStage;
 import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
 import org.opensearch.tsdb.lang.m3.stage.TopKStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
@@ -75,6 +78,7 @@ import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
 import org.opensearch.tsdb.lang.m3.stage.UnionStage;
+import org.opensearch.tsdb.lang.m3.stage.WhereStage;
 import org.opensearch.tsdb.lang.m3.stage.summarize.BucketMapper;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
@@ -84,11 +88,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -103,11 +109,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -150,7 +158,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     private final Stack<UnaryPipelineStage> stageStack; // accumulate stages per fetch pipeline
     private final M3OSTranslator.Params params;
     private final Context context;
-    private final boolean isRootVisitor; // true if this is the top-level visitor (not a child visitor)
+    private boolean needsTruncation = false;
+    private Long truncateStartTime = null;
 
     /**
      * Constructor for QueryComponentsVisitor.
@@ -158,7 +167,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
      * @param params params for query translation
      */
     public SourceBuilderVisitor(M3OSTranslator.Params params) {
-        this(params, Context.newContext(), true);
+        this(params, Context.newContext());
     }
 
     public static TSDBMetrics.MetricsInitializer getMetricsInitializer() {
@@ -170,12 +179,10 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
      *
      * @param params  params to inherit from parent
      * @param context context to inherit from parent
-     * @param isRootVisitor whether this is the root visitor (vs a child visitor for sub-plans)
      */
-    private SourceBuilderVisitor(M3OSTranslator.Params params, Context context, boolean isRootVisitor) {
+    private SourceBuilderVisitor(M3OSTranslator.Params params, Context context) {
         this.params = params;
         this.context = context;
-        this.isRootVisitor = isRootVisitor;
         this.stageStack = new Stack<>();
     }
 
@@ -187,29 +194,19 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Cumulative time shift applied by timeshift stages
         private long timeShift;
 
-        // Flag to track if time buffer was ever adjusted (non-zero)
-        private boolean timeBufferAdjusted;
-
-        // Adjusted truncate start time (may be earlier than query start due to summarize alignment)
-        private Long truncateStartTime; // null means not yet set, use query start time
         private final Map<CacheableUnfoldAggregation, String> cacheableUnfoldReferences;
 
-        private Context(long timeBuffer, long timeShift, boolean timeBufferAdjusted, Long truncateStartTime) {
+        private Context(long timeBuffer, long timeShift) {
             this.timeBuffer = timeBuffer;
             this.timeShift = timeShift;
-            this.timeBufferAdjusted = timeBufferAdjusted;
-            this.truncateStartTime = truncateStartTime;
             this.cacheableUnfoldReferences = new HashMap<>();
         }
 
         private static Context newContext() {
-            return new Context(0L, 0L, false, null);
+            return new Context(0L, 0L);
         }
 
         private void setTimeBuffer(long timeBuffer) {
-            if (timeBuffer > 0 && timeBuffer != this.timeBuffer) {
-                this.timeBufferAdjusted = true;
-            }
             this.timeBuffer = timeBuffer;
         }
 
@@ -223,21 +220,6 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
         private long getTimeShift() {
             return timeShift;
-        }
-
-        private boolean isTimeBufferAdjusted() {
-            return timeBufferAdjusted;
-        }
-
-        private void setTruncateStartTime(long truncateStartTime) {
-            // Only set if it's earlier than current value (or not yet set)
-            if (this.truncateStartTime == null || truncateStartTime < this.truncateStartTime) {
-                this.truncateStartTime = truncateStartTime;
-            }
-        }
-
-        private Long getTruncateStartTime() {
-            return truncateStartTime;
         }
     }
 
@@ -319,15 +301,36 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
+    public ComponentHolder visit(TagComparePlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new TagCompareStage(planNode.getOperator(), planNode.getTagKey(), planNode.getCompareValue()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(WherePlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new WhereStage(planNode.getOperator(), planNode.getTagKey1(), planNode.getTagKey2()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(MapKeyPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+        stageStack.add(new MapKeyStage(planNode.getOldKey(), planNode.getNewKey()));
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
     public ComponentHolder visit(FetchPlanNode planNode) {
-        // If this is the root visitor and time buffer was adjusted, add TruncateStage at the bottom of the stack
+        // If this visitor's pipeline needs truncation, add TruncateStage at the bottom of the stack
         // This ensures it executes LAST in the final coordinator pipeline
-        if (isRootVisitor && context.isTimeBufferAdjusted()) {
+        if (this.needsTruncation) {
             // Check if the first element in the stack is already a TruncateStage to avoid duplicates
             if (stageStack.isEmpty() || !(stageStack.get(0) instanceof TruncateStage)) {
                 // Use adjusted truncate start time if set (e.g., by summarize with alignToFrom=false)
                 // Otherwise use query start time
-                long truncateStart = context.getTruncateStartTime() != null ? context.getTruncateStartTime() : params.startTime();
+                long truncateStart = this.truncateStartTime != null ? this.truncateStartTime : params.startTime();
                 stageStack.add(0, new TruncateStage(truncateStart, params.endTime()));
             }
         }
@@ -470,6 +473,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Record the current buffer to re-set later.
         long originalTimeBuffer = context.getTimeBuffer();
 
+        this.needsTruncation = true;
+
         long window;
         if (planNode.isPointBased()) {
             // Point-based: moving N means N data points, so window = N * step
@@ -536,6 +541,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Record the current buffer to re-set later.
         long originalTimeBuffer = context.getTimeBuffer();
 
+        this.needsTruncation = true;
+
         // Get interval from plan node and convert to appropriate time unit
         long interval = getDurationAsLong(planNode.getInterval());
 
@@ -571,9 +578,20 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(HeadPlanNode planNode) {
         validateChildCountExact(planNode, 1);
 
-        // HeadStage is a coordinator-only stage
-        HeadStage headStage = new HeadStage(planNode.getLimit());
-        stageStack.add(headStage);
+        // Create SliceStage with HEAD mode
+        SliceStage sliceStage = new SliceStage(planNode.getLimit(), HeadTailMode.HEAD);
+        stageStack.add(sliceStage);
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(TailPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+
+        // Create SliceStage with TAIL mode
+        SliceStage sliceStage = new SliceStage(planNode.getLimit(), HeadTailMode.TAIL);
+        stageStack.add(sliceStage);
 
         return planNode.getChildren().getFirst().accept(this);
     }
@@ -618,7 +636,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             long adjustedStartTime = BucketMapper.calculateBucketStart(params.startTime(), interval, SummarizePlanNode.GO_ZERO_TIME_MILLIS);
 
             // Track this adjusted start time for TruncateStage
-            context.setTruncateStartTime(adjustedStartTime);
+            if (this.truncateStartTime == null || adjustedStartTime < this.truncateStartTime) {
+                this.truncateStartTime = adjustedStartTime;
+            }
         }
 
         stageStack.add(summarizeStage);
@@ -772,7 +792,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         for (int i = 0; i < planNode.getChildren().size(); i++) {
             M3PlanNode child = planNode.getChildren().get(i);
             // Create child visitors with isRootVisitor=false since these are sub-plans
-            childComponents[i] = new SourceBuilderVisitor(params, context, false).process(child);
+            childComponents[i] = new SourceBuilderVisitor(params, context).process(child);
         }
         ComponentHolder merged = ComponentHolder.merge(planNode.getId(), childComponents);
 
@@ -796,12 +816,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             stages.add(stageStack.pop());
         }
 
-        // Add TruncateStage at the end if time buffer was adjusted AND this is the root visitor
-        // This is the final coordinator for multi-fetch queries (union/binary operations)
-        if (isRootVisitor && context.isTimeBufferAdjusted()) {
-            // Use adjusted truncate start time if set (e.g., by summarize with alignToFrom=false)
-            // Otherwise use query start time
-            long truncateStart = context.getTruncateStartTime() != null ? context.getTruncateStartTime() : params.startTime();
+        // Add TruncateStage at the end if this visitor's pipeline needs truncation
+        if (this.needsTruncation) {
+            long truncateStart = this.truncateStartTime != null ? this.truncateStartTime : params.startTime();
             stages.add(new TruncateStage(truncateStart, params.endTime()));
         }
 

@@ -55,7 +55,6 @@ public class Constants {
             "divideWhen",
             "histogramCDF",
             "jainCP",
-            "mapKey",
             "mockFetch",
             "mockFetchLine",
             "mockFetchLinear",
@@ -72,12 +71,9 @@ public class Constants {
             "sustainedAbove",
             "sustainedBelow",
             "switch",
-            "tagCompare",
-            "tail",
             "timestamp",
             "toHistogram",
-            "toHistogramLinearBuckets",
-            "where"
+            "toHistogramLinearBuckets"
         );
 
         /**
@@ -116,6 +112,21 @@ public class Constants {
         public static final String TAG_SUB = "tagSub";
 
         /**
+         * tagCompare function name.
+         */
+        public static final String TAG_COMPARE = "tagCompare";
+
+        /**
+         * where function name.
+         */
+        public static final String WHERE = "where";
+
+        /**
+         * mapKey function name.
+         */
+        public static final String MAP_KEY = "mapKey";
+
+        /**
          * fallbackSeries function name.
          */
         public static final String FALLBACK_SERIES = "fallbackSeries";
@@ -139,6 +150,11 @@ public class Constants {
          * head function name.
          */
         public static final String HEAD = "head";
+
+        /**
+         * tail function name.
+         */
+        public static final String TAIL = "tail";
 
         /**
          * histogramPercentile function name.

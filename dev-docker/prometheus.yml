@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  # Scrape metrics from OpenTelemetry Collector's Prometheus exporter
+  # Note: otel-collector shares network namespace with opensearch, so we scrape from opensearch:9464
+  - job_name: 'opensearch-tsdb-otel'
+    scrape_protocols:
+      - OpenMetricsText1.0.0
+      - OpenMetricsText0.0.1
+      - PrometheusText0.0.4
+    static_configs:
+      - targets: ['opensearch:9464']
+        labels:
+          cluster: 'opensearch-tsdb-cluster'

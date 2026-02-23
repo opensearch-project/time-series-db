@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.core.model;
 
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
@@ -683,23 +684,15 @@ public class ByteLabelsTests extends OpenSearchTestCase {
     }
 
     /**
-     * Validate that ESTIMATED_MEMORY_OVERHEAD constant matches actual JVM object layout.
-     * This test uses JOL (Java Object Layout) to calculate the actual memory overhead
-     * and compares it with the hardcoded constant.
+     * Validate that SHALLOW_SIZE constant (from RamUsageEstimator) matches actual JVM object layout.
+     * This test uses JOL (Java Object Layout) to verify that RamUsageEstimator is accurate.
      *
-     * <p>If this test fails, it means:
-     * <ul>
-     *   <li>Fields were added/removed from ByteLabels without updating ESTIMATED_MEMORY_OVERHEAD</li>
-     *   <li>The JVM's object layout has changed (e.g., different JVM vendor/version)</li>
-     * </ul>
-     *
-     * <p><strong>To fix:</strong> Update ByteLabels.ESTIMATED_MEMORY_OVERHEAD to the value shown
-     * in the test failure message.
+     * <p>Since we now use RamUsageEstimator.shallowSizeOfInstance() which handles JVM detection
+     * automatically, this test serves as a cross-validation rather than a maintenance burden.</p>
      */
-    public void testEstimatedMemoryOverheadIsAccurate() {
+    public void testShallowSizeMatchesJvmLayout() {
         // Use JOL (Java Object Layout) to get actual memory layout
         org.openjdk.jol.info.ClassLayout byteLabelsLayout;
-        org.openjdk.jol.info.ClassLayout byteArrayLayout;
 
         try {
             // Create an empty ByteLabels instance
@@ -708,62 +701,71 @@ public class ByteLabelsTests extends OpenSearchTestCase {
             // Get the layout of the ByteLabels object
             byteLabelsLayout = org.openjdk.jol.info.ClassLayout.parseInstance(empty);
 
-            // Get the layout of the internal byte array
-            byte[] dataArray = empty.getDataForTesting();
-            byteArrayLayout = org.openjdk.jol.info.ClassLayout.parseInstance(dataArray);
+            // SHALLOW_SIZE should match the ByteLabels object instance size
+            long shallowSize = ByteLabels.getShallowSize();
+            long actualInstanceSize = byteLabelsLayout.instanceSize();
 
-            // Calculate actual overhead:
-            // - ByteLabels object size (includes object header + fields)
-            // - byte[] array header (does NOT include array data)
-            long actualOverhead = byteLabelsLayout.instanceSize() + byteArrayLayout.instanceSize();
-
-            long constantOverhead = ByteLabels.getEstimatedMemoryOverhead();
-
-            // Allow small variance for JVM-specific differences (alignment, compressed oops, etc.)
-            // Typically the difference should be 0, but allow up to 8 bytes for padding variations
+            // Allow small variance for JVM-specific differences
             long allowedDelta = 8;
-            long difference = Math.abs(actualOverhead - constantOverhead);
+            long difference = Math.abs(actualInstanceSize - shallowSize);
 
             if (difference > allowedDelta) {
                 fail(
                     String.format(
                         Locale.ROOT,
-                        "ESTIMATED_MEMORY_OVERHEAD constant (%d bytes) does not match actual JVM layout (%d bytes)!\n"
+                        "SHALLOW_SIZE from RamUsageEstimator (%d bytes) does not match JOL layout (%d bytes)!\n"
                             + "\n"
-                            + "ByteLabels object layout:\n%s\n"
-                            + "byte[] array layout:\n%s\n"
-                            + "\n"
-                            + "ACTION REQUIRED: Update ByteLabels.ESTIMATED_MEMORY_OVERHEAD to %d\n"
-                            + "\n"
-                            + "This usually happens when:\n"
-                            + "  1. Fields were added/removed from ByteLabels\n"
-                            + "  2. JVM version or vendor changed\n"
-                            + "  3. JVM flags changed (e.g., -XX:+UseCompressedOops)",
-                        constantOverhead,
-                        actualOverhead,
-                        byteLabelsLayout.toPrintable(),
-                        byteArrayLayout.toPrintable(),
-                        actualOverhead
+                            + "ByteLabels object layout:\n%s",
+                        shallowSize,
+                        actualInstanceSize,
+                        byteLabelsLayout.toPrintable()
                     )
                 );
             }
 
-            // Test passes - constant is accurate!
-            // Log the breakdown for documentation
+            // Test passes - RamUsageEstimator is accurate
             logger.info(
-                "ByteLabels memory overhead validation passed:\n"
-                    + "  ESTIMATED_MEMORY_OVERHEAD constant: {} bytes\n"
-                    + "  Actual JVM layout: {} bytes\n"
-                    + "  ByteLabels object: {} bytes\n"
-                    + "  byte[] array header: {} bytes",
-                constantOverhead,
-                actualOverhead,
-                byteLabelsLayout.instanceSize(),
-                byteArrayLayout.instanceSize()
+                "ByteLabels SHALLOW_SIZE validation passed:\n"
+                    + "  RamUsageEstimator SHALLOW_SIZE: {} bytes\n"
+                    + "  JOL instance size: {} bytes",
+                shallowSize,
+                actualInstanceSize
             );
 
         } catch (Exception e) {
-            fail("Failed to validate memory overhead using JOL: " + e.getMessage());
+            fail("Failed to validate SHALLOW_SIZE using JOL: " + e.getMessage());
         }
+    }
+
+    /**
+     * Tests that ramBytesUsed() returns a reasonable value and scales with data size.
+     */
+    public void testRamBytesUsedScalesWithDataSize() {
+        ByteLabels empty = ByteLabels.fromStrings();
+        ByteLabels small = ByteLabels.fromStrings("key", "value");
+        ByteLabels large = ByteLabels.fromMap(
+            Map.of("environment", "production", "region", "us-east-1", "service", "api-gateway", "version", "v1.2.3")
+        );
+
+        long emptySize = empty.ramBytesUsed();
+        long smallSize = small.ramBytesUsed();
+        long largeSize = large.ramBytesUsed();
+
+        assertTrue("Empty labels should have positive memory usage", emptySize > 0);
+        assertTrue("Small labels should use more memory than empty", smallSize > emptySize);
+        assertTrue("Large labels should use more memory than small", largeSize > smallSize);
+
+        // Memory difference should equal RamUsageEstimator.sizeOf() difference (which includes alignment)
+        byte[] emptyData = empty.getDataForTesting();
+        byte[] smallData = small.getDataForTesting();
+        byte[] largeData = large.getDataForTesting();
+
+        long expectedSmallVsEmpty = RamUsageEstimator.sizeOf(smallData) - RamUsageEstimator.sizeOf(emptyData);
+        long expectedLargeVsSmall = RamUsageEstimator.sizeOf(largeData) - RamUsageEstimator.sizeOf(smallData);
+
+        assertEquals("Memory difference should equal sizeOf difference", expectedSmallVsEmpty, smallSize - emptySize);
+        assertEquals("Memory difference should equal sizeOf difference", expectedLargeVsSmall, largeSize - smallSize);
+
+        logger.info("ramBytesUsed validation: empty={}, small={}, large={}", emptySize, smallSize, largeSize);
     }
 }

@@ -96,7 +96,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = sumStage.reduce(aggregations, true);
+        InternalAggregation result = sumStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -118,7 +118,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = sumStage.reduce(aggregations, false);
+        InternalAggregation result = sumStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -138,14 +138,14 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
 
     public void testReduceEmptyAggregation() throws Exception {
         // Test Empty Aggregation
-        assertThrows(IllegalArgumentException.class, () -> sumStage.reduce(Collections.emptyList(), false));
+        assertThrows(IllegalArgumentException.class, () -> sumStage.reduce(Collections.emptyList(), false, null));
 
         // Test with Aggregation with empty TS
         List<TimeSeriesProvider> aggregations_1 = List.of(
             new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
             new InternalTimeSeries("test2", Collections.emptyList(), Map.of())
         );
-        InternalAggregation result = sumStage.reduce(aggregations_1, false);
+        InternalAggregation result = sumStage.reduce(aggregations_1, false, null);
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
         TimeSeriesProvider provider = (TimeSeriesProvider) result;
@@ -157,7 +157,7 @@ public class SumStageTests extends AbstractWireSerializingTestCase<SumStage> {
             new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
             new InternalTimeSeries("test2", TEST_TIME_SERIES.subList(3, 5), Map.of())
         );
-        result = sumStage.reduce(aggregations_2, false);
+        result = sumStage.reduce(aggregations_2, false, null);
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
         provider = (TimeSeriesProvider) result;

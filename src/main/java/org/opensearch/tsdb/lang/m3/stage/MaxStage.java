@@ -11,6 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.List;
@@ -48,9 +49,12 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "max")
-public class MaxStage extends AbstractGroupingSampleStage {
+public class MaxStage extends AbstractGroupingSampleStage<Double> {
     /** The name identifier for this stage type. */
     public static final String NAME = "max";
+
+    /** Cached shallow size of Double object used as aggregation state. */
+    private static final long STATE_SIZE = RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /**
      * Constructor for max without label grouping (finds maximum across all time series together).
@@ -76,14 +80,16 @@ public class MaxStage extends AbstractGroupingSampleStage {
     }
 
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        return sample; // No transformation needed for max
+    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
+        if (bucket == null) {
+            return newSample.getValue();
+        }
+        return Math.max(bucket, newSample.getValue());
     }
 
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        double max = Math.max(existing.getValue(), newSample.getValue());
-        return new FloatSample(existing.getTimestamp(), max);
+    protected Sample bucketToSample(long timestamp, Double bucket) {
+        return new FloatSample(timestamp, bucket);
     }
 
     @Override
@@ -105,6 +111,11 @@ public class MaxStage extends AbstractGroupingSampleStage {
     @Override
     protected boolean needsMaterialization() {
         return false; // Max already works with FloatSample, no materialization needed
+    }
+
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
     }
 
     /**

@@ -11,9 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
@@ -92,24 +90,20 @@ public class AsPercentStage extends AbstractBinaryProjectionStage {
     }
 
     /**
-     * Process samples to calculate percentage. Both samples are guaranteed to be non-null.
+     * Process sample values to calculate percentage. Both values are guaranteed to be non-null.
      *
-     * @param leftSample The left sample (non-null)
-     * @param rightSample The right sample (non-null)
-     * @return A FloatSample with percentage value, or null if right value is 0
+     * @param leftValue The left value (non-null)
+     * @param rightValue The right value (non-null)
+     * @return percentage value, or NaN if right value is 0
      */
     @Override
-    protected Sample processSamples(Sample leftSample, Sample rightSample) {
-        double leftValue = leftSample.getValue();
-        double rightValue = rightSample.getValue();
-
+    protected Double processSampleValues(Double leftValue, Double rightValue) {
         // If right value is 0, return NaN
         if (rightValue == 0.0) {
-            return new FloatSample(leftSample.getTimestamp(), Float.NaN);
+            return Double.NaN;
         }
 
-        double percentage = (leftValue / rightValue) * 100.0;
-        return new FloatSample(leftSample.getTimestamp(), percentage);
+        return (leftValue / rightValue) * 100.0;
     }
 
     /**

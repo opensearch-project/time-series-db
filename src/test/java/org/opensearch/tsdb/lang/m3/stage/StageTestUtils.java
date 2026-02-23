@@ -9,6 +9,7 @@ package org.opensearch.tsdb.lang.m3.stage;
 
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
@@ -60,13 +61,13 @@ public final class StageTestUtils {
      * @return a new TimeSeries instance
      */
     public static TimeSeries createTimeSeries(String alias, Map<String, String> labels, List<Double> values) {
-        List<Sample> samples = new ArrayList<>();
+        FloatSampleList.Builder builder = new FloatSampleList.Builder();
         for (int i = 0; i < values.size(); i++) {
-            samples.add(new FloatSample(1000L + i * 1000, values.get(i)));
+            builder.add(1000L + i * 1000L, values.get(i));
         }
 
         Labels labelMap = labels.isEmpty() ? ByteLabels.emptyLabels() : ByteLabels.fromMap(labels);
-        return new TimeSeries(samples, labelMap, 1000L, 1000L + (values.size() - 1) * 1000, 1000L, alias);
+        return new TimeSeries(builder.build(), labelMap, 1000L, 1000L + (values.size() - 1) * 1000, 1000L, alias);
     }
 
     /**

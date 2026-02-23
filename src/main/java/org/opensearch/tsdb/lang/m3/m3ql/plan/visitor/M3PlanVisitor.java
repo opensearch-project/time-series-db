@@ -21,11 +21,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.RoundPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -40,11 +42,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 
 /**
  * Visitor for M3QL plan nodes.
@@ -139,6 +143,33 @@ public abstract class M3PlanVisitor<T> {
     }
 
     /**
+     * Visit method for TagComparePlanNode.
+     * @param planNode the TagComparePlanNode to visit
+     * @return the result of processing the TagComparePlanNode
+     */
+    public T visit(TagComparePlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for WherePlanNode.
+     * @param planNode the WherePlanNode to visit
+     * @return the result of processing the WherePlanNode
+     */
+    public T visit(WherePlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for MapKeyPlanNode.
+     * @param planNode the MapKeyPlanNode to visit
+     * @return the result of processing the MapKeyPlanNode
+     */
+    public T visit(MapKeyPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
      * Visit method for FallbackSeriesConstantPlanNode.
      * @param planNode the FallbackSeriesConstantPlanNode to visit
      * @return the result of processing the FallbackSeriesConstantPlanNode
@@ -180,6 +211,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the HeadPlanNode
      */
     public T visit(HeadPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for TailPlanNode.
+     * @param planNode the TailPlanNode to visit
+     * @return the result of processing the TailPlanNode
+     */
+    public T visit(TailPlanNode planNode) {
         return process(planNode);
     }
 

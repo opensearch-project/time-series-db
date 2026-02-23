@@ -36,6 +36,7 @@ import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.index.engine.TSDBTragicException;
 import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.index.metadata.SeriesMetadataManager;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.mapping.Constants;
@@ -161,16 +162,16 @@ public class LiveSeriesIndex implements Closeable {
 
     /**
      * Creates MemSeries in the given head based on references/labels stored in the index, as well as metadata in the LiveCommitData
-     *
-     * @param callback callback to load series into
+     * @param callback      callback to load series into
+     * @param eventListener event listener for chunk lifecycle events
      * @return the max reference seen
      */
-    public long loadSeriesFromIndex(SeriesLoader callback) {
+    public long loadSeriesFromIndex(SeriesLoader callback, SeriesEventListener eventListener) {
         DirectoryReader reader = null;
         try {
             reader = directoryReaderManager.acquire();
             IndexSearcher searcher = new IndexSearcher(reader);
-            return searcher.search(new MatchAllDocsQuery(), new SeriesLoadingCollectorManager(callback, labelStorageType));
+            return searcher.search(new MatchAllDocsQuery(), new SeriesLoadingCollectorManager(callback, labelStorageType, eventListener));
         } catch (Exception e) {
             throw ExceptionsHelper.convertToRuntime(e);
         } finally {

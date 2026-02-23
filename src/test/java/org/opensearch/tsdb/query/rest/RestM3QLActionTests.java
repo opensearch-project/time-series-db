@@ -7,25 +7,17 @@
  */
 package org.opensearch.tsdb.query.rest;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.HashSet;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.mockito.ArgumentCaptor;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
@@ -49,6 +41,13 @@ import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -543,6 +542,200 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
     }
 
+    // ========== CCS Minimize Roundtrips Parameter Tests ==========
+
+    /**
+     * Test that ccs_minimize_roundtrips defaults to true (OpenSearch default).
+     */
+    public void testCcsMinimizeRoundtripsDefaultTrue() throws Exception {
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertTrue("ccs_minimize_roundtrips should default to true", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that ccs_minimize_roundtrips can be explicitly set to false via request parameter.
+     */
+    public void testCcsMinimizeRoundtripsExplicitFalse() throws Exception {
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertFalse("ccs_minimize_roundtrips should be false", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "ccs_minimize_roundtrips", "false", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that ccs_minimize_roundtrips can be explicitly set to true via request parameter.
+     */
+    public void testCcsMinimizeRoundtripsExplicitTrue() throws Exception {
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertTrue("ccs_minimize_roundtrips should be true", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "ccs_minimize_roundtrips", "true", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that cluster setting tsdb_engine.query.ccs_minimize_roundtrips affects default behavior.
+     */
+    public void testCcsMinimizeRoundtripsClusterSettingDefaultFalse() throws Exception {
+        // Create a RestM3QLAction with ccs_minimize_roundtrips cluster setting set to false
+        Settings initialSettings = Settings.builder().put("tsdb_engine.query.ccs_minimize_roundtrips", false).build();
+        TSDBPlugin plugin = new TSDBPlugin();
+        ClusterSettings testClusterSettings = new ClusterSettings(
+            initialSettings,
+            plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
+        );
+        ClusterService mockClusterServiceForTest = mock(ClusterService.class);
+        IndexNameExpressionResolver mockResolverForTest = mock(IndexNameExpressionResolver.class);
+        RemoteIndexSettingsCache mockCacheForTest = mock(RemoteIndexSettingsCache.class);
+        RestM3QLAction actionWithSetting = new RestM3QLAction(
+            testClusterSettings,
+            mockClusterServiceForTest,
+            mockResolverForTest,
+            mockCacheForTest
+        );
+
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertFalse("ccs_minimize_roundtrips should default to cluster setting (false)", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        actionWithSetting.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that request parameter overrides cluster setting.
+     */
+    public void testCcsMinimizeRoundtripsRequestParamOverridesClusterSetting() throws Exception {
+        // Create a RestM3QLAction with ccs_minimize_roundtrips cluster setting set to false
+        Settings initialSettings = Settings.builder().put("tsdb_engine.query.ccs_minimize_roundtrips", false).build();
+        TSDBPlugin plugin = new TSDBPlugin();
+        ClusterSettings testClusterSettings = new ClusterSettings(
+            initialSettings,
+            plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
+        );
+        ClusterService mockClusterServiceForTest = mock(ClusterService.class);
+        IndexNameExpressionResolver mockResolverForTest = mock(IndexNameExpressionResolver.class);
+        RemoteIndexSettingsCache mockCacheForTest = mock(RemoteIndexSettingsCache.class);
+        RestM3QLAction actionWithSetting = new RestM3QLAction(
+            testClusterSettings,
+            mockClusterServiceForTest,
+            mockResolverForTest,
+            mockCacheForTest
+        );
+
+        NodeClient mockClient = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertTrue("ccs_minimize_roundtrips request param should override cluster setting", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "ccs_minimize_roundtrips", "true", "step", "10000"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        actionWithSetting.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    /**
+     * Test that ccs_minimize_roundtrips cluster setting can be dynamically updated.
+     */
+    public void testCcsMinimizeRoundtripsClusterSettingDynamicUpdate() throws Exception {
+        // Create a RestM3QLAction with ccs_minimize_roundtrips initially set to true
+        Settings initialSettings = Settings.builder().put("tsdb_engine.query.ccs_minimize_roundtrips", true).build();
+        TSDBPlugin plugin = new TSDBPlugin();
+        ClusterSettings testClusterSettings = new ClusterSettings(
+            initialSettings,
+            plugin.getSettings().stream().filter(Setting::hasNodeScope).collect(java.util.stream.Collectors.toCollection(HashSet::new))
+        );
+        ClusterService mockClusterServiceForTest = mock(ClusterService.class);
+        IndexNameExpressionResolver mockResolverForTest = mock(IndexNameExpressionResolver.class);
+        RemoteIndexSettingsCache mockCacheForTest = mock(RemoteIndexSettingsCache.class);
+        RestM3QLAction actionWithDynamicSetting = new RestM3QLAction(
+            testClusterSettings,
+            mockClusterServiceForTest,
+            mockResolverForTest,
+            mockCacheForTest
+        );
+
+        // First, verify that with ccs_minimize_roundtrips=true, the setting is respected
+        NodeClient mockClient1 = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertTrue("ccs_minimize_roundtrips should default to true", searchRequest.isCcsMinimizeRoundtrips());
+        });
+
+        FakeRestRequest request1 = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "step", "10000"))
+            .build();
+        FakeRestChannel channel1 = new FakeRestChannel(request1, true, 1);
+
+        actionWithDynamicSetting.handleRequest(request1, channel1, mockClient1);
+        assertThat(channel1.capturedResponse().status(), equalTo(RestStatus.OK));
+
+        // Now dynamically update the setting to false
+        testClusterSettings.applySettings(Settings.builder().put("tsdb_engine.query.ccs_minimize_roundtrips", false).build());
+
+        // Verify the updated setting is reflected
+        NodeClient mockClient2 = setupMockClientWithAssertion(searchRequest -> {
+            assertNotNull("SearchRequest should not be null", searchRequest);
+            assertFalse(
+                "ccs_minimize_roundtrips should now default to false after dynamic update",
+                searchRequest.isCcsMinimizeRoundtrips()
+            );
+        });
+
+        FakeRestRequest request2 = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_m3ql")
+            .withParams(Map.of("query", "fetch service:api", "step", "10000"))
+            .build();
+        FakeRestChannel channel2 = new FakeRestChannel(request2, true, 1);
+
+        actionWithDynamicSetting.handleRequest(request2, channel2, mockClient2);
+        assertThat(channel2.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
     // ========== Error Handling Tests ==========
 
     public void testInvalidM3QLQueryReturnsError() throws Exception {
@@ -984,7 +1177,10 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         // Using timeout() to handle any potential async delays in the handler
         verify(mockCounter, timeout(1000)).add(eq(1.0d), tagsCaptor.capture());
         Tags capturedTags = tagsCaptor.getValue();
-        assertThat(capturedTags.getTagsMap(), equalTo(Map.of("pushdown", "true", "reached_step", "search", "explain", "false")));
+        assertThat(
+            capturedTags.getTagsMap(),
+            equalTo(Map.of("pushdown", "true", "reached_step", "search", "explain", "false", "ccs_minimize_roundtrips", "true"))
+        );
 
         // Cleanup
         TSDBMetrics.cleanup();
@@ -1018,7 +1214,10 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         // Verify counter was incremented and capture tags
         // Using timeout() to handle any potential async delays in the handler
         verify(mockCounter, timeout(1000)).add(eq(1.0d), assertArg(tags -> {
-            assertThat(tags.getTagsMap(), equalTo(Map.of("explain", "true", "pushdown", "true", "reached_step", "explain")));
+            assertThat(
+                tags.getTagsMap(),
+                equalTo(Map.of("explain", "true", "pushdown", "true", "reached_step", "explain", "ccs_minimize_roundtrips", "unknown"))
+            );
         }));
 
         // Cleanup
@@ -1053,7 +1252,21 @@ public class RestM3QLActionTests extends OpenSearchTestCase {
         // Verify counter was incremented and capture tags
         // Using timeout() to handle any potential async delays in the handler
         verify(mockCounter, timeout(1000)).add(eq(1.0d), assertArg(tags -> {
-            assertThat(tags.getTagsMap(), equalTo(Map.of("explain", "false", "pushdown", "true", "reached_step", "error__missing_query")));
+            assertThat(
+                tags.getTagsMap(),
+                equalTo(
+                    Map.of(
+                        "explain",
+                        "false",
+                        "pushdown",
+                        "true",
+                        "reached_step",
+                        "error__missing_query",
+                        "ccs_minimize_roundtrips",
+                        "unknown"
+                    )
+                )
+            );
         }));
 
         // Cleanup

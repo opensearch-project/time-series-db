@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,7 +21,10 @@ import java.io.IOException;
  * with associated floating-point values. Provides efficient storage and access
  * for numeric time series data.
  */
-public class FloatSample implements Sample {
+public class FloatSample implements Sample, Accountable {
+
+    /** Shallow size of a FloatSample instance (object header + two longs). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(FloatSample.class);
 
     private final long timestamp;
     private final double value;
@@ -103,6 +108,11 @@ public class FloatSample implements Sample {
     @Override
     public int hashCode() {
         return java.util.Objects.hash(timestamp, value);
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return SHALLOW_SIZE;
     }
 
     @Override

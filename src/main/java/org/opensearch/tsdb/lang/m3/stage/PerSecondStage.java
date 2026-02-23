@@ -153,4 +153,19 @@ public class PerSecondStage implements UnaryPipelineStage {
     public int hashCode() {
         return PerSecondStage.class.hashCode();
     }
+
+    /**
+     * Estimate temporary memory overhead for per-second rate calculations.
+     * PerSecondStage creates new TimeSeries with new sample lists (reusing labels).
+     *
+     * <p>Delegates to {@link SampleList#ramBytesUsed()} for sample estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        return UnaryPipelineStage.estimateSampleReuseOverhead(input);
+    }
 }

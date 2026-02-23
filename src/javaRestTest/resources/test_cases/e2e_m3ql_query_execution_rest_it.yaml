@@ -451,6 +451,47 @@ test_case:
       expected:
         status: "success"
         data: []
+    - name: "tagCompare - lexicographic filter on name tag"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch method:GET | tagCompare \"<=\" \"name:http_requests_total_A\""
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_A", method: "GET", status: "200" }
+            values: [1,2,3,4,5,6,7,8,9,10,11,12]
+    - name: "where - neq filter comparing method and status tags"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch method:GET | where neq method status"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_A", method: "GET", status: "200" }
+            values: [1,2,3,4,5,6,7,8,9,10,11,12]
+          - metric: { name: "http_requests_total_B", method: "GET", status: "200" }
+            values: [2,4,6,8,10,8,6,4,2,14,12,10]
+    - name: "mapKey - rename method to method_type"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch name:http_requests_total_A | mapKey method method_type"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_A", method_type: "GET", status: "200" }
+            values: [1,2,3,4,5,6,7,8,9,10,11,12]
     - name: "maxSeries baseline with asPercent and percentileOfSeries"
       type: "m3ql"
       query: "a = fetch method:{GET,POST} | maxSeries; fetch method:{GET,POST}| asPercent(a) | percentileOfSeries 80 false"

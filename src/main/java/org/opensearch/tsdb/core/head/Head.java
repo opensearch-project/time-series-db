@@ -21,7 +21,6 @@ import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.core.index.live.LiveSeriesIndex;
 import org.opensearch.tsdb.core.index.live.MemChunkReader;
-import org.opensearch.tsdb.core.index.live.SeriesLoader;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
@@ -41,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Head storage implementation for active time series data.
@@ -55,7 +55,11 @@ public class Head implements Closeable {
     private final long oooCutoffWindow;
     private final Logger log;
     private final LiveSeriesIndex liveSeriesIndex;
+
+    // SeriesMap should not be directly updated if ingestion is on-going
+    // TODO: move SeriesMap under SeriesStore to prevent out-of-band create/update/delete operations
     private final SeriesMap seriesMap;
+    private final SeriesStore seriesStore;
     private final ClosedChunkIndexManager closedChunkIndexManager;
     private final ShardId shardId;
     private final Tags metricTags;
@@ -66,6 +70,32 @@ public class Head implements Closeable {
     // This will be used to track when a new chunk boundary is crossed to determine total closeable chunks.
     private volatile long lastProcessedChunkBoundary = 0;
     private volatile int cachedChunksToProcess = 0;
+
+    // Counters to track chunk activities.
+    private final AtomicLong createdChunksCount = new AtomicLong(0);
+    private final AtomicLong closedChunksCount = new AtomicLong(0);
+
+    /**
+     * Singleton event listener implementation for tracking chunk lifecycle events.
+     */
+    private final SeriesEventListener eventListener = new SeriesEventListener() {
+        @Override
+        public void onChunksCreated(long count) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksCreated, count);
+            createdChunksCount.addAndGet(count);
+        }
+
+        @Override
+        public void onChunksClosed(long count) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksClosedTotal, count, metricTags);
+            closedChunksCount.addAndGet(count);
+        }
+
+        @Override
+        public void onChunksExpired(long count) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksExpiredTotal, count);
+        }
+    };
 
     /**
      * Constructs a new Head instance.
@@ -104,6 +134,7 @@ public class Head implements Closeable {
                 throw new RuntimeException("Failed to initialize the live series index", e);
             }
 
+            seriesStore = new SeriesStore(seriesMap, this::getLiveSeriesIndex, eventListener);
             this.closedChunkIndexManager = closedChunkIndexManager;
 
             // rebuild in-memory state
@@ -171,120 +202,50 @@ public class Head implements Closeable {
      * @return the series and whether it was newly created (or upgraded from stub)
      */
     public SeriesResult getOrCreateSeries(long hash, Labels labels, long timestamp) {
-        MemSeries existingSeries = seriesMap.getByReference(hash);
-        boolean isFailedSeries = existingSeries != null && existingSeries.isFailed();
         boolean hasLabels = labels != null && !labels.isEmpty();
+        long minTimestampForDoc = hasLabels ? timestamp - oooCutoffWindow : 0L;
+        SeriesStore.SeriesOpResult result = seriesStore.getOrCreateSeries(hash, labels, minTimestampForDoc);
 
-        // Handle existing series (upgrade stub if needed, or return as-is)
-        if (existingSeries != null && !isFailedSeries) {
-            // If it's a stub series and we now have labels, upgrade it
-            if (existingSeries.isStub() && hasLabels) {
-                return upgradeStubSeriesWithLabels(existingSeries, hash, labels, timestamp);
-            }
-            // Series exists and is valid, return it
-            return new SeriesResult(existingSeries, false);
+        if (result.stubCreated()) {
+            log.info(
+                "Incrementing stub series count: ref={}, labels=null (stub), currentStubCount={}",
+                hash,
+                seriesMap.getStubSeriesCount()
+            );
         }
 
-        // Create new series (stub if no labels, normal if has labels)
-        MemSeries newSeries = hasLabels ? new MemSeries(hash, labels) : new MemSeries(hash, null, true);
-        MemSeries actualSeries = seriesMap.putIfAbsent(newSeries);
-        boolean isNewSeriesCreated = actualSeries == newSeries;
-
-        try {
-            if (isNewSeriesCreated) {
-                if (hasLabels) {
-                    // Normal series: add to live index
-                    // MIN_TIMESTAMP is set to (sample_timestamp - OOO_cutoff) to allow retrieval of late-arriving samples.
-                    long minTimestampForDoc = timestamp - oooCutoffWindow;
-                    liveSeriesIndex.addSeries(labels, hash, minTimestampForDoc);
-                    TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesCreated, 1, metricTags);
-                } else {
-                    // Stub series created: increment counter
-                    seriesMap.incrementStubSeriesCount();
-                    log.info(
-                        "Incrementing stub series count: ref={}, labels=null (stub), currentStubCount={}",
-                        hash,
-                        seriesMap.getStubSeriesCount()
-                    );
-                }
-                return new SeriesResult(newSeries, true);
-            } else {
-                return new SeriesResult(actualSeries, false);
-            }
-        } catch (Exception e) {
-            if (isNewSeriesCreated) {
-                markSeriesAsFailed(actualSeries);
-            }
-            throw e;
+        if (result.stubUpgraded()) {
+            log.info(
+                "Decrementing stub series count: ref={}, labels={}, currentStubCount={}",
+                hash,
+                labels,
+                seriesMap.getStubSeriesCount()
+            );
+            log.info("Upgraded stub series with labels: ref={}, labels={}, minTimestampForDoc={}", hash, labels, minTimestampForDoc);
         }
-    }
 
-    /**
-     * Upgrades a stub series with labels and adds it to the LiveSeriesIndex.
-     *
-     * @param series the stub series to upgrade
-     * @param hash the series reference hash
-     * @param labels the labels to add to the series
-     * @param timestamp the timestamp to use if no chunks exist yet
-     * @return SeriesResult with created=true to indicate labels should be persisted
-     */
-    private SeriesResult upgradeStubSeriesWithLabels(MemSeries series, long hash, Labels labels, long timestamp) {
-        try {
-            series.lock();
-            try {
-                series.upgradeWithLabels(labels);
-                // Decrement stub series counter since stub is now upgraded
-                seriesMap.decrementStubSeriesCount();
-                log.info(
-                    "Decrementing stub series count: ref={}, labels={}, currentStubCount={}",
-                    hash,
-                    labels,
-                    seriesMap.getStubSeriesCount()
-                );
-                // MIN_TIMESTAMP is set to (sample_timestamp - OOO_cutoff) to allow retrieval of late-arriving samples.
-                long minTimestampForDoc = timestamp - oooCutoffWindow;
-                liveSeriesIndex.addSeries(labels, hash, minTimestampForDoc);
-                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesCreated, 1, metricTags);
-                log.info("Upgraded stub series with labels: ref={}, labels={}, minTimestampForDoc={}", hash, labels, minTimestampForDoc);
-            } finally {
-                series.unlock();
-            }
-            return new SeriesResult(series, true);
-        } catch (Exception e) {
-            markSeriesAsFailed(series);
-            throw e;
+        if (result.created() && hasLabels) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesCreated, 1, metricTags);
         }
+
+        return new SeriesResult(result.series(), result.created());
     }
 
     /**
      * Marks a series as failed and removes from the SeriesMap.
      */
     public void markSeriesAsFailed(MemSeries series) {
-        // Attempt to remove the failed series from the live index. Do not block on this if it results in failure,
-        // as eventually they will be cleaned up even otherwise.
-        // First attempt to delete the series, before removing it from the seriesMap. As soon as it is deleted from the
-        // seriesMap, there is possibility of a new series attempted to be inserted into the live index.
-        try {
-            liveSeriesIndex.removeSeries(List.of(series.getReference()));
-        } catch (Exception e) {
-            // Suppress the exception. Unused series will be cleaned up from the head eventually.
-            log.error("Failed to remove series from live series index", e);
+        SeriesStore.FailedSeriesResult result = seriesStore.markSeriesAsFailed(series);
+        if (result.liveSeriesIndexRemoveFailure() != null) {
+            log.error("Failed to remove series from live series index", result.liveSeriesIndexRemoveFailure());
         }
-
-        // If this is a stub series, decrement the counter before removing
-        if (series.isStub()) {
-            seriesMap.decrementStubSeriesCount();
+        if (result.wasStub()) {
             log.info(
                 "Decrementing stub series count (failed series): ref={}, labels=null (stub), currentStubCount={}",
                 series.getReference(),
                 seriesMap.getStubSeriesCount()
             );
         }
-
-        // remove failed series from the seriesMap and mark it as deleted
-        seriesMap.delete(series);
-        series.markFailed();
-        series.markPersisted();
     }
 
     /**
@@ -293,26 +254,7 @@ public class Head implements Closeable {
      * @param series the deleted series to clean up
      */
     void cleanupDeletedSeries(MemSeries series) {
-        if (!series.isDeleted()) {
-            return;
-        }
-
-        series.lock();
-        try {
-            // Check if this series is still in the map - another thread may have already cleaned it up
-            if (seriesMap.getByReference(series.getReference()) != series) {
-                return; // Already cleaned up or replaced
-            }
-
-            try {
-                liveSeriesIndex.removeSeries(List.of(series.getReference()));
-                seriesMap.delete(series);
-            } catch (Exception e) {
-                throw new TSDBTragicException("Failed to remove deleted series from live series index: ref=" + series.getReference(), e);
-            }
-        } finally {
-            series.unlock();
-        }
+        seriesStore.cleanupDeletedSeries(series);
     }
 
     /**
@@ -327,7 +269,7 @@ public class Head implements Closeable {
     /**
      * Closes all MemChunks in the head that will not have new samples added.
      *
-     * @param allowDropEmptySeries whether to allow dropping empty series after closing chunks
+     * @param allowDropEmptySeries                 whether to allow dropping empty series after closing chunks
      * @param maxCloseableChunksPerFlushPercentage percentage of closeable chunks to close in this flush operation. A value of 100 disables rate limiting.
      * @return the minimum sequence number of all in-memory samples after closing chunks, or Long.MAX_VALUE if all in-memory chunks are closed
      */
@@ -367,8 +309,6 @@ public class Head implements Closeable {
             closedSeries = dropEmptySeries(indexChunksResult.minSeqNo());
         }
 
-        // Record push-based counters (pull-based gauges registered separately via TSDBEngine.registerHeadGauges)
-        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksClosedTotal, indexChunksResult.numClosedChunks(), metricTags);
         if (closedSeries > 0) {
             TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.seriesClosedTotal, closedSeries, metricTags);
         }
@@ -387,10 +327,17 @@ public class Head implements Closeable {
     /**
      * Calculates the cutoff timestamp for determining which chunks are closeable.
      * Chunks with max timestamp before this cutoff are eligible for closing.
+     * <p>
+     * If no samples have been ingested yet (maxTime == Long.MIN_VALUE), returns Long.MIN_VALUE
+     * to avoid underflow when subtracting oooCutoffWindow.
      *
-     * @return the cutoff timestamp (maxTime - oooCutoffWindow)
+     * @return the cutoff timestamp (maxTime - oooCutoffWindow), or Long.MIN_VALUE if no samples ingested
      */
-    private long getCutoffTimestamp() {
+    long getCutoffTimestamp() {
+        if (maxTime == Long.MIN_VALUE) {
+            // No samples ingested yet, return Long.MIN_VALUE to avoid underflow
+            return Long.MIN_VALUE;
+        }
         return maxTime - oooCutoffWindow;
     }
 
@@ -417,10 +364,10 @@ public class Head implements Closeable {
      * (say t + 20 min, with 20 min chunk range), 100 chunks will be attempted to close till next chunk range is reached (t + 40 min). At t + 40 min,
      * the target number of closeable chunks is recomputed based on the new total number of closeable chunks.
      *
-     * @param seriesList the list of MemSeries to process
-     * @param allowDropStubSeries whether to allow deleting orphaned stub series
+     * @param seriesList                           the list of MemSeries to process
+     * @param allowDropStubSeries                  whether to allow deleting orphaned stub series
      * @param maxCloseableChunksPerFlushPercentage percentage of closeable chunks to close
-     * @param cutoffTimestamp the cutoff timestamp for determining closeable chunks (maxTime - oooCutoffWindow)
+     * @param cutoffTimestamp                      the cutoff timestamp for determining closeable chunks (maxTime - oooCutoffWindow)
      * @return the result containing closed chunks and the minimum sequence number of in-memory samples
      */
     private IndexChunksResult indexCloseableChunks(
@@ -442,12 +389,12 @@ public class Head implements Closeable {
             if (series.isStub()) {
                 if (allowDropStubSeries) {
                     // After recovery completes, delete orphaned stub series
-                    log.error(
-                        "Deleting orphaned stub series during flush: ref={}. This indicates incomplete recovery data.",
-                        series.getReference()
-                    );
-                    seriesMap.decrementStubSeriesCount();
-                    seriesMap.delete(series);
+                    if (seriesStore.deleteStubSeries(series)) {
+                        log.error(
+                            "Deleting orphaned stub series during flush: ref={}. This indicates incomplete recovery data.",
+                            series.getReference()
+                        );
+                    }
                 } else {
                     // During early flush cycles, skip stub series (recovery may still be in progress)
                     log.warn("Skipping stub series during flush: ref={}", series.getReference());
@@ -480,19 +427,32 @@ public class Head implements Closeable {
         int deferredChunks = 0;
 
         if (maxCloseableChunksPerFlushPercentage < 100 && !allCloseableChunks.isEmpty()) {
-            // Recalculate target if new chunk boundary crossed or no cached value exists
-            if (cachedChunksToProcess == 0 || boundaryJustCrossed) {
-                cachedChunksToProcess = Math.max(1, (allCloseableChunks.size() * maxCloseableChunksPerFlushPercentage) / 100);
+            // Always compute the new closeable chunk target based on current closeable chunks count
+            int newChunksToProcess = Math.max(1, (allCloseableChunks.size() * maxCloseableChunksPerFlushPercentage) / 100);
 
-                if (boundaryJustCrossed) {
+            if (boundaryJustCrossed) {
+                // Boundary crossed: always use the new value
+                cachedChunksToProcess = newChunksToProcess;
+                lastProcessedChunkBoundary = currentBoundary;
+                log.debug(
+                    "Chunk boundary crossed (boundary timestamp: {}). Recalculated chunk close target: {} chunks per flush ({}% of {} closeable chunks)",
+                    currentBoundary,
+                    cachedChunksToProcess,
+                    maxCloseableChunksPerFlushPercentage,
+                    allCloseableChunks.size()
+                );
+            } else {
+                // Same boundary: use max of existing and new value to handle growth in closeable chunks
+                int previousCachedValue = cachedChunksToProcess;
+                cachedChunksToProcess = Math.max(cachedChunksToProcess, newChunksToProcess);
+                if (cachedChunksToProcess > previousCachedValue) {
                     log.debug(
-                        "Chunk boundary crossed (boundary timestamp: {}). Recalculated chunk close target: {} chunks per flush ({}% of {} closeable chunks)",
-                        currentBoundary,
+                        "Closeable chunks increased within boundary. Updated chunk close target: {} -> {} chunks per flush ({}% of {} closeable chunks)",
+                        previousCachedValue,
                         cachedChunksToProcess,
                         maxCloseableChunksPerFlushPercentage,
                         allCloseableChunks.size()
                     );
-                    lastProcessedChunkBoundary = currentBoundary;
                 }
             }
 
@@ -542,6 +502,8 @@ public class Head implements Closeable {
                 totalClosedChunks++;
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            } finally {
+                eventListener.onChunksClosed(totalClosedChunks);
             }
         }
 
@@ -578,48 +540,17 @@ public class Head implements Closeable {
      * Result of indexing closeable chunks operation.
      *
      * @param seriesRefToClosedChunks map of MemSeries references to the set of MemChunks that were successfully indexed and should be dropped from memory
-     * @param minSeqNo             minimum sequence number among all remaining in-memory (non-closed) samples, or Long.MAX_VALUE if all chunks were closed
-     * @param numClosedChunks      total count of MemChunks that were closed and indexed
-     * @param minTimestamp         minimum timestamp among all remaining in-memory (non-closed) samples, or Long.MAX_VALUE if all chunks were closed
-     * @param deferredChunkCount   number of chunks that were closeable but deferred due to rate limiting
+     * @param minSeqNo                minimum sequence number among all remaining in-memory (non-closed) samples, or Long.MAX_VALUE if all chunks were closed
+     * @param numClosedChunks         total count of MemChunks that were closed and indexed
+     * @param minTimestamp            minimum timestamp among all remaining in-memory (non-closed) samples, or Long.MAX_VALUE if all chunks were closed
+     * @param deferredChunkCount      number of chunks that were closeable but deferred due to rate limiting
      */
     public record IndexChunksResult(Map<Long, Set<MemChunk>> seriesRefToClosedChunks, long minSeqNo, int numClosedChunks, long minTimestamp,
         int deferredChunkCount) {
     }
 
     private int dropEmptySeries(long minSeqNoToKeep) {
-
-        List<Long> refs = new ArrayList<>();
-        List<MemSeries> allSeries = seriesMap.getSeriesMap();
-        for (MemSeries series : allSeries) {
-            series.lock();
-            try {
-                if (series.getMaxSeqNo() >= minSeqNoToKeep) {
-                    continue; // cannot gc series that must be loaded for translog replay
-                }
-
-                // Atomically try to mark series as deleted (only succeeds if refCount == 0)
-                if (!series.tryMarkDeleted()) {
-                    continue; // Has active references, skip
-                }
-
-                // TODO: Consider proactively removing MemSeries with no chunks. Currently translog replay requires all series that may be
-                // appended to be present, and LiveSeriesIndex is used to load them on server start. If we remove them here, it
-                // doesn't change the peak memory usage that would be seen after load. However, can reduce the memory footprint
-                // during normal operation, and if we load series on demand during translog replay then overall usage can be reduced.
-                refs.add(series.getReference());
-                seriesMap.delete(series);
-            } finally {
-                series.unlock();
-            }
-        }
-
-        try {
-            liveSeriesIndex.removeSeries(refs);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return refs.size();
+        return seriesStore.dropEmptySeries(minSeqNoToKeep);
     }
 
     /**
@@ -653,6 +584,15 @@ public class Head implements Closeable {
     }
 
     /**
+     * Get the total count of open (not yet closed) memory chunks across all series.
+     *
+     * @return count of open chunks, or 0 if no series exist
+     */
+    public long getNumOpenChunks() {
+        return Math.max(0, createdChunksCount.get() - closedChunksCount.get());
+    }
+
+    /**
      * Closes the head, flushing any pending writes to disk and writing a snapshot of the head state. Assumes that writes have stopped
      * before this is called.
      *
@@ -663,22 +603,11 @@ public class Head implements Closeable {
     }
 
     private void loadSeries() {
-        liveSeriesIndex.loadSeriesFromIndex(new HeadSeriesLoader());
+        seriesStore.loadSeriesFromIndex();
         log.info("Loaded {} series into head", getNumSeries());
 
-        liveSeriesIndex.updateSeriesFromCommitData(new SeqNoUpdater());
+        seriesStore.updateSeriesFromCommitData(new SeqNoUpdater());
         closedChunkIndexManager.updateSeriesFromCommitData(new MMapTimestampUpdater());
-    }
-
-    /**
-     * Callback for loading series from the live index into memory.
-     */
-    private class HeadSeriesLoader implements SeriesLoader {
-        @Override
-        public void load(MemSeries series) {
-            seriesMap.add(series);
-            series.markPersisted(); // a series loaded from index is considered persisted
-        }
     }
 
     /**
@@ -850,12 +779,12 @@ public class Head implements Closeable {
          * The failureCallback is executed in case of errors. Note that callback and failureCallback are mutually exclusive,
          * and will not be executed together.
          *
-         * @param context  the append context containing options for chunk management
-         * @param callback optional callback to execute under lock after appending the sample, this persists the series' labels
+         * @param context         the append context containing options for chunk management
+         * @param callback        optional callback to execute under lock after appending the sample, this persists the series' labels
          * @param failureCallback callback to execute in case of errors
          * @return true if sample was appended, false otherwise
          * @throws InterruptedException if the thread is interrupted while waiting for the series lock (append failed)
-         * @throws RuntimeException if series creation or translog write fails
+         * @throws RuntimeException     if series creation or translog write fails
          */
         protected boolean appendSample(AppendContext context, Runnable callback, Runnable failureCallback) throws InterruptedException {
             if (series == null) {
@@ -863,6 +792,8 @@ public class Head implements Closeable {
                 throw new RuntimeException("Append failed due to missing series");
             }
 
+            RuntimeException callbackFailure = null;
+            boolean appended = false;
             try {
                 if (!seriesCreated) {
                     // if this thread did not create the series, wait to ensure the series' labels are persisted to the translog
@@ -878,14 +809,21 @@ public class Head implements Closeable {
                 series.lock();
                 try {
                     // Execute the callback to write to translog under the series lock.
-                    executeCallback(callback, failureCallback);
-
-                    if (sample == null) {
-                        return false;
+                    try {
+                        executeCallback(callback, failureCallback);
+                    } catch (RuntimeException e) {
+                        callbackFailure = e;
                     }
 
-                    series.append(seqNo, sample.getTimestamp(), sample.getValue(), context.options());
-                    return true;
+                    if (callbackFailure == null) {
+                        if (sample == null) {
+                            appended = false;
+                        } else {
+                            series.append(seqNo, sample.getTimestamp(), sample.getValue(), context.options());
+                            appended = true;
+                        }
+                    }
+
                 } finally {
                     series.unlock();
                 }
@@ -893,6 +831,17 @@ public class Head implements Closeable {
                 // Decrement reference count after the append operation completes (success or failure)
                 series.decRef();
             }
+
+            if (callbackFailure != null) {
+                if (seriesCreated) {
+                    // Important: markSeriesAsFailed acquires refLock then series.lock (SeriesStore);
+                    // only call it after releasing series.lock to preserve lock order and avoid deadlocks.
+                    head.markSeriesAsFailed(this.series);
+                }
+                throw callbackFailure;
+            }
+
+            return appended;
         }
 
         /**
@@ -904,8 +853,8 @@ public class Head implements Closeable {
                 callback.run();
             } catch (Exception e) {
                 if (seriesCreated) {
-                    // this thread created the series, mark it as failed
-                    head.markSeriesAsFailed(this.series);
+                    // Mark failed before releasing the latch so other threads observe the failure.
+                    series.markFailed();
                 }
 
                 if (e instanceof TSDBTragicException == false) {

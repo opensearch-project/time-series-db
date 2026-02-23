@@ -1,0 +1,49 @@
+# Build artifacts
+.gradle
+build/*
+!build/distributions/tsdb-*.zip
+!build/distributions/telemetry-otel-*.zip
+bin
+out
+
+# Custom OpenSearch TAR (needed for Dockerfile.custom)
+!opensearch-*.tar.gz
+
+# IDE files
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Test data
+.test-data
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!DOCKER.md
+
+# CI/CD
+.github
+.circleci
+
+# Development
+benchmarks
+src
+gradle
+gradlew
+gradlew.bat
+settings.gradle
+build.gradle

@@ -160,8 +160,7 @@ public class MinMaxSampleTests extends OpenSearchTestCase {
         MinMaxSample minMaxSample = new MinMaxSample(1000L, 10.0, 30.0);
         FloatSample floatSample = new FloatSample(1000L, 25.0);
 
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> minMaxSample.merge(floatSample));
-        assertEquals("Cannot merge MinMaxSample with FloatSample", e.getMessage());
+        assertEquals(minMaxSample, minMaxSample.merge(floatSample));
     }
 
     public void testMergeWithNull() {
@@ -333,5 +332,20 @@ public class MinMaxSampleTests extends OpenSearchTestCase {
 
         assertEquals(25.0, result.min(), 0.001); // Should initialize with first valid value
         assertEquals(25.0, result.max(), 0.001);
+    }
+
+    public void testRamBytesUsed() {
+        MinMaxSample sample = new MinMaxSample(1234567890L, 10.0, 50.0);
+
+        // ramBytesUsed() should return SHALLOW_SIZE
+        long ramBytes = sample.ramBytesUsed();
+        assertEquals(MinMaxSample.SHALLOW_SIZE, ramBytes);
+
+        // SHALLOW_SIZE should be a positive value
+        assertTrue(MinMaxSample.SHALLOW_SIZE > 0);
+
+        // All instances should report the same shallow size (records are shallow)
+        MinMaxSample sample2 = new MinMaxSample(0L, 0.0, 0.0);
+        assertEquals(sample.ramBytesUsed(), sample2.ramBytesUsed());
     }
 }

@@ -188,6 +188,7 @@ public class RestM3QLAction extends BaseTSDBAction {
         final Map<String, String> tags = new HashMap<>();
         tags.put("explain", "unknown");
         tags.put("pushdown", "unknown");
+        tags.put("ccs_minimize_roundtrips", "unknown"); // opensearch defaults to true
 
         // Pre-consume all parameters synchronously to satisfy REST framework
         // This must happen before returning RestChannelConsumer
@@ -199,6 +200,7 @@ public class RestM3QLAction extends BaseTSDBAction {
         final String partitionsParam = request.param(PARTITIONS_PARAM);
         final boolean explainParam = request.paramAsBoolean(EXPLAIN_PARAM, false);
         final boolean pushdownParam = request.paramAsBoolean(PUSHDOWN_PARAM, true);
+        boolean ccsMinimizeRoundTrips = resolveCcsMinimizeRoundTrips(request);
         final boolean profileParam = request.paramAsBoolean(PROFILE_PARAM, false);
         final boolean includeMetadataParam = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
 
@@ -212,7 +214,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         tags.put("pushdown", String.valueOf(params.pushdown()));
                         if (logger.isDebugEnabled()) {
                             logger.debug(
-                                "Received M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}",
+                                "Received M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
                                 params.query,
                                 params.startMs,
                                 params.endMs,
@@ -222,7 +224,8 @@ public class RestM3QLAction extends BaseTSDBAction {
                                 params.pushdown,
                                 params.profile,
                                 params.includeMetadata,
-                                params.federationMetadata()
+                                params.federationMetadata(),
+                                params.ccsMinimizeRoundTrips
                             );
                         }
 
@@ -247,6 +250,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         // Build and execute search request
                         tags.put("reached_step", "build_search_request");
                         final SearchRequest searchRequest = buildSearchRequest(params, searchSourceBuilder);
+                        tags.put("ccs_minimize_roundtrips", searchRequest.isCcsMinimizeRoundtrips() ? "true" : "false");
                         final String finalAggName = AggregationNameExtractor.getFinalAggregationName(searchSourceBuilder);
 
                         tags.put("reached_step", "search");
@@ -288,6 +292,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                 public void onFailure(Exception e) {
                     if (e instanceof IndexSettingsResolutionException) {
                         tags.put("reached_step", "error__index_settings_resolution");
+                        logger.error("Failed to resolve index settings {}", e.getMessage(), e);
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
                     } else {
@@ -397,6 +402,7 @@ public class RestM3QLAction extends BaseTSDBAction {
         boolean pushdown = resolvePushdownParam(request, true);
         boolean profile = request.paramAsBoolean(PROFILE_PARAM, false);
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
+        boolean ccsMinimizeRoundTrips = resolveCcsMinimizeRoundTrips(request);
 
         // Extract resolved partitions from request body (implements FederationMetadata)
         FederationMetadata federationMetadata = (requestBody != null) ? requestBody.resolvedPartitions() : null;
@@ -415,7 +421,8 @@ public class RestM3QLAction extends BaseTSDBAction {
                 pushdown,
                 profile,
                 includeMetadata,
-                federationMetadata
+                federationMetadata,
+                ccsMinimizeRoundTrips
             );
             listener.onResponse(params);
         } else {
@@ -433,7 +440,8 @@ public class RestM3QLAction extends BaseTSDBAction {
                         pushdown,
                         profile,
                         includeMetadata,
-                        federationMetadata
+                        federationMetadata,
+                        ccsMinimizeRoundTrips
                     );
                     listener.onResponse(params);
                 }
@@ -525,6 +533,9 @@ public class RestM3QLAction extends BaseTSDBAction {
         if (params.indices.length > 0) {
             searchRequest.indices(params.indices);
         }
+
+        searchRequest.setCcsMinimizeRoundtrips(params.ccsMinimizeRoundTrips);
+        logger.debug("search request ccs_minimize_roundtrips: {}", searchRequest.isCcsMinimizeRoundtrips());
 
         return searchRequest;
     }
@@ -644,21 +655,28 @@ public class RestM3QLAction extends BaseTSDBAction {
                                 validateAndReturnStepSize(stepSizeToIndices, partitionIds, listener);
 
                             } catch (Exception e) {
+                                // For any remote index settings processing errors AFTER we have fetched the setting
                                 TSDBMetrics.incrementCounter(METRICS.indexSettingsErrors, 1, Metrics.TAGS_SOURCE_REMOTE);
-                                logger.error("Failed to process remote settings: {}", e.getMessage());
                                 listener.onFailure(
-                                    new IndexSettingsResolutionException("Failed to process remote settings: " + e.getMessage(), e)
+                                    new IndexSettingsResolutionException(
+                                        "Failed to process remote index settings for partitions "
+                                            + remotePartitionIds
+                                            + ": "
+                                            + e.getMessage(),
+                                        e
+                                    )
                                 );
                             }
                         }
 
                         @Override
                         public void onFailure(Exception e) {
+                            // For any remote index settings fetch errors, this will be propagated from RemoteIndexSettingsCache via
+                            // ActionListener.onFailure
                             TSDBMetrics.incrementCounter(METRICS.indexSettingsErrors, 1, Metrics.TAGS_SOURCE_REMOTE);
-                            logger.error("Failed to fetch settings from remote partitions: {}", e.getMessage());
                             listener.onFailure(
                                 new IndexSettingsResolutionException(
-                                    "Failed to fetch settings from remote partitions: " + e.getMessage(),
+                                    "Failed to fetch settings from remote partitions " + remotePartitionIds + ": " + e.getMessage(),
                                     e
                                 )
                             );
@@ -707,7 +725,7 @@ public class RestM3QLAction extends BaseTSDBAction {
      * Internal record holding parsed request parameters.
      */
     protected record RequestParams(String query, long startMs, long endMs, long stepMs, String[] indices, boolean explain, boolean pushdown,
-        boolean profile, boolean includeMetadata, FederationMetadata federationMetadata) {
+        boolean profile, boolean includeMetadata, FederationMetadata federationMetadata, boolean ccsMinimizeRoundTrips) {
 
     }
 

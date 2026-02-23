@@ -26,8 +26,8 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.MinMaxSample;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleType;
-import org.opensearch.tsdb.core.model.SortedValuesSample;
 import org.opensearch.tsdb.core.model.SumCountSample;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.query.aggregator.DefaultSampleContainer;
 import org.opensearch.tsdb.query.aggregator.DenseSampleContainer;
 import org.opensearch.tsdb.query.aggregator.SampleContainer;
@@ -57,7 +57,7 @@ import java.util.concurrent.TimeUnit;
  * <ul>
  *   <li>{@link org.opensearch.tsdb.core.model.FloatSample} - Single floating-point value</li>
  *   <li>{@link org.opensearch.tsdb.core.model.SumCountSample} - Sum and count pair</li>
- *   <li>{@link org.opensearch.tsdb.core.model.SortedValuesSample} - Sorted list of values (histogram)</li>
+ *   <li>{@link org.opensearch.tsdb.core.model.MultiValueSample} - List of values</li>
  * </ul>
  *
  * <h2>Configuration:</h2>
@@ -115,7 +115,7 @@ public class SampleStorageBenchmark {
      *
      * <p><b>Parameters:</b>
      * <ul>
-     *   <li>{@code sampleTypeStr} - Type of sample to benchmark (FLOAT_SAMPLE, SUM_COUNT_SAMPLE, SORTED_VALUES_SAMPLE)</li>
+     *   <li>{@code sampleTypeStr} - Type of sample to benchmark (FLOAT_SAMPLE, SUM_COUNT_SAMPLE, MULTI_VALUE_SAMPLE)</li>
      * </ul>
      *
      * <p><b>Auxiliary Metrics:</b>
@@ -126,7 +126,7 @@ public class SampleStorageBenchmark {
     @AuxCounters(AuxCounters.Type.EVENTS)
     @State(Scope.Thread)
     public static class ListStorageState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
         private SampleType sampleType;
         public double bytesPerSample;
@@ -246,7 +246,7 @@ public class SampleStorageBenchmark {
      *
      * <p><b>Parameters:</b>
      * <ul>
-     *   <li>{@code sampleTypeStr} - Type of sample (FLOAT_SAMPLE, SUM_COUNT_SAMPLE, SORTED_VALUES_SAMPLE)</li>
+     *   <li>{@code sampleTypeStr} - Type of sample (FLOAT_SAMPLE, SUM_COUNT_SAMPLE, MULTI_VALUE_SAMPLE)</li>
      *   <li>{@code containerTypeStr} - Container implementation (DEFAULT_SAMPLE_CONTAINER, DENSE_SAMPLE_CONTAINER)</li>
      * </ul>
      *
@@ -264,7 +264,7 @@ public class SampleStorageBenchmark {
     @AuxCounters(AuxCounters.Type.EVENTS)
     @State(Scope.Thread)
     public static class ContainerStorageState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
         private SampleType sampleType;
 
@@ -400,7 +400,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ListIterationState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
 
         private SampleType sampleType;
@@ -469,7 +469,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ContainerIterationState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
         @Param({ "DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER" })
         private String containerTypeStr;
@@ -550,7 +550,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ListAppendState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
 
         private SampleType sampleType;
@@ -627,7 +627,7 @@ public class SampleStorageBenchmark {
      */
     @State(Scope.Thread)
     public static class ContainerAppendState {
-        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "SORTED_VALUES_SAMPLE" })
+        @Param({ "FLOAT_SAMPLE", "SUM_COUNT_SAMPLE", "MULTI_VALUE_SAMPLE" })
         private String sampleTypeStr;
         @Param({ "DEFAULT_SAMPLE_CONTAINER", "DENSE_SAMPLE_CONTAINER" })
         private String containerTypeStr;
@@ -791,7 +791,7 @@ public class SampleStorageBenchmark {
      * <ul>
      *   <li>{@link FloatSample}: Single value (100.0 + index)</li>
      *   <li>{@link SumCountSample}: Sum (100.0 + index), Count (10 + index)</li>
-     *   <li>{@link SortedValuesSample}: 5 sorted values [index, index+1, ..., index+4]</li>
+     *   <li>{@link MultiValueSample}: 5 values [index, index+1, ..., index+4]</li>
      * </ul>
      *
      * <p>Values are deterministic to ensure consistent benchmarking across runs
@@ -807,7 +807,7 @@ public class SampleStorageBenchmark {
             case FLOAT_SAMPLE -> new FloatSample(timestamp, 100.0 + index);
             case SUM_COUNT_SAMPLE -> new SumCountSample(timestamp, 100.0 + index, 10 + index);
             case MIN_MAX_SAMPLE -> new MinMaxSample(timestamp, 50.0 + index, 150.0 + index);
-            case SORTED_VALUES_SAMPLE -> new SortedValuesSample(
+            case MULTI_VALUE_SAMPLE -> new MultiValueSample(
                 timestamp,
                 Arrays.asList((double) index, (double) index + 1, (double) index + 2, (double) index + 3, (double) index + 4)
             );

@@ -14,6 +14,7 @@ import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreMode;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
@@ -32,6 +33,7 @@ public class SeriesLoadingCollector implements Collector {
 
     private final SeriesLoader seriesLoader;
     private final LabelStorageType labelStorageType;
+    private final SeriesEventListener eventListener;
     private NumericDocValues referenceValues;
     private LabelsStorage labelsStorage;
     private long maxReference = 0L;
@@ -40,10 +42,12 @@ public class SeriesLoadingCollector implements Collector {
      * Constructs a SeriesLoadingCollector with the given head instance.
      * @param seriesLoader SeriesLoadingCallback, used to load series
      * @param labelStorageType the label storage type configuration
+     * @param eventListener event listener for chunk lifecycle events
      */
-    public SeriesLoadingCollector(SeriesLoader seriesLoader, LabelStorageType labelStorageType) {
+    public SeriesLoadingCollector(SeriesLoader seriesLoader, LabelStorageType labelStorageType, SeriesEventListener eventListener) {
         this.seriesLoader = seriesLoader;
         this.labelStorageType = labelStorageType;
+        this.eventListener = eventListener;
     }
 
     @Override
@@ -67,7 +71,7 @@ public class SeriesLoadingCollector implements Collector {
                 referenceValues.advanceExact(doc);
                 long reference = referenceValues.longValue();
 
-                seriesLoader.load(new MemSeries(reference, labels));
+                seriesLoader.load(new MemSeries(reference, labels, eventListener));
                 if (maxReference < reference) {
                     maxReference = reference;
                 }

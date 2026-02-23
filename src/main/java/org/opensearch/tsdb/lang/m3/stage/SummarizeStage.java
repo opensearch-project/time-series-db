@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -79,6 +80,12 @@ public class SummarizeStage implements UnaryPipelineStage {
     private final Supplier<BucketSummarizer> summarizerFactory;
 
     /**
+     * Shallow size of the summarizer. Note: list-based summarizers (Percentile, StdDev)
+     * have additional dynamic overhead from stored values not included here.
+     */
+    private final long summarizerShallowSize;
+
+    /**
      * Constructor with core parameters.
      * Creates the summarizer factory based on the WindowAggregationType.
      * Use {@link #setReferenceTimeConstant(long)} to set the reference time for fixed alignment.
@@ -102,6 +109,8 @@ public class SummarizeStage implements UnaryPipelineStage {
         this.referenceTimeConstant = 0L; // Default, should be set via setReferenceTimeConstant
         // Create the summarizer factory based on the function type
         this.summarizerFactory = createSummarizerFactory(function);
+        // Compute the actual summarizer shallow size by creating a sample instance
+        this.summarizerShallowSize = RamUsageEstimator.shallowSizeOf(summarizerFactory.get());
     }
 
     /**
@@ -353,5 +362,34 @@ public class SummarizeStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(interval, function, alignToFrom, referenceTimeConstant);
+    }
+
+    /**
+     * Estimate temporary memory overhead for summarize operations.
+     * SummarizeStage uses BucketMapper, BucketSummarizer, and result ArrayLists.
+     *
+     * <p>For result samples, delegates to {@link SampleList#ramBytesUsed()} ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // Stage-specific overhead: one BucketMapper and one BucketSummarizer per series
+            totalOverhead += BucketMapper.SHALLOW_SIZE;
+            totalOverhead += summarizerShallowSize;
+
+            // New TimeSeries with result samples (delegated estimation)
+            totalOverhead += TimeSeries.ESTIMATED_MEMORY_OVERHEAD + ts.getSamples().ramBytesUsed();
+        }
+
+        return totalOverhead;
     }
 }

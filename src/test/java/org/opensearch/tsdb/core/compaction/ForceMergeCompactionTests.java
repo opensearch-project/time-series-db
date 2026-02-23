@@ -14,6 +14,7 @@ import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.tsdb.TSDBPlugin;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndex;
 import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.core.retention.NOOPRetention;
@@ -165,8 +166,8 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         // Create indexes with different segment counts
         Labels labels1 = ByteLabels.fromStrings("label1", "value1");
         Labels labels2 = ByteLabels.fromStrings("label2", "value2");
-        MemSeries series1 = new MemSeries(1, labels1);
-        MemSeries series2 = new MemSeries(2, labels2);
+        MemSeries series1 = new MemSeries(1, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(2, labels2, SeriesEventListener.NOOP);
 
         // First index - create multiple segments
         manager.addMemChunk(series1, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
@@ -229,7 +230,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         // Create index with only 2 segments
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
@@ -272,7 +273,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         // Create a single index with multiple segments (the latest block)
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
@@ -314,7 +315,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         // Create 3 indexes with multiple segments each
         for (int block = 0; block < 3; block++) {
@@ -389,7 +390,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         // Create index with multiple segments by committing between adds
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
@@ -449,7 +450,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
         manager.commitChangedIndexes(List.of(series));
@@ -503,7 +504,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));
         manager.commitChangedIndexes(List.of(series));
@@ -546,7 +547,7 @@ public class ForceMergeCompactionTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("label", "value");
-        MemSeries series = new MemSeries(1, labels);
+        MemSeries series = new MemSeries(1, labels, SeriesEventListener.NOOP);
 
         // Create indexes that won't meet the segment count requirement
         manager.addMemChunk(series, org.opensearch.tsdb.TestUtils.getMemChunk(10, 0, 1000));

@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.core.index.live;
 
 import org.apache.lucene.search.CollectorManager;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 
 import java.util.Collection;
@@ -22,20 +23,24 @@ import java.util.Collection;
 public class SeriesLoadingCollectorManager implements CollectorManager<SeriesLoadingCollector, Long> {
     private final SeriesLoader seriesLoader;
     private final LabelStorageType labelStorageType;
+    private final SeriesEventListener eventListener;
 
     /**
      * Constructor for SeriesLoadingCollectorManager
-     * @param seriesLoader SeriesLoader to load series with
+     *
+     * @param seriesLoader     SeriesLoader to load series with
      * @param labelStorageType the label storage type configuration
+     * @param eventListener    event listener for chunk lifecycle events
      */
-    public SeriesLoadingCollectorManager(SeriesLoader seriesLoader, LabelStorageType labelStorageType) {
+    public SeriesLoadingCollectorManager(SeriesLoader seriesLoader, LabelStorageType labelStorageType, SeriesEventListener eventListener) {
         this.seriesLoader = seriesLoader;
         this.labelStorageType = labelStorageType;
+        this.eventListener = eventListener;
     }
 
     @Override
     public SeriesLoadingCollector newCollector() {
-        return new SeriesLoadingCollector(seriesLoader, labelStorageType);
+        return new SeriesLoadingCollector(seriesLoader, labelStorageType, eventListener);
     }
 
     @Override

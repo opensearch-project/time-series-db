@@ -15,11 +15,15 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesNormalizer;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
+
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.LongConsumer;
 
 /**
  * Abstract base class for pipeline stages that support label grouping.
@@ -68,57 +73,18 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         if (input == null) {
             throw new NullPointerException(getName() + " stage received null input");
         }
-        return process(input, true);
+        return processWithContext(input, true, null);
     }
 
     /**
-     * Process a list of time series with coordination control.
-     * This method allows controlling normalization and materialization for coordination aggregator.
-     *
-     * @param input The input time series to process
-     * @param isCoord Whether this is called from coordination aggregator (enables normalization and materialization)
-     * @return The processed time series
-     */
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord) {
-        if (input == null) {
-            throw new NullPointerException(getName() + " stage received null input");
-        }
-        if (input.isEmpty()) {
-            return input;
-        }
-
-        List<TimeSeries> result;
-        if (groupByLabels.isEmpty()) {
-            // No label grouping: treat all time series as one group
-            // Normalize all series together if called from coordination aggregator
-            List<TimeSeries> normalizedInput = isCoord ? normalizeInputSeries(input) : input;
-            TimeSeries processedSeries = processGroup(normalizedInput, null);
-
-            // Apply sample materialization if called from coordination aggregator
-            if (isCoord && needsMaterialization()) {
-                processedSeries = materializeSamples(processedSeries);
-            }
-
-            return List.of(processedSeries);
-        } else {
-            // Label grouping: group by specified labels and aggregate within each group
-            result = processWithLabelGrouping(input, isCoord);
-            // Apply sample materialization if called from coordination aggregator
-            if (isCoord && needsMaterialization()) {
-                result.replaceAll(this::materializeSamples);
-            }
-
-            return result;
-        }
-    }
-
-    /**
-    * Process time series with label grouping.
+    * Process time series with label grouping and circuit breaker tracking.
     * @param input List of time series to process
     * @param isCoord Whether this is called from coordination aggregator (enables normalization per group)
+    * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created.
+    *        Batching is handled centrally by TimeSeriesUnfoldAggregator.
     * @return List of aggregated time series grouped by labels
     */
-    protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord) {
+    protected List<TimeSeries> processWithLabelGrouping(List<TimeSeries> input, boolean isCoord, LongConsumer circuitBreakerConsumer) {
         // Group by ByteLabels for proper equality and hashing
         Map<ByteLabels, List<TimeSeries>> labelGroupToSeries = new HashMap<>();
 
@@ -132,8 +98,17 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
                 continue;
             }
 
+            // Track if this is a new group for circuit breaker
+            boolean isNewGroup = !labelGroupToSeries.containsKey(groupLabels);
+
             // Add this series to the appropriate group using ByteLabels as key
             labelGroupToSeries.computeIfAbsent(groupLabels, k -> new ArrayList<>()).add(series);
+
+            // Report memory overhead for new groups (batching handled by aggregator)
+            if (isNewGroup) {
+                long groupOverhead = RamUsageConstants.groupEntryBaseOverhead(groupLabels) + SampleList.ARRAYLIST_OVERHEAD;
+                circuitBreakerConsumer.accept(groupOverhead);
+            }
         }
 
         // Process each group and combine results
@@ -289,17 +264,23 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
     }
 
     /**
-     * Common reduce implementation for all grouping stages.
+     * Common reduce implementation for all grouping stages with circuit breaker tracking.
      * Handles distributed aggregation by combining time series across multiple aggregations.
+     *
+     * <p>Circuit breaker tracking is performed to protect coordinator nodes (including
+     * data cluster coordinators in CCS setups) from OOM conditions.</p>
      *
      * @param aggregations List of aggregations to reduce
      * @param isFinalReduce Whether this is the final reduce phase
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
      * @return Reduced aggregation result
      */
-    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
+    @Override
+    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce, LongConsumer circuitBreakerConsumer) {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // we reuse firstAgg's metaData/name to create final aggregation
         TimeSeriesProvider firstAgg = aggregations.get(0);
@@ -309,24 +290,26 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
             TimeSeriesProvider result = firstAgg.createReduced(Collections.emptyList());
             return (InternalAggregation) result;
         }
-        return reduceGrouped(aggregations, firstAgg, firstTimeSeries, isFinalReduce);
+        return reduceGrouped(aggregations, firstAgg, firstTimeSeries, isFinalReduce, cb);
     }
 
     /**
-     * Reduces a list of TimeSeriesProvider instances into a single InternalAggregation.
-     * This method is intended for distributed aggregation scenarios.
+     * Reduces a list of TimeSeriesProvider instances into a single InternalAggregation
+     * with circuit breaker tracking.
      *
      * @param aggregations List of aggregations to reduce.
      * @param firstAgg The first aggregation in the list, used as final aggregation meta reference.
-     * @param firstTimeSeries, first nonEmpty time series across aggregations, used as time series metadata reference
+     * @param firstTimeSeries first nonEmpty time series across aggregations, used as time series metadata reference
      * @param isFinalReduce True if this is the final reduction phase, false otherwise.
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes (can be null)
      * @return The reduced InternalAggregation result.
      */
     protected abstract InternalAggregation reduceGrouped(
         List<TimeSeriesProvider> aggregations,
         TimeSeriesProvider firstAgg,
         TimeSeries firstTimeSeries,
-        boolean isFinalReduce
+        boolean isFinalReduce,
+        LongConsumer circuitBreakerConsumer
     );
 
     /**
@@ -396,5 +379,56 @@ public abstract class AbstractGroupingStage implements UnaryPipelineStage {
         }
         AbstractGroupingStage that = (AbstractGroupingStage) obj;
         return groupByLabels.equals(that.groupByLabels);
+    }
+
+    /**
+     * Process with context for grouping stages.
+     * This overrides the default to pass the coordinator flag and circuit breaker consumer to the process method.
+     *
+     * <p>Circuit breaker tracking is done granularly inside {@link #processWithLabelGrouping} as each
+     * new group is created, rather than estimating upfront. This catches cardinality explosion in real-time.</p>
+     *
+     * @param input The input time series
+     * @param coordinatorExecution true if executing at coordinator level
+     * @param circuitBreakerConsumer Optional consumer to track circuit breaker bytes as groups are created
+     * @return The processed time series
+     */
+    @Override
+    public List<TimeSeries> processWithContext(List<TimeSeries> input, boolean coordinatorExecution, LongConsumer circuitBreakerConsumer) {
+        if (input == null) {
+            throw new NullPointerException(getName() + " stage received null input");
+        }
+        if (input.isEmpty()) {
+            return input;
+        }
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
+
+        List<TimeSeries> result;
+        if (groupByLabels.isEmpty()) {
+            // No label grouping: treat all time series as one group
+            // Normalize all series together if called from coordination aggregator
+            List<TimeSeries> normalizedInput = coordinatorExecution ? normalizeInputSeries(input) : input;
+            TimeSeries processedSeries = processGroup(normalizedInput, null);
+
+            // Apply sample materialization if called from coordination aggregator
+            if (coordinatorExecution && needsMaterialization()) {
+                processedSeries = materializeSamples(processedSeries);
+            }
+
+            // Use mutable list so downstream code can modify if needed (avoids immutable collection issues)
+            result = new ArrayList<>(1);
+            result.add(processedSeries);
+            return result;
+        } else {
+            // Label grouping: group by specified labels and aggregate within each group
+            // Pass circuit breaker consumer for granular tracking of cardinality
+            result = processWithLabelGrouping(input, coordinatorExecution, cb);
+            // Apply sample materialization if called from coordination aggregator
+            if (coordinatorExecution && needsMaterialization()) {
+                result.replaceAll(this::materializeSamples);
+            }
+
+            return result;
+        }
     }
 }

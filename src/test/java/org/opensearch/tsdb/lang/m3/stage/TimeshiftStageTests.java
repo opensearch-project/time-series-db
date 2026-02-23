@@ -417,7 +417,7 @@ public class TimeshiftStageTests extends AbstractWireSerializingTestCase<Timeshi
 
         UnsupportedOperationException exception = assertThrows(
             UnsupportedOperationException.class,
-            () -> stage.reduce(aggregations, false)
+            () -> stage.reduce(aggregations, false, null)
         );
 
         // Assert the complete error message for better test precision

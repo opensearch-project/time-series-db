@@ -24,7 +24,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testAppendInOrder() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
 
         ChunkOptions options = new ChunkOptions(8000, 8);
 
@@ -65,7 +65,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testAppendOutOfOrder() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
 
         ChunkOptions options = new ChunkOptions(8000, 8);
 
@@ -87,7 +87,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
      */
     public void testAppendOutOfOrderChunkInsertion() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         ChunkOptions options = new ChunkOptions(8000, 8);
 
         // Create chunks [8000-16000] and [24000-32000] with gap in between
@@ -121,7 +121,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testChunkRangeChangeForHeadChunks() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
 
         // Create first chunk with range 8000: [0-8000]
         ChunkOptions options1 = new ChunkOptions(8000, 8);
@@ -148,7 +148,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testChunkRangeChangeForOldChunks() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
 
         // Create chunks with range 8000: [0-8000] and [16000-24000]
         ChunkOptions options1 = new ChunkOptions(8000, 8);
@@ -178,7 +178,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testGetClosableChunksOrder() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         ChunkOptions options = new ChunkOptions(8000, 8);
 
         // Create 5 chunks: [0-8000], [8000-16000], [16000-24000], [24000-32000], [32000-40000]
@@ -203,7 +203,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
     }
 
     public void testGetClosableChunks() {
-        MemSeries series = new MemSeries(123L, ByteLabels.fromStrings("k1", "v1", "k2", "v2"));
+        MemSeries series = new MemSeries(123L, ByteLabels.fromStrings("k1", "v1", "k2", "v2"), SeriesEventListener.NOOP);
 
         // No chunks: return empty
         MemSeries.ClosableChunkResult result = series.getClosableChunks(10000L);
@@ -250,7 +250,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testGetClosableChunksMinSeqNoTracking() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         ChunkOptions options = new ChunkOptions(8000, 8);
 
         // Ingest with decreasing seqNo to test minSeqNo tracking
@@ -324,7 +324,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
     public void testGettersAndSetters() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         long reference = 123L;
-        MemSeries series = new MemSeries(reference, labels);
+        MemSeries series = new MemSeries(reference, labels, SeriesEventListener.NOOP);
 
         // Test getters for constructor parameters
         assertEquals(reference, series.getReference());
@@ -336,7 +336,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testAwaitPersistedAndMarkPersisted() throws InterruptedException {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         final AtomicBoolean threadCompleted = new AtomicBoolean(false);
         final AtomicReference<Exception> threadException = new AtomicReference<>();
 
@@ -371,7 +371,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     private MemSeries createMemSeries(int chunkCount) {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
 
         ChunkOptions options = new ChunkOptions(8000, 8);
 
@@ -385,7 +385,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
     public void testGetClosableChunksSkipsClosedChunks() {
         Labels labels = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
-        MemSeries series = new MemSeries(123L, labels);
+        MemSeries series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         ChunkOptions options = new ChunkOptions(8000, 8);
 
         // Create 4 chunks: [0-8000], [8000-16000], [16000-24000], [24000-32000]
@@ -414,7 +414,7 @@ public class MemSeriesTests extends OpenSearchTestCase {
 
         // Test 4: Closed and cutoff filtering - Close second chunk, cutoff at 24000L
         // Reset state for this test
-        series = new MemSeries(123L, labels);
+        series = new MemSeries(123L, labels, SeriesEventListener.NOOP);
         for (int i = 0; i < 32; i++) {
             series.append(i, i * 1000L, i * 10.0, options);
         }

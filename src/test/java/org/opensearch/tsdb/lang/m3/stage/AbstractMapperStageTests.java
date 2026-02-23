@@ -34,7 +34,7 @@ public class AbstractMapperStageTests extends OpenSearchTestCase {
         @Override
         protected Sample mapSample(Sample sample) {
             // Filter out samples with value > 15
-            return sample.getValue() > 15 ? null : sample;
+            return sample.getValue() > 15 ? null : sample.deepCopy();
         }
 
         @Override

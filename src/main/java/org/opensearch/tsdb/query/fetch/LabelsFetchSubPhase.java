@@ -57,6 +57,10 @@ public class LabelsFetchSubPhase implements FetchSubPhase {
                 return;
             }
 
+            // TODO: Add circuit breaker tracking here once FetchContext exposes SearchContext or CircuitBreakerService.
+            // Currently, FetchContext does not provide access to the circuit breaker, so we can only log warnings.
+            // See:
+            // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/fetch/FetchContext.java
             Map<String, String> labelsMap = labels.toMapView();
             hitContext.hit().setDocumentField(NAME, new DocumentField(NAME, Collections.singletonList(labelsMap)));
         }

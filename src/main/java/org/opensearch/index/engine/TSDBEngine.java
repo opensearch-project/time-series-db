@@ -1708,6 +1708,7 @@ public class TSDBEngine extends Engine {
                 long minSeq = headRef.getMinSeqNo();
                 return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
             },
+            () -> (double) headRef.getNumOpenChunks(),       // Current open chunks count
             headRef.getMetricTags()
         );
     }

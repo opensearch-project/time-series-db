@@ -22,8 +22,8 @@ public enum SampleType implements Writeable {
     FLOAT_SAMPLE((byte) 0),
     /** Sum-count sample type for averaging */
     SUM_COUNT_SAMPLE((byte) 1),
-    /** Sorted values sample type for percentile calculations */
-    SORTED_VALUES_SAMPLE((byte) 2),
+    /** Multi-value sample type for efficient percentile calculations */
+    MULTI_VALUE_SAMPLE((byte) 2),
     /** Min-max sample type for range calculations */
     MIN_MAX_SAMPLE((byte) 3);
 

@@ -21,6 +21,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.ByteLabels;
@@ -54,7 +55,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Long> collectedReferences = new ArrayList<>();
         SeriesLoader loader = series -> collectedReferences.add(series.getReference());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 200", 200L, maxRef.longValue());
@@ -85,7 +90,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Long> collectedReferences = new ArrayList<>();
         SeriesLoader loader = series -> collectedReferences.add(series.getReference());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.SORTED_SET);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.SORTED_SET,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 300", 300L, maxRef.longValue());
@@ -110,7 +119,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Long> collectedReferences = new ArrayList<>();
         SeriesLoader loader = series -> collectedReferences.add(series.getReference());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 0 for empty index", 0L, maxRef.longValue());
@@ -139,7 +152,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Labels> collectedLabels = new ArrayList<>();
         SeriesLoader loader = series -> collectedLabels.add(series.getLabels());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Should collect 1 series", 1, collectedLabels.size());
@@ -168,7 +185,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Labels> collectedLabels = new ArrayList<>();
         SeriesLoader loader = series -> collectedLabels.add(series.getLabels());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.SORTED_SET);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.SORTED_SET,
+            SeriesEventListener.NOOP
+        );
         searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Should collect 1 series", 1, collectedLabels.size());
@@ -199,7 +220,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<MemSeries> collectedSeries = new ArrayList<>();
         SeriesLoader loader = collectedSeries::add;
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.SORTED_SET);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.SORTED_SET,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 123", 123L, maxRef.longValue());
@@ -229,7 +254,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         IndexSearcher searcher = new IndexSearcher(reader);
 
         SeriesLoader loader = series -> {};
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 90", 90L, maxRef.longValue());
@@ -257,7 +286,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         IndexSearcher searcher = new IndexSearcher(reader);
 
         SeriesLoader loader = series -> {};
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 100", 100L, maxRef.longValue());
@@ -287,7 +320,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<MemSeries> collectedSeries = new ArrayList<>();
         SeriesLoader loader = collectedSeries::add;
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.BINARY);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.BINARY,
+            SeriesEventListener.NOOP
+        );
         Long maxRef = searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Max reference should be 456", 456L, maxRef.longValue());
@@ -329,7 +366,11 @@ public class SeriesLoadingCollectorTests extends OpenSearchTestCase {
         List<Labels> collectedLabels = new ArrayList<>();
         SeriesLoader loader = series -> collectedLabels.add(series.getLabels());
 
-        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(loader, LabelStorageType.SORTED_SET);
+        SeriesLoadingCollectorManager manager = new SeriesLoadingCollectorManager(
+            loader,
+            LabelStorageType.SORTED_SET,
+            SeriesEventListener.NOOP
+        );
         searcher.search(new MatchAllDocsQuery(), manager);
 
         assertEquals("Should collect 1 series", 1, collectedLabels.size());

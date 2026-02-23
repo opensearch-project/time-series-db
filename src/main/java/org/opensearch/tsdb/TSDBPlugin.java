@@ -65,11 +65,13 @@ import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.tsdb.query.search.CachedWildcardQueryBuilder;
 import org.opensearch.tsdb.query.search.TimeRangePruningQueryBuilder;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
+import org.opensearch.tsdb.query.aggregator.InternalTSDBStats;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RemoteIndexSettingsCache;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
+import org.opensearch.tsdb.query.rest.RestTSDBStatsAction;
 import org.opensearch.watcher.ResourceWatcherService;
 
 import java.io.IOException;
@@ -102,6 +104,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     // Search plugin constants
     private static final String TIME_SERIES_NAMED_WRITEABLE_NAME = "time_series";
+    private static final String TSDB_STATS_NAMED_WRITEABLE_NAME = "tsdb_stats";
 
     // Store plugin constants
     private static final String TSDB_STORE_FACTORY_NAME = "tsdb_store";
@@ -530,6 +533,16 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     );
 
     /**
+     * Setting to set the OpenSearch ccs_minimize_roundtrip parameter for all requests
+     */
+    public static final Setting<Boolean> TSDB_ENGINE_CCS_MINIMIZE_ROUNDTRIPS = Setting.boolSetting(
+        "tsdb_engine.query.ccs_minimize_roundtrips",
+        true,  // default: true (follows default OpenSearch behavior)
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
+    /**
      * Setting for the default step size (query resolution) for M3QL queries.
      * This defines the default time interval between data points in query results.
      * Can be overridden by the 'step' parameter in individual M3QL queries.
@@ -708,6 +721,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             TSDB_ENGINE_WILDCARD_QUERY_CACHE_EXPIRE_AFTER,
             TSDB_ENGINE_FORCE_NO_PUSHDOWN,
             TSDB_ENGINE_ENABLE_INTERNAL_AGG_CHUNK_COMPRESSION,
+            TSDB_ENGINE_CCS_MINIMIZE_ROUNDTRIPS,
             TSDB_ENGINE_DEFAULT_STEP,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_TTL,
             TSDB_ENGINE_REMOTE_INDEX_SETTINGS_CACHE_MAX_SIZE,
@@ -840,14 +854,16 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     ) {
         return List.of(
             new RestM3QLAction(clusterSettings, clusterService, indexNameExpressionResolver, remoteIndexSettingsCache),
-            new RestPromQLAction(clusterSettings)
+            new RestPromQLAction(clusterSettings),
+            new RestTSDBStatsAction(clusterSettings)
         );
     }
 
     @Override
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
         return List.of(
-            new NamedWriteableRegistry.Entry(InternalAggregation.class, TIME_SERIES_NAMED_WRITEABLE_NAME, InternalTimeSeries::new)
+            new NamedWriteableRegistry.Entry(InternalAggregation.class, TIME_SERIES_NAMED_WRITEABLE_NAME, InternalTimeSeries::new),
+            new NamedWriteableRegistry.Entry(InternalAggregation.class, TSDB_STATS_NAMED_WRITEABLE_NAME, InternalTSDBStats::new)
         );
     }
 
@@ -915,7 +931,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
             settings,
             MGMT_THREAD_POOL_NAME,
             1,
-            1,
+            100,
             "index.tsdb_engine.thread_pool." + MGMT_THREAD_POOL_NAME
         );
         return List.of(executorBuilder);

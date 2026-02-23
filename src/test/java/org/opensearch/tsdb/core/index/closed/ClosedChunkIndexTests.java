@@ -31,6 +31,7 @@ import org.opensearch.tsdb.core.chunk.ChunkIterator;
 import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
@@ -115,8 +116,8 @@ public class ClosedChunkIndexTests extends OpenSearchTestCase {
         closedChunkIndex.addNewChunk(labels1, buildMemChunk(5, 0, 90));
 
         // liveSeries mimics the series that would be in the head during a real commit
-        MemSeries series1 = new MemSeries(100L, labels1);
-        MemSeries series2 = new MemSeries(200L, ByteLabels.fromStrings("k1", "v2", "k2", "v4"));
+        MemSeries series1 = new MemSeries(100L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(200L, ByteLabels.fromStrings("k1", "v2", "k2", "v4"), SeriesEventListener.NOOP);
         series1.setMaxMMapTimestamp(90L);
         series2.setMaxMMapTimestamp(50L);
         List<MemSeries> liveSeries = List.of(series1, series2);

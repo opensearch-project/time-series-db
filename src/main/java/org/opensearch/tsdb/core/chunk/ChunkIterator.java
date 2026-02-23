@@ -7,11 +7,8 @@
  */
 package org.opensearch.tsdb.core.chunk;
 
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.opensearch.tsdb.core.model.FloatSampleList;
+import org.opensearch.tsdb.core.model.SampleList;
 
 /**
  * Iterator interface for reading data from chunks
@@ -84,7 +81,9 @@ public interface ChunkIterator {
         // Pre-allocate ArrayList capacity based on total samples to avoid expansions
         // For full range queries (common case), this prevents multiple array resizings
         int totalSamples = totalSamples();
-        List<Sample> samples = totalSamples > 0 ? new ArrayList<>(totalSamples) : new ArrayList<>();
+        FloatSampleList.Builder resultBuilder = totalSamples > 0
+            ? new FloatSampleList.Builder(totalSamples)
+            : new FloatSampleList.Builder();
 
         int processedCount = 0;
         while (next() != ValueType.NONE) {
@@ -101,7 +100,7 @@ public interface ChunkIterator {
             // Valid timestamp, add it
             if (timestamp >= minTimestamp) {
                 double value = tv.value();
-                samples.add(new FloatSample(timestamp, value));
+                resultBuilder.add(timestamp, value);
             }
         }
 
@@ -117,9 +116,9 @@ public interface ChunkIterator {
             }
         }
 
-        return new DecodeResult(samples, processedCount);
+        return new DecodeResult(resultBuilder.build(), processedCount);
     }
 
-    record DecodeResult(List<Sample> samples, int processedSampleCount) {
+    record DecodeResult(SampleList samples, int processedSampleCount) {
     }
 }

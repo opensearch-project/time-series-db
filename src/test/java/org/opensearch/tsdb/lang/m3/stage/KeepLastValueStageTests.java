@@ -344,4 +344,50 @@ public class KeepLastValueStageTests extends AbstractWireSerializingTestCase<Kee
         };
     }
 
+    public void testEstimateMemoryOverhead() {
+        KeepLastValueStage stage = new KeepLastValueStage();
+
+        // Null and empty input should return 0
+        assertEquals(0L, stage.estimateMemoryOverhead(null));
+        assertEquals(0L, stage.estimateMemoryOverhead(List.of()));
+
+        // Create test series with potential for expansion (sparse data)
+        Labels labels = ByteLabels.fromStrings("name", "test");
+        List<Sample> sparseSamples = List.of(
+            new FloatSample(0L, 10.0),
+            new FloatSample(100L, 20.0)  // Only 2 samples over 100ms span with 10ms step = potential 11 samples
+        );
+        TimeSeries sparseSeries = new TimeSeries(sparseSamples, labels, 0L, 100L, 10L, null);
+
+        // Should return positive overhead for sparse series that can expand
+        long overhead = stage.estimateMemoryOverhead(List.of(sparseSeries));
+        assertTrue("Overhead should be positive for sparse series with expansion potential", overhead > 0);
+    }
+
+    public void testEstimateMemoryOverheadWithZeroStep() {
+        KeepLastValueStage stage = new KeepLastValueStage();
+
+        // Series with zero step should be handled gracefully
+        Labels labels = ByteLabels.fromStrings("name", "test");
+        List<Sample> samples = List.of(new FloatSample(0L, 10.0));
+        TimeSeries ts = new TimeSeries(samples, labels, 0L, 100L, 0L, null);
+
+        // Should not throw and return reasonable value
+        long overhead = stage.estimateMemoryOverhead(List.of(ts));
+        assertTrue("Overhead should be >= 0 for zero step", overhead >= 0);
+    }
+
+    public void testEstimateMemoryOverheadWithInvalidTimestamps() {
+        KeepLastValueStage stage = new KeepLastValueStage();
+
+        // Series with maxTs < minTs should be handled gracefully
+        Labels labels = ByteLabels.fromStrings("name", "test");
+        List<Sample> samples = List.of(new FloatSample(100L, 10.0));
+        TimeSeries ts = new TimeSeries(samples, labels, 100L, 0L, 10L, null);  // maxTs < minTs
+
+        // Should not throw
+        long overhead = stage.estimateMemoryOverhead(List.of(ts));
+        assertTrue("Overhead should be >= 0 for invalid timestamps", overhead >= 0);
+    }
+
 }

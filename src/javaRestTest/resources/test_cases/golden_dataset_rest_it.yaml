@@ -1,0 +1,1057 @@
+# TSDB REST Integration Test - Golden Dataset
+
+test_setup:
+  name: "Golden Dataset M3QL Tests - Complete"
+  description: "Golden dataset tests covering a wide range of M3QL functions and scenarios."
+
+  index_configs:
+    - name: "golden_all"
+      shards: 2
+      replicas: 0
+
+test_case:
+  name: "Golden Dataset Complete"
+
+  input_data_list:
+    - index_name: "golden_all"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:07:00Z"
+        step: "1m"
+      regular_metrics:
+      # test_case_fetch_simple
+      - labels: "name:test_metric,dc:dca1,test:fetch_simple"
+        values: [1, 2, 3, 4, null, null, null]
+
+      # test_case_fetch_with_nan
+      - labels: "name:test_metric,dc:dca1,test:fetch_nan"
+        values: [1, null, 3, 4, null, null, null]
+
+      # test_case_fetch_negative
+      - labels: "name:test_metric,dc:dca1,test:fetch_negative"
+        values: [-5, 10, -3, 7, null, null, null]
+
+      # test_case_sum_basic
+      - labels: "name:cpu,dc:dca1,test:sum_basic"
+        values: [1, 2, 3, null, null, null, null]
+      - labels: "name:memory,dc:dca1,test:sum_basic"
+        values: [4, 5, 6, null, null, null, null]
+
+      # test_case_sum_by_tag
+      - labels: "name:requests,dc:dca1,service:web,test:sum_by_tag"
+        values: [10, 20, 30, null, null, null, null]
+      - labels: "name:requests,dc:phx1,service:web,test:sum_by_tag"
+        values: [15, 25, 35, null, null, null, null]
+
+      # test_case_avg_basic
+      - labels: "name:latency,service:web,dc:dca1,test:avg_basic"
+        values: [10, 20, 30, null, null, null, null]
+      - labels: "name:latency,service:web,dc:phx1,test:avg_basic"
+        values: [20, 30, 40, null, null, null, null]
+
+      # test_case_averageSeries
+      - labels: "name:requests,service:web,dc:dca1,test:averageSeries"
+        values: [10, 20, 30, null, null, null, null]
+      - labels: "name:requests,service:api,dc:dca1,test:averageSeries"
+        values: [20, 30, 40, null, null, null, null]
+
+      # test_case_max_basic
+      - labels: "name:cpu,dc:dca1,service:web,test:max_basic"
+        values: [5, 15, 10, null, null, null, null]
+      - labels: "name:cpu,dc:dca1,service:api,test:max_basic"
+        values: [8, 12, 6, null, null, null, null]
+
+      # test_case_min_basic
+      - labels: "name:latency,dc:dca1,service:web,test:min_basic"
+        values: [5, 15, 10, null, null, null, null]
+      - labels: "name:latency,dc:dca1,service:api,test:min_basic"
+        values: [8, 12, 6, null, null, null, null]
+
+      # test_case_median_basi
+      - labels: "name:response,dc:dca1,service:web,test:median_basic"
+        values: [1, 5, 3, null, null, null, null]
+      - labels: "name:response,dc:dca1,service:api,test:median_basic"
+        values: [2, 4, 8, null, null, null, null]
+
+      # test_case_count_basic
+      - labels: "name:test,dc:dca1,test:count_basic,instance:a"
+        values: [1, 2, null, 4, null, null, null]
+      - labels: "name:test,dc:dca1,test:count_basic,instance:b"
+        values: [1, 2, 3, 4, null, null, null]
+
+      # test_case_scale_basic
+      - labels: "name:metric,dc:dca1,test:scale_basic"
+        values: [5, 10, 15, 20, null, null, null]
+
+      # test_case_absolute_basic
+      - labels: "name:temperature,dc:dca1,test:absolute_basic"
+        values: [-5, 10, -3, 7, null, null, null]
+
+      # test_case_round_basic
+      - labels: "name:precise,dc:dca1,test:round_basic"
+        values: [1.234, 5.678, 9.012, null, null, null, null]
+
+      # test_case_transformNull_basic
+      - labels: "name:sensor,dc:dca1,test:transformNull_basic"
+        values: [1, null, 3, null, 5, null, null]
+
+      # test_case_transformNull_negative
+      - labels: "name:metric,dc:dca1,test:transformNull_negative"
+        values: [10, null, 20, null, null, null, null]
+
+      # test_case_keepLastValue_basic
+      - labels: "name:cpu,dc:dca1,test:keepLastValue_basic"
+        values: [100, null, null, 150, null, null, null]
+
+      # test_case_keepLastValue_window
+      - labels: "name:memory,dc:dca1,test:keepLastValue_window"
+        values: [50, null, null, null, 80, null, null]
+
+      # test_case_derivative_basic
+      - labels: "name:counter,dc:dca1,test:derivative_basic"
+        values: [100, 110, 105, 120, 115, null, null]
+
+      # test_case_perSecond_basic
+      - labels: "name:bytes,dc:dca1,test:perSecond_basic"
+        values: [1000, 1100, 1050, 1200, null, null, null]
+
+      # test_case_integral_basic
+      - labels: "name:rate,dc:dca1,test:integral_basic"
+        values: [10, 15, 20, 25, null, null, null]
+
+      # test_case_isNonNull_basi
+      - labels: "name:sensor,dc:dca1,test:isNonNull_basic"
+        values: [10, null, 20, null, null, null, null]
+
+      # test_case_moving_avg
+      - labels: "name:values,dc:dca1,test:moving_avg"
+        values: [1, 5, 3, 8, 2, 6, 4]
+
+      # test_case_moving_max
+      - labels: "name:values,dc:dca1,test:moving_max"
+        values: [10, 5, 15, 2, 20, 8, null]
+
+      # test_case_moving_min
+      - labels: "name:values,dc:dca1,test:moving_min"
+        values: [10, 5, 15, 2, 20, 8, null]
+
+      # test_case_moving_sum
+      - labels: "name:counter,dc:dca1,test:moving_sum"
+        values: [2, 4, 6, 8, 10, null, null]
+
+      # test_case_summarize_sum
+      - labels: "name:requests,dc:dca1,test:summarize_sum"
+        values: [10, 20, 30, 40, 50, 60, null]
+
+      # test_case_summarize_avg
+      - labels: "name:cpu,dc:dca1,test:summarize_avg"
+        values: [10, 20, 30, 40, 50, 60, null]
+
+      # test_case_summarize_max
+      - labels: "name:latency,dc:dca1,test:summarize_max"
+        values: [5, 15, 8, 25, 12, 30, null]
+
+      # test_case_summarize_min
+      - labels: "name:errors,dc:dca1,test:summarize_min"
+        values: [15, 5, 25, 8, 35, 12, null]
+
+      # test_case_scaleToSeconds_basic
+      - labels: "name:hourly_count,dc:dca1,test:scaleToSeconds_basic"
+        values: [3600, 7200, 10800, null, null, null, null]
+
+      # test_case_asPercent_basic
+      - labels: "name:success,dc:dca1,test:asPercent_basic"
+        values: [90, 95, 85, null, null, null, null]
+      - labels: "name:total,dc:dca1,test:asPercent_basic"
+        values: [100, 100, 100, null, null, null, null]
+
+      # test_case_divide_basic
+      - labels: "name:numerator,dc:dca1,test:divide_basic"
+        values: [100, 200, 300, null, null, null, null]
+      - labels: "name:denominator,dc:dca1,test:divide_basic"
+        values: [10, 20, 30, null, null, null, null]
+
+      # test_case_subtract_basic
+      - labels: "name:total,dc:dca1,test:subtract_basic"
+        values: [100, 150, 200, null, null, null, null]
+      - labels: "name:errors,dc:dca1,test:subtract_basic"
+        values: [10, 25, 40, null, null, null, null]
+
+      # test_case_multiply_basic
+      - labels: "name:base,dc:dca1,test:multiply_basic"
+        values: [5, 10, 15, null, null, null, null]
+      - labels: "name:multiplier,dc:dca1,test:multiply_basic"
+        values: [2, 3, 4, null, null, null, null]
+
+      # test_case_ratio_basic
+      - labels: "name:current,dc:dca1,test:ratio_basic"
+        values: [50, 100, 75, null, null, null, null]
+      - labels: "name:baseline,dc:dca1,test:ratio_basic"
+        values: [40, 80, 60, null, null, null, null]
+
+      # test_case_sort_max_desc
+      - labels: "name:series1,dc:dca1,test:sort"
+        values: [10, 50, 30, null, null, null, null]
+      - labels: "name:series2,dc:dca1,test:sort"
+        values: [20, 40, 60, null, null, null, null]
+
+      # test_case_sort_avg_asc
+      - labels: "name:high,dc:dca1,test:sort_avg"
+        values: [100, 200, 300, null, null, null, null]
+      - labels: "name:low,dc:dca1,test:sort_avg"
+        values: [10, 20, 30, null, null, null, null]
+
+      # test_case_head_basic
+      - labels: "name:values,dc:dca1,test:head_basic"
+        values: [10, 20, 30, 40, 50, null, null]
+
+      # test_case_alias_basic
+      - labels: "name:cpu_usage,dc:dca1,test:alias_basic"
+        values: [1, 2, 3, 4, null, null, null]
+
+      # test_case_aliasByTags_basic
+      - labels: "name:requests,service:web,dc:dca1,test:aliasByTags_basic"
+        values: [100, 200, 300, null, null, null, null]
+
+      # test_case_aliasByTags_single
+      - labels: "name:latency,service:payment,dc:dca1,test:aliasByTags_single"
+        values: [50, 75, 60, null, null, null, null]
+
+      # test_case_showTags_basic
+      - labels: "name:requests,service:web,dc:dca1,env:prod,test:showTags_basic"
+        values: [10, 20, 30, null, null, null, null]
+
+      # test_case_removeEmpty_basic
+      - labels: "name:active,dc:dca1,test:removeEmpty"
+        values: [1, 2, 3, null, null, null, null]
+      - labels: "name:inactive,dc:dca1,test:removeEmpty"
+        values: [null, null, null, null, null, null, null]
+
+      # test_case_excludedByTag_basic
+      - labels: "name:cpu,service:web,dc:dca1,test:excludedByTag"
+        values: [1, 2, 3, null, null, null, null]
+      - labels: "name:cpu,service:api,dc:dca1,test:excludedByTag"
+        values: [4, 5, 6, null, null, null, null]
+
+      # test_case_timeshift_basic:
+      - labels: "name:current,dc:dca1,test:timeshift_basic"
+        values: [10, 20, 30, 40, null, null, null]
+
+      # test_case_intersect_basic
+      - labels: "name:cpu,region:us,dc:dca1,test:intersectL"
+        values: [10, 20, 30, null, null, null, null]
+      - labels: "name:cpu,region:us,dc:phx1,test:intersectR"
+        values: [15, 25, 35, null, null, null, null]
+
+      # test_case_fallbackSeries_basic
+      - labels: "name:primary,dc:dca1,test:fallbackSeries"
+        values: [null, null, null, null, null, null, null]
+      - labels: "name:backup,dc:dca1,test:fallbackSeries"
+        values: [10, 20, 30, null, null, null, null]
+
+      # test_case_scale_multi_step_pipeline
+      - labels: "name:raw_sensor,dc:dca1,test:scale_pipeline"
+        values: [-10, -20, 30, -40, null, null, null]
+
+      # test_case_keepLastValue_complex_gaps
+      - labels: "name:intermittent,dc:dca1,test:keepLastValue_complex"
+        values: [100, null, null, 150, null, null, 200]
+
+      # test_case_percentileOfSeries_basic
+      - labels: "name:latency,dc:dca1,test:percentile"
+        values: [10, 20, 30, 40, 50, null, null]
+      - labels: "name:latency,dc:dca2,test:percentile"
+        values: [10, 20, 30, 40, 50, null, null]
+      - labels: "name:latency,dc:dca3,test:percentile"
+        values: [10, 20, 30, 40, 50, null, null]
+      - labels: "name:latency,dc:dca4,test:percentile"
+        values: [100, 200, 300, 400, 500, null, null]
+
+      # test_case_medianOfSeries_basic
+      - labels: "name:response_time,dc:dca1,test:medianOfSeries"
+        values: [1, 3, 2, 6, 4, null, null]
+
+      # test_case_sum_multi_datacenter
+      - labels: "name:requests,service:web,dc:dca1,test:sum_multi"
+        values: [100, 200, 150, null, null, null, null]
+      - labels: "name:requests,service:api,dc:dca1,test:sum_multi"
+        values: [80, 180, 120, null, null, null, null]
+      - labels: "name:requests,service:web,dc:phx1,test:sum_multi"
+        values: [120, 220, 170, null, null, null, null]
+      - labels: "name:requests,service:api,dc:phx1,test:sum_multi"
+        values: [90, 190, 130, null, null, null, null]
+
+      # test_case_asPercent_error_rate
+      - labels: "name:total_requests,service:api,dc:dca1,test:error_rate"
+        values: [1000, 2000, 1500, null, null, null, null]
+      - labels: "name:error_requests,service:api,dc:dca1,test:error_rate"
+        values: [50, 100, 75, null, null, null, null]
+
+      # test_case_asPercent_capacity_utilization
+      - labels: "name:used_memory,service:db,dc:dca1,test:capacity"
+        values: [750, 800, 650, null, null, null, null]
+      - labels: "name:total_memory,service:db,dc:dca1,test:capacity"
+        values: [1000, 1000, 1000, null, null, null, null]
+
+  queries:
+
+    - name: "test_case_fetch_simple"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:fetch_simple"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "test_metric", dc: "dca1", test: "fetch_simple"}
+            values: [1, 2, 3, 4]
+
+    - name: "test_case_fetch_with_nan"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:fetch_nan"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "test_metric", dc: "dca1", test: "fetch_nan"}
+            values: [1, null, 3, 4]
+
+    - name: "test_case_fetch_negative"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:fetch_negative"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "test_metric", dc: "dca1", test: "fetch_negative"}
+            values: [-5, 10, -3, 7]
+
+
+    - name: "test_case_sum_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:sum_basic | sum"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [5, 7, 9]
+
+    - name: "test_case_sum_by_tag"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:sum_by_tag | sum dc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {dc: "dca1"}
+            values: [10, 20, 30]
+          - metric: {dc: "phx1"}
+            values: [15, 25, 35]
+
+    - name: "test_case_avg_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:avg_basic | avg service"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {service: "web"}
+            values: [15, 25, 35]
+
+    - name: "test_case_averageSeries"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:averageSeries | averageSeries"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [15, 25, 35]
+
+    - name: "test_case_max_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:max_basic | max name"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu"}
+            values: [8, 15, 10]
+
+    - name: "test_case_min_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:min_basic | min name"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "latency"}
+            values: [5, 12, 6]
+
+    - name: "test_case_median_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:median_basic | percentileOfSeries 50"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__percentile: "50"}
+            values: [1.0, 4.0, 3.0]
+
+    - name: "test_case_count_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:count_basic | count"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [2, 2, 2, 2]
+
+    - name: "test_case_percentileOfSeries_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:percentile | percentileOfSeries 75"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__percentile: "75"}
+            values: [10.0, 20.0, 30.0, 40.0, 50]
+
+    - name: "test_case_medianOfSeries_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:medianOfSeries | percentileOfSeries 50"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {__percentile: "50"}
+            values: [1, 3, 2, 6, 4]
+
+    - name: "test_case_sum_multi_datacenter"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:sum_multi | sum dc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {dc: "dca1"}
+            values: [180, 380, 270]
+          - metric: {dc: "phx1"}
+            values: [210, 410, 300]
+
+
+    - name: "test_case_scale_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:scale_basic | scale 2"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "metric", dc: "dca1", test: "scale_basic"}
+            values: [10, 20, 30, 40]
+
+    - name: "test_case_absolute_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:absolute_basic | absolute"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "temperature", dc: "dca1", test: "absolute_basic"}
+            values: [5, 10, 3, 7]
+
+    - name: "test_case_transformNull_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:transformNull_basic | transformNull 0"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "sensor", dc: "dca1", test: "transformNull_basic"}
+            values: [1, 0, 3, 0, 5]
+
+    - name: "test_case_transformNull_negative"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:transformNull_negative | transformNull -1"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "metric", dc: "dca1", test: "transformNull_negative"}
+            values: [10, -1, 20, -1]
+
+    - name: "test_case_keepLastValue_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:keepLastValue_basic | keepLastValue 2m"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu", dc: "dca1", test: "keepLastValue_basic"}
+            values: [100, 100, 100, 150, 150]
+
+    - name: "test_case_keepLastValue_window"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:keepLastValue_window | keepLastValue 1m"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "memory", dc: "dca1", test: "keepLastValue_window"}
+            values: [50, 50, null, null, 80]
+
+    - name: "test_case_keepLastValue_complex_gaps"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:keepLastValue_complex | keepLastValue 2m | transformNull -1"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:07:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "intermittent", dc: "dca1", test: "keepLastValue_complex"}
+            values: [100, 100, 100, 150, 150, 150, 200]
+
+    - name: "test_case_fallbackSeries_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:fallbackSeries name:primary | fallbackSeries(fetch test:fallbackSeries name:backup)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "backup", dc: "dca1", test: "fallbackSeries"}
+            values: [10, 20, 30]
+
+
+    - name: "test_case_derivative_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:derivative_basic | derivative"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "counter", dc: "dca1", test: "derivative_basic"}
+            values: [null, 10, -5, 15, -5]
+
+    - name: "test_case_perSecond_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:perSecond_basic | perSecond"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "bytes", dc: "dca1", test: "perSecond_basic"}
+            values: [null, 1.6666666666666667, null, 2.5]
+
+    - name: "test_case_integral_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:integral_basic | integral"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "rate", dc: "dca1", test: "integral_basic"}
+            values: [10, 25, 45, 70]
+
+    - name: "test_case_isNonNull_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:isNonNull_basic | isNonNull"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "sensor", dc: "dca1", test: "isNonNull_basic"}
+            values: [1, 0, 1, 0]
+
+    - name: "test_case_scaleToSeconds_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:scaleToSeconds_basic | scaleToSeconds 3600"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "hourly_count", dc: "dca1", test: "scaleToSeconds_basic"}
+            values: [216000, 432000, 648000]
+
+    - name: "test_case_moving_avg"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:moving_avg | movingAverage 3m"
+      time_config:
+        min_timestamp: "2025-01-01T00:01:00Z"
+        max_timestamp: "2025-01-01T00:07:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "values", dc: "dca1", test: "moving_avg"}
+            values: [1, 3, 3, 5.333333333333333, 4.333333333333333, 5.333333333333333]
+
+    - name: "test_case_moving_sum"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:moving_sum | movingSum 3m"
+      time_config:
+        min_timestamp: "2025-01-01T00:01:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "counter", dc: "dca1", test: "moving_sum"}
+            values: [2, 6, 12, 18, 24]
+
+    - name: "test_case_moving_max"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:moving_max | movingMax 3m"
+      time_config:
+        min_timestamp: "2025-01-01T00:01:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "values", dc: "dca1", test: "moving_max"}
+            values: [10, 10, 15, 15, 20]
+
+    - name: "test_case_moving_min"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:moving_min | movingMin 3m"
+      time_config:
+        min_timestamp: "2025-01-01T00:01:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "values", dc: "dca1", test: "moving_min"}
+            values: [10, 5, 5, 2, 2]
+
+    - name: "test_case_summarize_sum"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:summarize_sum | summarize 2m sum"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "requests", dc: "dca1", test: "summarize_sum"}
+            values: [30, null, 70, null, 110, null, null]
+
+    - name: "test_case_summarize_avg"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:summarize_avg | summarize 3m avg"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu", dc: "dca1", test: "summarize_avg"}
+            values: [20, null, null, 50, null, null, null]
+
+    - name: "test_case_summarize_max"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:summarize_max | summarize 2m max true"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "latency", dc: "dca1", test: "summarize_max"}
+            values: [15, null, 25, null, 30, null, null]
+
+    - name: "test_case_summarize_min"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:summarize_min | summarize 3m min"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "errors", dc: "dca1", test: "summarize_min"}
+            values: [5, null, null, 8, null, null, null]
+
+
+    - name: "test_case_asPercent_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:asPercent_basic name:success | asPercent(fetch test:asPercent_basic name:total)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "success", dc: "dca1", test: "asPercent_basic", type: "ratios"}
+            values: [90, 95, 85]
+
+    - name: "test_case_divide_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:divide_basic name:numerator | divide(fetch test:divide_basic name:denominator)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "numerator", dc: "dca1", test: "divide_basic", type: "ratios"}
+            values: [10, 10, 10]
+
+    - name: "test_case_subtract_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:subtract_basic name:total | subtract(fetch test:subtract_basic name:errors)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "total", dc: "dca1", test: "subtract_basic"}
+            values: [90, 125, 160]
+
+    - name: "test_case_multiply_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:multiply_basic | multiply"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [10, 30, 60]
+
+    - name: "test_case_ratio_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:ratio_basic name:current | ratio(fetch test:ratio_basic name:baseline)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "current", dc: "dca1", test: "ratio_basic", type: "ratios"}
+            values: [125, 125, 125]
+
+    - name: "test_case_asPercent_error_rate"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:error_rate name:error_requests | asPercent(fetch test:error_rate name:total_requests)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "error_requests", service: "api", dc: "dca1", test: "error_rate", type: "ratios"}
+            values: [5, 5, 5]
+
+    - name: "test_case_asPercent_capacity_utilization"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:capacity name:used_memory | asPercent(fetch test:capacity name:total_memory)"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "used_memory", service: "db", dc: "dca1", test: "capacity", type: "ratios"}
+            values: [75, 80, 65]
+
+
+    - name: "test_case_sort_max_desc"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:sort | sort max desc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "series2", dc: "dca1", test: "sort"}
+            values: [20, 40, 60]
+          - metric: {name: "series1", dc: "dca1", test: "sort"}
+            values: [10, 50, 30]
+
+    - name: "test_case_sort_avg_asc"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:sort_avg | sort avg asc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "low", dc: "dca1", test: "sort_avg"}
+            values: [10, 20, 30]
+          - metric: {name: "high", dc: "dca1", test: "sort_avg"}
+            values: [100, 200, 300]
+
+    - name: "test_case_head_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:head_basic | head 3"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "values", dc: "dca1", test: "head_basic"}
+            values: [10, 20, 30]
+
+    - name: "test_case_alias_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:alias_basic | alias My_CPU_Metric"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu_usage", dc: "dca1", test: "alias_basic"}
+            alias: "My_CPU_Metric"
+            values: [1, 2, 3, 4]
+
+    - name: "test_case_aliasByTags_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:aliasByTags_basic | aliasByTags service dc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "requests", service: "web", dc: "dca1", test: "aliasByTags_basic"}
+            alias: "web dca1"
+            values: [100, 200, 300]
+
+    - name: "test_case_aliasByTags_single"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:aliasByTags_single | aliasByTags service"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "latency", service: "payment", dc: "dca1", test: "aliasByTags_single"}
+            alias: "payment"
+            values: [50, 75, 60]
+
+    - name: "test_case_showTags_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:showTags_basic | showTags"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "requests", service: "web", dc: "dca1", env: "prod", test: "showTags_basic"}
+            alias: "dc:dca1 env:prod name:requests service:web test:showTags_basic"
+            values: [10, 20, 30]
+
+    - name: "test_case_removeEmpty_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:removeEmpty | removeEmpty"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "active", dc: "dca1", test: "removeEmpty"}
+            values: [1, 2, 3]
+
+
+    - name: "test_case_excludeByTag_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:excludedByTag | excludeByTag service api"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu", service: "web", dc: "dca1", test: "excludedByTag"}
+            values: [1, 2, 3]
+
+    - name: "test_case_intersect_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:intersectL | intersect (fetch test:intersectR) region"  # TODO: Fix syntax - intersect requires specific argument format
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cpu", region: "us", dc: "dca1", test: "intersectL"}
+            values: [10, 20, 30]
+
+    - name: "test_case_timeshift_basic"
+      type: "m3ql"
+      indices: "golden_all"
+      query: "fetch test:timeshift_basic | timeshift -1m"
+      time_config:
+        min_timestamp: "2025-01-01T00:01:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "current", dc: "dca1", test: "timeshift_basic"}
+            values: [10, 20, 30, 40]

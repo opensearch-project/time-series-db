@@ -58,6 +58,7 @@ import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.Mockito.doReturn;
 
@@ -273,6 +274,7 @@ public class HeadTests extends OpenSearchTestCase {
         Head.IndexChunksResult indexChunksResult = head.closeHeadChunks(true, 100);
 
         assertEquals("7 samples were MMAPed, replay from minSeqNo + 1", 6, getMinSeqNoToKeep(indexChunksResult.minSeqNo()));
+        var openChunks = head.getNumOpenChunks();
         head.close();
         closedChunkIndexManager.close();
 
@@ -286,7 +288,6 @@ public class HeadTests extends OpenSearchTestCase {
             defaultSettings
         );
         Head newHead = new Head(headPath, new ShardId("headTest", "headTestUid", 0), newClosedChunkIndexManager, defaultSettings);
-
         // MemSeries are correctly loaded and updated from commit data
         assertEquals(series1, newHead.getSeriesMap().getByReference(series1Reference).getLabels());
         assertEquals(8000, newHead.getSeriesMap().getByReference(series1Reference).getMaxMMapTimestamp());
@@ -308,7 +309,7 @@ public class HeadTests extends OpenSearchTestCase {
             assertTrue("Previously in-memory sample for seqNo " + i + " is appended", appender1.append(() -> {}, () -> {}));
             i++;
         }
-
+        assertEquals(openChunks, newHead.getNumOpenChunks());
         newHead.close();
         newClosedChunkIndexManager.close();
     }
@@ -556,6 +557,86 @@ public class HeadTests extends OpenSearchTestCase {
         assertTrue(result2.created());
         assertNotEquals(result1.series(), result2.series());
         assertEquals(labels.stableHash(), result2.series().getReference());
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    public void testGetNumOpenChunksEmpty() throws IOException {
+        ShardId shardId = new ShardId("headTest", "headTestUid", 0);
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("testGetNumOpenChunksEmpty"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            shardId,
+            defaultSettings
+        );
+        Head head = new Head(createTempDir("testGetNumOpenChunksEmpty"), shardId, closedChunkIndexManager, defaultSettings);
+
+        // Empty head should have 0 open chunks
+        assertEquals("Empty head should have 0 open chunks", 0L, head.getNumOpenChunks());
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    public void testGetNumOpenChunksBasicCounting() throws IOException, InterruptedException {
+        ShardId shardId = new ShardId("headTest", "headTestUid", 0);
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("testGetNumOpenChunksBasicCounting"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            shardId,
+            defaultSettings
+        );
+        Head head = new Head(createTempDir("testGetNumOpenChunksBasicCounting"), shardId, closedChunkIndexManager, defaultSettings);
+
+        long seqNo = 0;
+
+        // Create 3 series with 1 chunk each
+        for (int i = 0; i < 3; i++) {
+            Labels labels = ByteLabels.fromStrings("series", String.valueOf(i));
+            appendSampleWithSeqNo(head, labels, 1000L, 1.0, seqNo++);
+        }
+
+        assertEquals("Should have 3 open chunks (1 per series)", 3L, head.getNumOpenChunks());
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    public void testGetNumOpenChunksMultipleChunksPerSeries() throws IOException, InterruptedException {
+        ShardId shardId = new ShardId("headTest", "headTestUid", 0);
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("testGetNumOpenChunksMultipleChunksPerSeries"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            shardId,
+            defaultSettings
+        );
+        Head head = new Head(
+            createTempDir("testGetNumOpenChunksMultipleChunksPerSeries"),
+            shardId,
+            closedChunkIndexManager,
+            defaultSettings
+        );
+
+        long seqNo = 0;
+        Labels labels = ByteLabels.fromStrings("metric", "test");
+
+        // Create multiple chunks for the same series by spanning chunk duration
+        // Chunk duration is 8000ms (8 seconds) from defaultSettings
+        appendSampleWithSeqNo(head, labels, 1000L, 1.0, seqNo++);   // First chunk
+        appendSampleWithSeqNo(head, labels, 10000L, 2.0, seqNo++);  // Second chunk
+        appendSampleWithSeqNo(head, labels, 20000L, 3.0, seqNo++);  // Third chunk
+
+        assertEquals("Should have 3 open chunks in one series", 3L, head.getNumOpenChunks());
 
         head.close();
         closedChunkIndexManager.close();
@@ -2079,6 +2160,107 @@ public class HeadTests extends OpenSearchTestCase {
     }
 
     /**
+     * Ensure callback failure during append does not deadlock with dropEmptySeries.
+     * This stresses the lock ordering between series.lock() and per-ref locks.
+     */
+    public void testNoDeadlockBetweenDropEmptySeriesAndCallbackFailure() throws Exception {
+        ShardId shardId = new ShardId("headTest", "headTestUid", 0);
+        Path metricsPath = createTempDir("testNoDeadlockBetweenDropEmptySeriesAndCallbackFailure");
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            metricsPath,
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            shardId,
+            defaultSettings
+        );
+        Head head = new Head(metricsPath, shardId, closedChunkIndexManager, defaultSettings);
+
+        long baseTimestamp = 100_000L;
+
+        // Anchor series to ensure closeHeadChunks runs dropEmptySeries (minSeqNo != Long.MAX_VALUE).
+        Labels anchorLabels = ByteLabels.fromStrings("type", "anchor", "id", "1");
+        long anchorRef = anchorLabels.stableHash();
+        Head.HeadAppender anchorAppender = head.newAppender();
+        anchorAppender.preprocess(Engine.Operation.Origin.PRIMARY, 0, anchorRef, anchorLabels, baseTimestamp, 10.0, () -> {});
+        anchorAppender.append(() -> {}, () -> {});
+
+        int iterations = 50;
+        for (int i = 0; i < iterations; i++) {
+            int iter = i;
+            Labels targetLabels = ByteLabels.fromStrings("type", "target", "iter", String.valueOf(iter));
+            long targetRef = targetLabels.stableHash();
+
+            CountDownLatch callbackStarted = new CountDownLatch(1);
+            CountDownLatch allowCallback = new CountDownLatch(1);
+            CountDownLatch appendDone = new CountDownLatch(1);
+            CountDownLatch deleteDone = new CountDownLatch(1);
+            AtomicReference<Exception> appendFailure = new AtomicReference<>();
+            AtomicReference<Exception> deleteFailure = new AtomicReference<>();
+
+            Thread appendThread = new Thread(() -> {
+                try {
+                    Head.HeadAppender appender = head.newAppender();
+                    appender.preprocess(
+                        Engine.Operation.Origin.PRIMARY,
+                        1_000 + iter,
+                        targetRef,
+                        targetLabels,
+                        baseTimestamp + 1_000 + iter,
+                        42.0,
+                        () -> {}
+                    );
+                    appender.append(() -> {
+                        callbackStarted.countDown();
+                        try {
+                            if (!allowCallback.await(5, TimeUnit.SECONDS)) {
+                                throw new RuntimeException("Callback wait timed out");
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("Callback interrupted", e);
+                        }
+                        throw new RuntimeException("Simulated callback failure");
+                    }, () -> {});
+                } catch (Exception e) {
+                    appendFailure.set(e);
+                } finally {
+                    appendDone.countDown();
+                }
+            });
+
+            Thread deleteThread = new Thread(() -> {
+                try {
+                    if (!callbackStarted.await(5, TimeUnit.SECONDS)) {
+                        throw new RuntimeException("Callback did not start");
+                    }
+                    head.closeHeadChunks(true, 100);
+                } catch (Exception e) {
+                    deleteFailure.set(e);
+                } finally {
+                    deleteDone.countDown();
+                }
+            });
+
+            appendThread.start();
+            deleteThread.start();
+
+            assertTrue("Callback should start for iteration " + iter, callbackStarted.await(5, TimeUnit.SECONDS));
+            allowCallback.countDown();
+
+            assertTrue("Append should complete for iteration " + iter, appendDone.await(5, TimeUnit.SECONDS));
+            assertTrue("Delete should complete for iteration " + iter, deleteDone.await(5, TimeUnit.SECONDS));
+
+            assertNotNull("Append should throw for iteration " + iter, appendFailure.get());
+            assertNull("Delete should not throw for iteration " + iter, deleteFailure.get());
+        }
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
      * Helper method to query the LiveSeriesIndex and get the MIN_TIMESTAMP for a specific series reference.
      *
      * @param liveSeriesIndex the LiveSeriesIndex to query
@@ -2351,7 +2533,8 @@ public class HeadTests extends OpenSearchTestCase {
 
     /**
      * Tests chunk boundary-based rate limiting with dynamic percentage changes.
-     * Dynamic setting changes only take effect at the next chunk boundary crossing.
+     * Within a boundary, cachedChunksToProcess uses max(existing, new) to handle growth.
+     * At boundary crossing, cachedChunksToProcess is reset to the new value.
      */
     public void testChunkBoundaryRateLimiting() throws Exception {
         // Create head with 10% rate limit
@@ -2398,12 +2581,14 @@ public class HeadTests extends OpenSearchTestCase {
         Head.IndexChunksResult result1 = head.closeHeadChunks(true, 10);
         assertEquals("First flush should close 2 chunks (10% of 20)", 2, result1.numClosedChunks());
 
-        // Now change percentage to 5% for remaining flushes in first range
-        // This change should not affect the first chunk range and will only update after chunk boundary.
+        // Within same boundary, passing 5% should still close 2 chunks because:
+        // - new target = 5% of 18 remaining = 1
+        // - cached target = 2
+        // - max(2, 1) = 2
         for (int flush = 2; flush <= 10; flush++) {
-            Head.IndexChunksResult result = head.closeHeadChunks(true, 5);  // Pass 5% but should still close 2
+            Head.IndexChunksResult result = head.closeHeadChunks(true, 5);
             assertEquals(
-                String.format(Locale.getDefault(), "Flush %d should still close 2 chunks (cached 10%% target from first boundary)", flush),
+                String.format(Locale.getDefault(), "Flush %d should close 2 chunks (max of cached=2 and new=1)", flush),
                 2,
                 result.numClosedChunks()
             );
@@ -2413,8 +2598,8 @@ public class HeadTests extends OpenSearchTestCase {
         // Cutoff at 360000, so maxTime = 360000 + 20000 = 380000
         head.updateMaxSeenTimestamp(380000L);
 
-        // Now in second range, the 5% setting should take effect
-        // 5% of 10 = 0.5, which rounds to 1
+        // Now in second range, boundary crossed so cachedChunksToProcess is reset
+        // 5% of 10 = 1
         for (int flush = 1; flush <= 10; flush++) {
             Head.IndexChunksResult result = head.closeHeadChunks(true, 5);
             assertEquals(
@@ -2423,6 +2608,108 @@ public class HeadTests extends OpenSearchTestCase {
                 result.numClosedChunks()
             );
         }
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
+     * Tests that getCutoffTimestamp() returns Long.MIN_VALUE when maxTime is Long.MIN_VALUE,
+     * preventing underflow that would wrap to a huge positive value.
+     */
+    public void testGetCutoffTimestampUnderflowProtection() throws Exception {
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("metrics"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("headTest", "headTestUid", 0),
+            defaultSettings
+        );
+
+        Head head = new Head(
+            createTempDir("testGetCutoffTimestamp"),
+            new ShardId("headTest", "headTestUid", 0),
+            closedChunkIndexManager,
+            defaultSettings
+        );
+
+        // When no samples have been ingested, maxTime is Long.MIN_VALUE
+        // getCutoffTimestamp() should return Long.MIN_VALUE to avoid underflow
+        long cutoffTimestamp = head.getCutoffTimestamp();
+        assertEquals(
+            "getCutoffTimestamp should return Long.MIN_VALUE when no samples ingested to avoid underflow",
+            Long.MIN_VALUE,
+            cutoffTimestamp
+        );
+
+        // After ingesting a sample, getCutoffTimestamp should return maxTime - oooCutoffWindow
+        Labels series = ByteLabels.fromStrings("test", "cutoff");
+        Head.HeadAppender appender = head.newAppender();
+        appender.preprocess(Engine.Operation.Origin.PRIMARY, 0, series.stableHash(), series, 100000L, 1.0, () -> {});
+        appender.append(() -> {}, () -> {});
+
+        // Now maxTime = 100000, oooCutoffWindow = 8000 (from defaultSettings)
+        cutoffTimestamp = head.getCutoffTimestamp();
+        assertEquals("getCutoffTimestamp should return maxTime - oooCutoffWindow after samples ingested", 100000L - 8000L, cutoffTimestamp);
+
+        head.close();
+        closedChunkIndexManager.close();
+    }
+
+    /**
+     * Tests that when closeable chunks decrease within the same boundary, the cached value is preserved
+     * (conservative approach to avoid thrashing).
+     */
+    public void testRateLimitingPreservesCachedValueWhenChunksDecrease() throws Exception {
+        Settings customSettings = Settings.builder()
+            .put(defaultSettings)
+            .put(TSDBPlugin.TSDB_ENGINE_MAX_CLOSEABLE_CHUNKS_PER_CHUNK_RANGE_PERCENTAGE.getKey(), 50)
+            .build();
+
+        ClosedChunkIndexManager closedChunkIndexManager = new ClosedChunkIndexManager(
+            createTempDir("metrics"),
+            new InMemoryMetadataStore(),
+            new NOOPRetention(),
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("headTest", "headTestUid", 0),
+            customSettings
+        );
+
+        Head head = new Head(
+            createTempDir("testPreserveCachedValue"),
+            new ShardId("headTest", "headTestUid", 0),
+            closedChunkIndexManager,
+            customSettings
+        );
+
+        long seqNo = 0;
+
+        // Create 10 series with 1 chunk each
+        for (int s = 0; s < 10; s++) {
+            Labels series = ByteLabels.fromStrings("series", String.valueOf(s));
+            for (int i = 1; i <= 4; i++) {
+                appendSampleWithSeqNo(head, series, i * 1000L, 1.0, seqNo++);
+            }
+        }
+
+        // Make chunks closeable
+        head.updateMaxSeenTimestamp(20000L);
+
+        // First flush: 10 closeable chunks, 50% = 5 chunks per flush
+        Head.IndexChunksResult result1 = head.closeHeadChunks(true, 50);
+        assertEquals("First flush should close 5 chunks (50% of 10)", 5, result1.numClosedChunks());
+        assertEquals("Should have 5 deferred chunks", 5, result1.deferredChunkCount());
+
+        // Second flush: only 5 closeable chunks remaining
+        // new target = 50% of 5 = 2
+        // cached target = 5
+        // max(5, 2) = 5 (preserved, but limited by available chunks)
+        Head.IndexChunksResult result2 = head.closeHeadChunks(true, 50);
+        assertEquals("Should close all 5 remaining chunks (cached=5, available=5)", 5, result2.numClosedChunks());
+        assertEquals("Should have no deferred chunks", 0, result2.deferredChunkCount());
 
         head.close();
         closedChunkIndexManager.close();

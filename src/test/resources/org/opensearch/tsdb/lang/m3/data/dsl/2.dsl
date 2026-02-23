@@ -245,6 +245,11 @@
             "type" : "moving",
             "interval" : 60000,
             "function" : "sum"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -265,6 +270,11 @@
             "type" : "moving",
             "interval" : 60000,
             "function" : "sum"
+          },
+          {
+            "type" : "truncate",
+            "truncate_start" : 1000000000,
+            "truncate_end" : 1001000000
           }
         ],
         "references" : {
@@ -292,11 +302,6 @@
           {
             "type" : "alias",
             "pattern" : "exec"
-          },
-          {
-            "type" : "truncate",
-            "truncate_start" : 1000000000,
-            "truncate_end" : 1001000000
           }
         ],
         "references" : {

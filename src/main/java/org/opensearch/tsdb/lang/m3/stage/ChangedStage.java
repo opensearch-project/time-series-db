@@ -11,8 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
@@ -79,7 +78,7 @@ public class ChangedStage implements UnaryPipelineStage {
 
         // Calculate total number of expected timestamps
         int numSteps = (int) ((maxTimestamp - minTimestamp) / stepSize) + 1;
-        List<Sample> changedSamples = new ArrayList<>(numSteps);
+        FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder(numSteps);
 
         // Track last non-null value for comparison
         Double lastNonNullValue = null;
@@ -92,9 +91,8 @@ public class ChangedStage implements UnaryPipelineStage {
             // Check if we have a sample at this timestamp
             Double currentValue = null;
             if (sampleIdx < samples.size()) {
-                Sample sample = samples.getSample(sampleIdx);
-                if (sample != null && sample.getTimestamp() == timestamp) {
-                    double value = sample.getValue();
+                if (samples.getTimestamp(sampleIdx) == timestamp) {
+                    double value = samples.getValue(sampleIdx);
                     currentValue = Double.isNaN(value) ? null : value;
                     sampleIdx++; // Move to next sample
                 }
@@ -111,11 +109,11 @@ public class ChangedStage implements UnaryPipelineStage {
                 lastNonNullValue = currentValue;
             }
 
-            changedSamples.add(new FloatSample(timestamp, outputValue));
+            resultBuilder.add(timestamp, outputValue);
         }
 
         return new TimeSeries(
-            changedSamples,
+            resultBuilder.build(),
             series.getLabels(),
             series.getMinTimestamp(),
             series.getMaxTimestamp(),

@@ -78,7 +78,7 @@ public class SumCountSampleTests extends OpenSearchTestCase {
 
             @Override
             public SampleType getSampleType() {
-                return SampleType.FLOAT_SAMPLE;
+                return SampleType.MIN_MAX_SAMPLE;
             }
 
             @Override
@@ -148,8 +148,7 @@ public class SumCountSampleTests extends OpenSearchTestCase {
         SumCountSample sumCountSample = new SumCountSample(1000L, 50.0, 2);
         FloatSample floatSample = new FloatSample(1000L, 25.0);
 
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> sumCountSample.merge(floatSample));
-        assertEquals("Cannot merge SumCountSample with FloatSample", e.getMessage());
+        assertEquals(new SumCountSample(1000L, 75.0, 3), sumCountSample.merge(floatSample));
     }
 
     public void testMergeWithNull() {
@@ -268,5 +267,20 @@ public class SumCountSampleTests extends OpenSearchTestCase {
         // Test zero sum with zero count - should return NaN per Prometheus/M3
         SumCountSample zeroSample = new SumCountSample(1000L, 0.0, 0);
         assertTrue(Double.isNaN(zeroSample.getAverage()));
+    }
+
+    public void testRamBytesUsed() {
+        SumCountSample sample = new SumCountSample(1234567890L, 100.0, 5);
+
+        // ramBytesUsed() should return SHALLOW_SIZE
+        long ramBytes = sample.ramBytesUsed();
+        assertEquals(SumCountSample.SHALLOW_SIZE, ramBytes);
+
+        // SHALLOW_SIZE should be a positive value
+        assertTrue(SumCountSample.SHALLOW_SIZE > 0);
+
+        // All instances should report the same shallow size (records are shallow)
+        SumCountSample sample2 = new SumCountSample(0L, 0.0, 0);
+        assertEquals(sample.ramBytesUsed(), sample2.ramBytesUsed());
     }
 }

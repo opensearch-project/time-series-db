@@ -13,6 +13,7 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.rest.RestResponse;
 import org.opensearch.search.aggregations.Aggregations;
+import org.opensearch.search.profile.NetworkTime;
 import org.opensearch.search.profile.ProfileResult;
 import org.opensearch.search.profile.ProfileShardResult;
 import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
@@ -909,5 +910,860 @@ public class PromMatrixResponseListenerTests extends OpenSearchTestCase {
         when(searchResponse.getAggregations()).thenReturn(aggregations);
 
         return searchResponse;
+    }
+
+    // ============================
+    // Profile Output Format Tests (NEW - for profile param separation feature)
+    // ============================
+
+    /**
+     * Test that when profile=true, response includes raw ProfileShardResult format.
+     * The profile field should contain the complete OpenSearch profile structure with:
+     * - shards array
+     * - Each shard with id, searches, aggregations, fetch, network times
+     */
+    public void testProfileTrueReturnsCompleteProfileShardResult() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create comprehensive profile with aggregations and network timing
+        Map<String, Long> breakdown = new HashMap<>();
+        breakdown.put("collect", 100_000_000L);
+        breakdown.put("reduce", 50_000_000L);
+
+        ProfileResult aggProfileResult = new ProfileResult(
+            TimeSeriesUnfoldAggregator.class.getSimpleName(),
+            "comprehensive test",
+            breakdown,
+            Collections.emptyMap(),
+            150_000_000L,
+            List.of()
+        );
+
+        AggregationProfileShardResult aggProfile = new AggregationProfileShardResult(List.of(aggProfileResult));
+        NetworkTime networkTime = new NetworkTime(75_000_000L, 25_000_000L);
+
+        ProfileShardResult shardResult = new ProfileShardResult(
+            List.of(),      // queries (empty for this test)
+            aggProfile,     // aggregations
+            null,           // fetch (null for this test)
+            networkTime     // network timing
+        );
+
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("[node1][test_index][0]", shardResult);
+
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole profile JSON structure using string-based comparison
+        assertTrue("Profile field should exist when profile=true", parsed.containsKey("profile"));
+
+        // Define expected JSON structure as a string for better readability
+        String expectedProfileJson = """
+            {
+              "shards": [{
+                "id": "[node1][test_index][0]",
+                "searches": [],
+                "fetch": [],
+                "inbound_network_time_in_millis": 75,
+                "outbound_network_time_in_millis": 25,
+                "aggregations": [{
+                  "type": "TimeSeriesUnfoldAggregator",
+                  "description": "comprehensive test",
+                  "time_in_nanos": 150000000,
+                  "breakdown": {
+                    "collect": 100000000,
+                    "reduce": 50000000
+                  }
+                }]
+              }]
+            }
+            """;
+
+        Map<String, Object> expectedProfile = parseJsonResponse(expectedProfileJson);
+        Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+
+        // Compare whole profile structure
+        assertEquals("Profile structure should match expected", expectedProfile, actualProfile);
+    }
+
+    /**
+     * Test that when profile=false, response does NOT include profile field.
+     * Only the standard Prometheus matrix response should be returned.
+     */
+    public void testProfileFalseDoesNotIncludeProfileField() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, false, false);
+
+        // Create SearchResponse with profile results (but profile=false so they should be ignored)
+        SearchResponse searchResponse = createSearchResponseWithProfile(
+            100_000_000L,
+            50_000_000L,
+            25_000_000L,  // shard 1
+            80_000_000L,
+            40_000_000L,
+            20_000_000L    // shard 2
+        );
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole response structure WITHOUT profile field when profile=false
+        String expectedJson = """
+            {
+              "status": "success",
+              "data": {
+                "resultType": "matrix",
+                "result": [{
+                  "metric": {
+                    "region": "us-east",
+                    "service": "api"
+                  },
+                  "values": [[1.0, "10.0"]]
+                }]
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonResponse(expectedJson);
+
+        // Profile field should NOT exist when profile=false
+        assertFalse("Profile field should not be present when profile=false", parsed.containsKey("profile"));
+
+        assertEquals("Response without profile field should match expected", expected, parsed);
+    }
+
+    /**
+     * Test that profile output includes query profiling information.
+     * Validates the "searches" section is present and properly formatted.
+     * Note: This test verifies structure only - detailed query profiling content
+     * will be validated through integration tests since creating QueryProfileShardResult
+     * requires more complex setup.
+     */
+    public void testProfileIncludesQueryProfilingInfo() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create ProfileShardResult with empty query results (structure test only)
+        ProfileShardResult shardResult = new ProfileShardResult(
+            List.of(),  // Empty query profile for this unit test
+            null,       // No aggregation profile
+            null,       // No fetch profile
+            null        // No network timing
+        );
+
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("shard_0", shardResult);
+
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole profile structure with searches array
+        // Note: The searches array is empty in this test since we didn't provide QueryProfileShardResult
+        // The important part is that the structure exists and will be populated when query profiling is enabled
+        String expectedProfileJson = """
+            {
+              "shards": [{
+                "id": "shard_0",
+                "searches": [],
+                "aggregations": [],
+                "fetch": []
+              }]
+            }
+            """;
+
+        Map<String, Object> expectedProfile = parseJsonResponse(expectedProfileJson);
+        Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+
+        assertEquals("Profile structure with searches array should match expected", expectedProfile, actualProfile);
+    }
+
+    /**
+     * Test that profile output includes aggregation profiling with breakdown times.
+     * Validates the "aggregations" section with timing breakdown and debug info.
+     */
+    public void testProfileIncludesAggregationProfilingInfo() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create aggregation profile with detailed breakdown and debug info
+        Map<String, Long> breakdown = new HashMap<>();
+        breakdown.put("initialize", 100_000L);
+        breakdown.put("collect", 200_000_000L);
+        breakdown.put("post_collection", 50_000_000L);
+        breakdown.put("build_aggregation", 150_000_000L);
+        breakdown.put("reduce", 75_000_000L);
+
+        Map<String, Object> debugInfo = new HashMap<>();
+        debugInfo.put("stages", "ScaleStage,SumStage");
+        debugInfo.put("total_chunks", 1000L);
+        debugInfo.put("total_input_series", 50L);
+        debugInfo.put("total_output_series", 10L);
+
+        ProfileResult aggProfileResult = new ProfileResult(
+            TimeSeriesUnfoldAggregator.class.getSimpleName(),
+            "test description",
+            breakdown,
+            debugInfo,
+            475_100_000L,  // total time
+            List.of()
+        );
+
+        AggregationProfileShardResult aggProfile = new AggregationProfileShardResult(List.of(aggProfileResult));
+        ProfileShardResult shardResult = new ProfileShardResult(List.of(), aggProfile, null, null);
+
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("shard_0", shardResult);
+
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole profile structure with detailed aggregation info using string-based comparison
+        // Define expected JSON structure as a string for better readability
+        String expectedProfileJson = """
+            {
+              "shards": [{
+                "id": "shard_0",
+                "searches": [],
+                "fetch": [],
+                "aggregations": [{
+                  "type": "TimeSeriesUnfoldAggregator",
+                  "description": "test description",
+                  "time_in_nanos": 475100000,
+                  "breakdown": {
+                    "initialize": 100000,
+                    "collect": 200000000,
+                    "post_collection": 50000000,
+                    "build_aggregation": 150000000,
+                    "reduce": 75000000
+                  },
+                  "debug": {
+                    "stages": "ScaleStage,SumStage",
+                    "total_chunks": 1000,
+                    "total_input_series": 50,
+                    "total_output_series": 10
+                  }
+                }]
+              }]
+            }
+            """;
+
+        Map<String, Object> expectedProfile = parseJsonResponse(expectedProfileJson);
+        Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+
+        // Compare whole profile structure
+        assertEquals("Profile structure with aggregation details should match expected", expectedProfile, actualProfile);
+    }
+
+    /**
+     * Test that profile output includes network timing information.
+     * Validates inbound_network_time_in_millis and outbound_network_time_in_millis.
+     */
+    public void testProfileIncludesNetworkTiming() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create SearchResponse with network timing (100ms inbound, 50ms outbound)
+        long inboundNanos = 100_000_000L;  // 100ms
+        long outboundNanos = 50_000_000L;  // 50ms
+        SearchResponse searchResponse = createSearchResponseWithNetworkTiming(inboundNanos, outboundNanos);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole profile structure with network timing using string-based comparison
+        assertTrue("Profile field should exist when profile=true", parsed.containsKey("profile"));
+
+        // Define expected JSON structure as a string for better readability
+        String expectedProfileJson = """
+            {
+              "shards": [{
+                "id": "shard_0",
+                "searches": [],
+                "fetch": [],
+                "aggregations": [{
+                  "type": "TimeSeriesUnfoldAggregator",
+                  "description": "testCase",
+                  "time_in_nanos": 150000000,
+                  "breakdown": {
+                    "collect": 100000000,
+                    "reduce": 50000000
+                  }
+                }],
+                "inbound_network_time_in_millis": 100,
+                "outbound_network_time_in_millis": 50
+              }]
+            }
+            """;
+
+        Map<String, Object> expectedProfile = parseJsonResponse(expectedProfileJson);
+        Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+
+        // Compare whole profile structure
+        assertEquals("Profile structure with network timing should match expected", expectedProfile, actualProfile);
+    }
+
+    /**
+     * Test that profile output correctly handles multiple shards.
+     * Each shard should appear as a separate entry in the profile.shards array.
+     */
+    public void testProfileIncludesMultipleShards() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create SearchResponse with 3 shards (using existing helper method)
+        SearchResponse searchResponse = createSearchResponseWithMultipleShards(
+            new long[] { 100_000_000L, 150_000_000L, 80_000_000L },  // collect times
+            new long[] { 50_000_000L, 30_000_000L, 70_000_000L }     // reduce times
+        );
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole profile structure with 3 shards
+        String expectedProfileJson = """
+            {
+              "shards": [
+                {
+                  "id": "shard_0",
+                  "searches": [],
+                  "aggregations": [{
+                    "type": "TimeSeriesUnfoldAggregator",
+                    "description": "testCase",
+                    "time_in_nanos": 150000000,
+                    "breakdown": {
+                      "collect": 100000000,
+                      "reduce": 50000000
+                    }
+                  }],
+                  "fetch": []
+                },
+                {
+                  "id": "shard_1",
+                  "searches": [],
+                  "aggregations": [{
+                    "type": "TimeSeriesUnfoldAggregator",
+                    "description": "testCase",
+                    "time_in_nanos": 180000000,
+                    "breakdown": {
+                      "collect": 150000000,
+                      "reduce": 30000000
+                    }
+                  }],
+                  "fetch": []
+                },
+                {
+                  "id": "shard_2",
+                  "searches": [],
+                  "aggregations": [{
+                    "type": "TimeSeriesUnfoldAggregator",
+                    "description": "testCase",
+                    "time_in_nanos": 150000000,
+                    "breakdown": {
+                      "collect": 80000000,
+                      "reduce": 70000000
+                    }
+                  }],
+                  "fetch": []
+                }
+              ]
+            }
+            """;
+
+        Map<String, Object> expectedProfile = parseJsonResponse(expectedProfileJson);
+        Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+
+        // Sort shards by ID for deterministic comparison (HashMap doesn't guarantee order)
+        sortShardsById((List<Map<String, Object>>) expectedProfile.get("shards"));
+        sortShardsById((List<Map<String, Object>>) actualProfile.get("shards"));
+
+        assertEquals("Profile structure with multiple shards should match expected", expectedProfile, actualProfile);
+    }
+
+    /**
+     * Test that profile and matrix data coexist in the response.
+     * When profile=true, response should include BOTH:
+     * - Standard matrix data (status, data.resultType, data.result)
+     * - Profile information (profile.shards)
+     */
+    public void testProfileAndMatrixDataCoexist() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create SearchResponse with both time series data and profile results
+        SearchResponse searchResponse = createSearchResponseWithProfile(
+            100_000_000L,
+            50_000_000L,
+            25_000_000L,  // shard 1
+            80_000_000L,
+            40_000_000L,
+            20_000_000L    // shard 2
+        );
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole response structure with both matrix and profile data coexisting
+        String expectedJson = """
+            {
+              "status": "success",
+              "data": {
+                "resultType": "matrix",
+                "result": [{
+                  "metric": {
+                    "region": "us-east",
+                    "service": "api"
+                  },
+                  "values": [[1.0, "10.0"]]
+                }]
+              },
+              "profile": {
+                "shards": [
+                  {
+                    "id": "shard_0",
+                    "searches": [],
+                    "aggregations": [{
+                      "type": "TimeSeriesUnfoldAggregator",
+                      "description": "testCase",
+                      "time_in_nanos": 175000000,
+                      "breakdown": {
+                        "collect": 100000000,
+                        "reduce": 50000000,
+                        "post_collection": 25000000
+                      }
+                    }],
+                    "fetch": []
+                  },
+                  {
+                    "id": "shard_1",
+                    "searches": [],
+                    "aggregations": [{
+                      "type": "TimeSeriesUnfoldAggregator",
+                      "description": "testCase",
+                      "time_in_nanos": 140000000,
+                      "breakdown": {
+                        "collect": 80000000,
+                        "reduce": 40000000,
+                        "post_collection": 20000000
+                      }
+                    }],
+                    "fetch": []
+                  }
+                ]
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonResponse(expectedJson);
+
+        // Sort shards by ID for deterministic comparison (HashMap doesn't guarantee order)
+        if (expected.containsKey("profile")) {
+            Map<String, Object> expectedProfile = (Map<String, Object>) expected.get("profile");
+            sortShardsById((List<Map<String, Object>>) expectedProfile.get("shards"));
+        }
+        if (parsed.containsKey("profile")) {
+            Map<String, Object> actualProfile = (Map<String, Object>) parsed.get("profile");
+            sortShardsById((List<Map<String, Object>>) actualProfile.get("shards"));
+        }
+
+        assertEquals("Response with both matrix and profile data should match expected", expected, parsed);
+    }
+
+    /**
+     * Test that empty profile results are handled gracefully.
+     * When profile=true but no profile results available, should still return valid response.
+     */
+    public void testProfileWithNoProfileResults() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create SearchResponse with time series data but NO profile results
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        SearchResponse searchResponse = createSearchResponse(TEST_AGG_NAME, timeSeriesList);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole response structure WITHOUT profile field when no profile results available
+        // The implementation should gracefully handle null/empty profile results
+        String expectedJson = """
+            {
+              "status": "success",
+              "data": {
+                "resultType": "matrix",
+                "result": [{
+                  "metric": {
+                    "region": "us-east",
+                    "service": "api"
+                  },
+                  "values": [[1.0, "10.0"]]
+                }]
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonResponse(expectedJson);
+
+        // Profile field should not exist when there are no profile results
+        assertFalse("Profile field should not exist when no profile results available", parsed.containsKey("profile"));
+
+        assertEquals("Response without profile results should match expected", expected, parsed);
+    }
+
+    /**
+     * Test that profile includes query profiling information when QueryProfileShardResult is present.
+     * This covers lines 73-77 in ProfileInfoMapper where non-empty query results are processed.
+     */
+    public void testProfileIncludesQueryProfiling() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create query profile results
+        Map<String, Long> queryBreakdown = new HashMap<>();
+        queryBreakdown.put("create_weight", 50_000L);
+        queryBreakdown.put("build_scorer", 100_000L);
+        queryBreakdown.put("next_doc", 200_000L);
+
+        ProfileResult queryProfileResult = new ProfileResult(
+            "TermQuery",
+            "field:value",
+            queryBreakdown,
+            Collections.emptyMap(),
+            350_000L,
+            List.of()
+        );
+
+        // Create CollectorResult for QueryProfileShardResult
+        org.opensearch.search.profile.query.CollectorResult collectorResult = new org.opensearch.search.profile.query.CollectorResult(
+            "SimpleCollector",
+            "search_count",
+            150_000L,
+            Collections.emptyList()
+        );
+
+        // Create QueryProfileShardResult with query results
+        org.opensearch.search.profile.query.QueryProfileShardResult queryResult =
+            new org.opensearch.search.profile.query.QueryProfileShardResult(
+                List.of(queryProfileResult),
+                25_000L,  // rewrite time
+                collectorResult
+            );
+
+        // Create ProfileShardResult with query profile
+        ProfileShardResult shardResult = new ProfileShardResult(
+            List.of(queryResult),  // Non-empty query results
+            null,                  // No aggregation profile
+            null,                  // No fetch profile
+            null                   // No network timing
+        );
+
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("shard_0", shardResult);
+
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        // Mock aggregations
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole response structure including query profiling
+        String expectedJson = """
+            {
+              "status": "success",
+              "data": {
+                "resultType": "matrix",
+                "result": [{
+                  "metric": {
+                    "region": "us-east",
+                    "service": "api"
+                  },
+                  "values": [[1.0, "10.0"]]
+                }]
+              },
+              "profile": {
+                "shards": [{
+                  "id": "shard_0",
+                  "searches": [{
+                    "query": [{
+                      "type": "TermQuery",
+                      "description": "field:value",
+                      "time_in_nanos": 350000,
+                      "breakdown": {
+                        "create_weight": 50000,
+                        "build_scorer": 100000,
+                        "next_doc": 200000
+                      }
+                    }],
+                    "rewrite_time": 25000,
+                    "collector": [{
+                      "name": "SimpleCollector",
+                      "reason": "search_count",
+                      "time_in_nanos": 150000
+                    }]
+                  }],
+                  "aggregations": [],
+                  "fetch": []
+                }]
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonResponse(expectedJson);
+
+        assertEquals("Response with query profiling should match expected structure", expected, parsed);
+    }
+
+    /**
+     * Test that profile includes fetch profiling information when FetchProfileShardResult is present.
+     * This covers line 91 in ProfileInfoMapper where non-null fetch results are processed.
+     */
+    public void testProfileIncludesFetchProfiling() throws Exception {
+        // Arrange
+        FakeRestChannel channel = new FakeRestChannel(new FakeRestRequest(), true, 1);
+        PromMatrixResponseListener listener = new PromMatrixResponseListener(channel, TEST_AGG_NAME, true, false);
+
+        // Create fetch profile results
+        Map<String, Long> fetchBreakdown = new HashMap<>();
+        fetchBreakdown.put("load_stored_fields", 75_000L);
+        fetchBreakdown.put("next_reader", 25_000L);
+
+        ProfileResult fetchProfileResult = new ProfileResult(
+            "FetchPhase",
+            "fetch stored fields",
+            fetchBreakdown,
+            Collections.emptyMap(),
+            100_000L,
+            List.of()
+        );
+
+        // Create FetchProfileShardResult with fetch results
+        org.opensearch.search.profile.fetch.FetchProfileShardResult fetchResult =
+            new org.opensearch.search.profile.fetch.FetchProfileShardResult(List.of(fetchProfileResult));
+
+        // Create ProfileShardResult with fetch profile
+        ProfileShardResult shardResult = new ProfileShardResult(
+            List.of(),      // Empty query results
+            null,           // No aggregation profile
+            fetchResult,    // Non-null fetch profile
+            null            // No network timing
+        );
+
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("shard_0", shardResult);
+
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        // Mock aggregations
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        // Act
+        listener.onResponse(searchResponse);
+
+        // Assert
+        RestResponse response = channel.capturedResponse();
+        assertEquals(RestStatus.OK, response.status());
+
+        Map<String, Object> parsed = parseJsonResponse(response.content().utf8ToString());
+
+        // Verify whole response structure including fetch profiling
+        String expectedJson = """
+            {
+              "status": "success",
+              "data": {
+                "resultType": "matrix",
+                "result": [{
+                  "metric": {
+                    "region": "us-east",
+                    "service": "api"
+                  },
+                  "values": [[1.0, "10.0"]]
+                }]
+              },
+              "profile": {
+                "shards": [{
+                  "id": "shard_0",
+                  "searches": [],
+                  "aggregations": [],
+                  "fetch": [{
+                    "type": "FetchPhase",
+                    "description": "fetch stored fields",
+                    "time_in_nanos": 100000,
+                    "breakdown": {
+                      "load_stored_fields": 75000,
+                      "next_reader": 25000
+                    }
+                  }]
+                }]
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonResponse(expectedJson);
+
+        assertEquals("Response with fetch profiling should match expected structure", expected, parsed);
+    }
+
+    // ============================
+    // Helper Methods for Profile Output Format Tests
+    // ============================
+
+    /**
+     * Creates a SearchResponse with complete ProfileShardResult including network timing.
+     */
+    private SearchResponse createSearchResponseWithNetworkTiming(long inboundNanos, long outboundNanos) {
+        // Create aggregation profile
+        Map<String, Long> breakdown = new HashMap<>();
+        breakdown.put("collect", 100_000_000L);
+        breakdown.put("reduce", 50_000_000L);
+
+        ProfileResult aggProfileResult = new ProfileResult(
+            TimeSeriesUnfoldAggregator.class.getSimpleName(),
+            "testCase",
+            breakdown,
+            Collections.emptyMap(),
+            150_000_000L,
+            List.of()
+        );
+
+        AggregationProfileShardResult aggProfile = new AggregationProfileShardResult(List.of(aggProfileResult));
+
+        // Create network time
+        NetworkTime networkTime = new NetworkTime(inboundNanos, outboundNanos);
+
+        // Create ProfileShardResult with network timing
+        ProfileShardResult shardResult = new ProfileShardResult(
+            List.of(),      // queries
+            aggProfile,     // aggregations
+            null,           // fetch
+            networkTime     // network timing
+        );
+
+        // Create profile results map
+        Map<String, ProfileShardResult> profileResults = new HashMap<>();
+        profileResults.put("shard_0", shardResult);
+
+        // Mock SearchResponse
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        when(searchResponse.getProfileResults()).thenReturn(profileResults);
+
+        // Mock aggregations
+        List<TimeSeries> timeSeriesList = createTimeSeriesWithLabels();
+        InternalTimeSeries timeSeries = new InternalTimeSeries(TEST_AGG_NAME, timeSeriesList, TEST_METADATA);
+        Aggregations aggregations = new Aggregations(List.of(timeSeries));
+        when(searchResponse.getAggregations()).thenReturn(aggregations);
+
+        return searchResponse;
+    }
+
+    /**
+     * Helper method to sort shards array by shard ID for deterministic comparison.
+     * ProfileShardResult uses HashMap which doesn't guarantee order.
+     */
+    private void sortShardsById(List<Map<String, Object>> shards) {
+        if (shards != null) {
+            shards.sort((a, b) -> {
+                String idA = (String) a.get("id");
+                String idB = (String) b.get("id");
+                return idA.compareTo(idB);
+            });
+        }
     }
 }

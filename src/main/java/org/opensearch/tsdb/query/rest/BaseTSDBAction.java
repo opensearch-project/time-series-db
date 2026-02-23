@@ -41,6 +41,7 @@ public abstract class BaseTSDBAction extends BaseRestHandler {
     protected static final String PARTITIONS_PARAM = "partitions";
     protected static final String EXPLAIN_PARAM = "explain";
     protected static final String PUSHDOWN_PARAM = "pushdown";
+    protected static final String CCS_MINIMIZE_ROUNDTRIPS_PARAM = "ccs_minimize_roundtrips";
     protected static final String PROFILE_PARAM = "profile";
     protected static final String INCLUDE_METADATA_PARAM = "include_metadata";
 
@@ -61,6 +62,8 @@ public abstract class BaseTSDBAction extends BaseRestHandler {
      */
     private volatile boolean forceNoPushdown;
 
+    private volatile boolean ccsMinimizeRoundTrips;
+
     /**
      * Constructs a new BaseTSDBAction handler.
      *
@@ -74,6 +77,13 @@ public abstract class BaseTSDBAction extends BaseRestHandler {
         clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.TSDB_ENGINE_FORCE_NO_PUSHDOWN, newValue -> {
             this.forceNoPushdown = newValue;
             logger.info("Updated force_no_pushdown setting to: {}", newValue);
+        });
+
+        this.ccsMinimizeRoundTrips = clusterSettings.get(TSDBPlugin.TSDB_ENGINE_CCS_MINIMIZE_ROUNDTRIPS);
+        clusterSettings.addSettingsUpdateConsumer(TSDBPlugin.TSDB_ENGINE_CCS_MINIMIZE_ROUNDTRIPS, newValue -> {
+            boolean oldValue = this.ccsMinimizeRoundTrips;
+            this.ccsMinimizeRoundTrips = newValue;
+            logger.info("Updated tsdb_engine.query.ccs_minimize_roundtrips setting from {} to: {}", oldValue, newValue);
         });
     }
 
@@ -93,6 +103,10 @@ public abstract class BaseTSDBAction extends BaseRestHandler {
         }
 
         return pushdown;
+    }
+
+    protected boolean resolveCcsMinimizeRoundTrips(RestRequest request) {
+        return request.paramAsBoolean(CCS_MINIMIZE_ROUNDTRIPS_PARAM, ccsMinimizeRoundTrips);
     }
 
     /**

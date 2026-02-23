@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.core.model;
 
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,7 +21,10 @@ import java.io.IOException;
  * @param sum the sum of all values
  * @param count the number of values
  */
-public record SumCountSample(long getTimestamp, double sum, long count) implements Sample {
+public record SumCountSample(long getTimestamp, double sum, long count) implements Sample, Accountable {
+
+    /** Shallow size of a SumCountSample record (object header + timestamp + sum + count). */
+    public static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(SumCountSample.class);
 
     @Override
     public ValueType valueType() {
@@ -80,11 +85,14 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     }
 
     @Override
-    public Sample merge(Sample other) {
-        if (!(other instanceof SumCountSample otherSumCount)) {
-            throw new IllegalArgumentException("Cannot merge SumCountSample with " + other.getClass().getSimpleName());
+    public SumCountSample merge(Sample other) {
+        if (other instanceof SumCountSample otherSumCount) {
+            return new SumCountSample(this.getTimestamp, this.sum + otherSumCount.sum, this.count + otherSumCount.count);
         }
-        return new SumCountSample(this.getTimestamp, this.sum + otherSumCount.sum, this.count + otherSumCount.count);
+        if (other.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return add(other.getValue());
+        }
+        throw new IllegalArgumentException("Cannot merge SumCountSample with " + other.getClass().getSimpleName());
     }
 
     /**
@@ -108,8 +116,8 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     public static SumCountSample fromSample(Sample sample) {
         if (sample instanceof SumCountSample) {
             return (SumCountSample) sample;
-        } else if (sample instanceof FloatSample) {
-            return fromValue(sample.getTimestamp(), ((FloatSample) sample).getValue());
+        } else if (sample.getSampleType() == SampleType.FLOAT_SAMPLE) {
+            return fromValue(sample.getTimestamp(), sample.getValue());
         } else {
             throw new IllegalArgumentException("Unsupported sample type [" + sample.getClass() + "]");
         }
@@ -126,6 +134,11 @@ public record SumCountSample(long getTimestamp, double sum, long count) implemen
     @Override
     public String toString() {
         return "SumCountSample{" + "timestamp=" + getTimestamp + ", sum=" + sum + ", count=" + count + ", avg=" + getAverage() + '}';
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return SHALLOW_SIZE;
     }
 
     @Override

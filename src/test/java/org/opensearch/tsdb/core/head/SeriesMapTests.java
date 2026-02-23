@@ -27,8 +27,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         Labels labels2 = ByteLabels.fromStrings("k3", "v3", "k4", "v4");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(456L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(456L, labels2, SeriesEventListener.NOOP);
 
         seriesMap.add(series1);
         seriesMap.add(series2);
@@ -44,8 +44,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         Labels labels2 = ByteLabels.fromStrings("k3", "v3", "k4", "v4");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(123L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(123L, labels2, SeriesEventListener.NOOP);
 
         seriesMap.add(series1);
         seriesMap.add(series2);
@@ -59,8 +59,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         Labels labels2 = ByteLabels.fromStrings("k3", "v3", "k4", "v4");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(456L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(456L, labels2, SeriesEventListener.NOOP);
 
         seriesMap.add(series1);
         seriesMap.add(series2);
@@ -81,8 +81,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         Labels labels2 = ByteLabels.fromStrings("k3", "v3", "k4", "v4");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(456L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(456L, labels2, SeriesEventListener.NOOP);
 
         seriesMap.add(series1);
         assertEquals(1, seriesMap.size());
@@ -97,8 +97,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1", "k2", "v2");
         Labels labels2 = ByteLabels.fromStrings("k3", "v3", "k4", "v4");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(456L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(456L, labels2, SeriesEventListener.NOOP);
 
         seriesMap.add(series1);
         seriesMap.add(series2);
@@ -108,7 +108,7 @@ public class SeriesMapTests extends OpenSearchTestCase {
         assertTrue(snapshot.contains(series1));
         assertTrue(snapshot.contains(series2));
 
-        seriesMap.add(new MemSeries(789L, ByteLabels.fromStrings("k5", "v5")));
+        seriesMap.add(new MemSeries(789L, ByteLabels.fromStrings("k5", "v5"), SeriesEventListener.NOOP));
         assertEquals(2, snapshot.size());
         assertEquals(3, seriesMap.size());
     }
@@ -119,14 +119,14 @@ public class SeriesMapTests extends OpenSearchTestCase {
 
         for (int i = 0; i < 5; i++) {
             Labels labels = ByteLabels.fromStrings("key", "value" + i);
-            MemSeries series = new MemSeries(i, labels);
+            MemSeries series = new MemSeries(i, labels, SeriesEventListener.NOOP);
             seriesMap.add(series);
             assertEquals(i + 1, seriesMap.size());
         }
 
         for (int i = 0; i < 5; i++) {
             Labels labels = ByteLabels.fromStrings("key", "value" + i);
-            MemSeries series = new MemSeries(i, labels);
+            MemSeries series = new MemSeries(i, labels, SeriesEventListener.NOOP);
             seriesMap.delete(series);
             assertEquals(4 - i, seriesMap.size());
         }
@@ -137,8 +137,8 @@ public class SeriesMapTests extends OpenSearchTestCase {
         Labels labels1 = ByteLabels.fromStrings("k1", "v1");
         Labels labels2 = ByteLabels.fromStrings("k2", "v2");
 
-        MemSeries series1 = new MemSeries(123L, labels1);
-        MemSeries series2 = new MemSeries(123L, labels2);
+        MemSeries series1 = new MemSeries(123L, labels1, SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(123L, labels2, SeriesEventListener.NOOP);
 
         MemSeries result1 = seriesMap.putIfAbsent(series1);
         assertEquals(series1, result1);

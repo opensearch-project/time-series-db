@@ -19,7 +19,7 @@ import java.util.Locale;
  * HeadPlanNode represents a plan node that handles head operations in M3QL.
  *
  * The head function returns the first n series from the series list.
- * It takes an optional limit argument (defaults to 10).
+ * Takes an optional limit argument (defaults to 10).
  *
  * This is a coordinator-only stage that operates on all time series at once.
  */
@@ -60,7 +60,7 @@ public class HeadPlanNode extends M3PlanNode {
     }
 
     /**
-     * Creates a HeadPlanNode from a FunctionNode.
+     * Creates a HeadPlanNode from a FunctionNode for head function.
      * Expected format:
      * - head() -> defaults to 10
      * - head(5) -> returns first 5 series
@@ -70,28 +70,40 @@ public class HeadPlanNode extends M3PlanNode {
      * @throws IllegalArgumentException if the function arguments are invalid
      */
     public static HeadPlanNode of(FunctionNode functionNode) {
+        int limit = parseLimit(functionNode, "head");
+        return new HeadPlanNode(M3PlannerContext.generateId(), limit);
+    }
+
+    /**
+     * Parse limit from function node arguments.
+     *
+     * @param functionNode The function node
+     * @param functionName The function name (for error messages)
+     * @return The parsed limit
+     */
+    private static int parseLimit(FunctionNode functionNode, String functionName) {
         int limit = 10; // Default
 
         if (!functionNode.getChildren().isEmpty()) {
             if (functionNode.getChildren().size() > 1) {
-                throw new IllegalArgumentException("head function accepts at most 1 argument: limit");
+                throw new IllegalArgumentException(functionName + " function accepts at most 1 argument: limit");
             }
 
             M3ASTNode firstChild = functionNode.getChildren().getFirst();
             if (!(firstChild instanceof ValueNode valueNode)) {
-                throw new IllegalArgumentException("head limit argument must be a numeric value");
+                throw new IllegalArgumentException(functionName + " limit argument must be a numeric value");
             }
 
             try {
                 limit = Integer.parseInt(valueNode.getValue());
                 if (limit <= 0) {
-                    throw new IllegalArgumentException("head limit must be positive, got: " + limit);
+                    throw new IllegalArgumentException(functionName + " limit must be positive, got: " + limit);
                 }
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("head limit must be a valid integer, got: " + valueNode.getValue(), e);
+                throw new IllegalArgumentException(functionName + " limit must be a valid integer, got: " + valueNode.getValue(), e);
             }
         }
 
-        return new HeadPlanNode(M3PlannerContext.generateId(), limit);
+        return limit;
     }
 }

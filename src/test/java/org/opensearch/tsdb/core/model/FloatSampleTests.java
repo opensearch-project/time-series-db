@@ -155,4 +155,19 @@ public class FloatSampleTests extends OpenSearchTestCase {
         assertTrue(str.contains("0"));
         assertTrue(str.contains("FloatSample"));
     }
+
+    public void testRamBytesUsed() {
+        FloatSample sample = new FloatSample(1234567890L, 42.5);
+
+        // ramBytesUsed() should return SHALLOW_SIZE
+        long ramBytes = sample.ramBytesUsed();
+        assertEquals(FloatSample.SHALLOW_SIZE, ramBytes);
+
+        // SHALLOW_SIZE should be a positive value
+        assertTrue(FloatSample.SHALLOW_SIZE > 0);
+
+        // All instances should report the same shallow size
+        FloatSample sample2 = new FloatSample(0L, 0.0);
+        assertEquals(sample.ramBytesUsed(), sample2.ramBytesUsed());
+    }
 }

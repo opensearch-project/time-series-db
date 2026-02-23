@@ -76,7 +76,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
         MergeIterator multiIterator = new MergeIterator(iterators);
 
         // Verify all values are in order
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(6, samples.size());
         assertEquals(1000L, samples.get(0).getTimestamp());
         assertEquals(2000L, samples.get(1).getTimestamp());
@@ -98,7 +98,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(2, samples.size());
         assertEquals(1000L, samples.get(0).getTimestamp());
         assertEquals(2000L, samples.get(1).getTimestamp());
@@ -119,7 +119,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(2, samples.size());
         assertEquals(1000L, samples.get(0).getTimestamp());
         assertEquals(2000L, samples.get(1).getTimestamp());
@@ -160,7 +160,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(1, samples.size());
         assertEquals(1000L, samples.get(0).getTimestamp());
     }
@@ -193,7 +193,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(1500L, 3500L).samples();
+        List<Sample> samples = multiIterator.decodeSamples(1500L, 3500L).samples().toList();
         assertEquals(2, samples.size());
         assertEquals(2000L, samples.get(0).getTimestamp());
         assertEquals(3000L, samples.get(1).getTimestamp());
@@ -454,7 +454,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
         MergeIterator multiIterator = new MergeIterator(iterators);
 
         // Verify the merge produces correctly sorted output
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(8, samples.size());
 
         // Verify timestamps are in ascending order
@@ -504,7 +504,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(8, samples.size());
 
         // Timestamp 1000: should be in order 1.0, 2.0, 3.0, 4.0
@@ -533,7 +533,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(4, samples.size());
 
         // Should emit in stable order: index 0, 1, 2, 3
@@ -568,7 +568,7 @@ public class MergeIteratorTests extends OpenSearchTestCase {
 
         MergeIterator multiIterator = new MergeIterator(iterators);
 
-        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples();
+        List<Sample> samples = multiIterator.decodeSamples(0L, Long.MAX_VALUE).samples().toList();
         assertEquals(6, samples.size());
 
         // 1000 from chunk1

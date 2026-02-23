@@ -95,7 +95,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = minStage.reduce(aggregations, true);
+        InternalAggregation result = minStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -117,7 +117,7 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = minStage.reduce(aggregations, false);
+        InternalAggregation result = minStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -256,6 +256,17 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
             List.of(new FloatSample(1000L, 5.0), new FloatSample(2000L, 15.0), new FloatSample(3000L, 25.0)),
             minned.getSamples().toList()
         );
+    }
+
+    public void testEstimateStateSize() {
+        MinStage stage = new MinStage();
+
+        // MinStage uses Double as state, so should return RamUsageConstants.DOUBLE_SHALLOW_SIZE
+        long stateSize = stage.estimateStateSize();
+        assertTrue("State size should be positive", stateSize > 0);
+
+        // Should match the constant defined in RamUsageConstants
+        assertEquals(org.opensearch.tsdb.query.utils.RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
     }
 
     // Comprehensive test data - all tests use this same dataset

@@ -102,7 +102,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         // Test reduce() during final reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = multiplyStage.reduce(aggregations, true);
+        InternalAggregation result = multiplyStage.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -125,7 +125,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         // Test reduce() during intermediate reduce phase
         List<TimeSeriesProvider> aggregations = createMockAggregations();
 
-        InternalAggregation result = multiplyStage.reduce(aggregations, false);
+        InternalAggregation result = multiplyStage.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -151,7 +151,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 4); // ts4 only (exclude ts5)
         List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
-        InternalAggregation result = multiplyStageWithLabels.reduce(aggregations, true);
+        InternalAggregation result = multiplyStageWithLabels.reduce(aggregations, true, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -203,7 +203,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
         List<TimeSeries> series2 = TEST_TIME_SERIES.subList(3, 4); // ts4 only (exclude ts5)
         List<TimeSeriesProvider> aggregations = createMockAggregations(series1, series2);
 
-        InternalAggregation result = multiplyStageWithLabels.reduce(aggregations, false);
+        InternalAggregation result = multiplyStageWithLabels.reduce(aggregations, false, null);
 
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
@@ -250,14 +250,14 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
 
     public void testReduceEmptyAggregation() throws Exception {
         // Test Empty Aggregation
-        assertThrows(IllegalArgumentException.class, () -> multiplyStage.reduce(Collections.emptyList(), false));
+        assertThrows(IllegalArgumentException.class, () -> multiplyStage.reduce(Collections.emptyList(), false, null));
 
         // Test with Aggregation with empty TS
         List<TimeSeriesProvider> aggregations_1 = List.of(
             new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
             new InternalTimeSeries("test2", Collections.emptyList(), Map.of())
         );
-        InternalAggregation result = multiplyStage.reduce(aggregations_1, false);
+        InternalAggregation result = multiplyStage.reduce(aggregations_1, false, null);
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
         TimeSeriesProvider provider = (TimeSeriesProvider) result;
@@ -269,7 +269,7 @@ public class MultiplyStageTests extends AbstractWireSerializingTestCase<Multiply
             new InternalTimeSeries("test1", Collections.emptyList(), Map.of()),
             new InternalTimeSeries("test2", TEST_TIME_SERIES.subList(3, 5), Map.of())
         );
-        result = multiplyStage.reduce(aggregations_2, false);
+        result = multiplyStage.reduce(aggregations_2, false, null);
         assertNotNull(result);
         assertTrue(result instanceof TimeSeriesProvider);
         provider = (TimeSeriesProvider) result;

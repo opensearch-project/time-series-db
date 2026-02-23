@@ -38,6 +38,7 @@ import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.head.ChunkOptions;
 import org.opensearch.tsdb.core.head.MemSeriesReader;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.index.ReaderManagerWithMetadata;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.chunk.MMappedChunksManager;
@@ -1862,7 +1863,7 @@ public class TSDBDirectoryReaderTests extends OpenSearchTestCase {
      */
     private MemSeries createMemSeriesWithChunks(long reference, String labelName, String labelValue) {
         Labels labels = org.opensearch.tsdb.core.model.ByteLabels.fromStrings(labelName, labelValue);
-        MemSeries series = new MemSeries(reference, labels);
+        MemSeries series = new MemSeries(reference, labels, SeriesEventListener.NOOP);
 
         // Create ChunkOptions with a time range that will create multiple chunks
         ChunkOptions options = new ChunkOptions(1000, 8); // 1000ms range, 8 samples per chunk

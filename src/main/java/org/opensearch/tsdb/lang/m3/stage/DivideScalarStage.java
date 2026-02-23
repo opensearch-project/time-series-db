@@ -83,7 +83,7 @@ public class DivideScalarStage extends AbstractMapperStage {
         }
         double value = sample.getValue();
         if (Double.isNaN(value)) {
-            return sample; // Keep NaN samples unchanged
+            return sample.deepCopy(); // Keep NaN samples unchanged
         }
         double dividedValue = value / divisor;
         return new FloatSample(sample.getTimestamp(), dividedValue);

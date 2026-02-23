@@ -12,6 +12,7 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.core.model.SumCountSample;
 
 import java.util.Arrays;
@@ -209,21 +210,6 @@ public class TimeSeriesTests extends OpenSearchTestCase {
         assertEquals(1000L, timeSeries.getStep());
     }
 
-    public void testWithMixedSampleTypes() {
-        // Arrange
-        Labels labels = ByteLabels.fromMap(Map.of("service", "mixed"));
-        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new SumCountSample(2000L, 10.0, 2));
-
-        // Act
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
-
-        // Assert
-        assertEquals(samples, timeSeries.getSamples().toList());
-        assertEquals(2, timeSeries.getSamples().size());
-        assertTrue(timeSeries.getSamples().getSample(0) instanceof FloatSample);
-        assertTrue(timeSeries.getSamples().getSample(1) instanceof SumCountSample);
-    }
-
     public void testWithEmptySamples() {
         // Arrange
         Labels labels = ByteLabels.fromMap(Map.of("service", "empty"));
@@ -378,5 +364,118 @@ public class TimeSeriesTests extends OpenSearchTestCase {
                 + "  With scalar replacement: 16 bytes (just timestamp + value)",
             sampleSize
         );
+    }
+
+    /**
+     * Tests that ramBytesUsed() returns a reasonable estimate for a TimeSeries.
+     * This validates the delegation pattern where TimeSeries.ramBytesUsed() aggregates
+     * its components' memory estimates.
+     */
+    public void testRamBytesUsedReturnsReasonableValue() {
+        // Arrange: Create a TimeSeries with known components
+        Labels labels = ByteLabels.fromMap(Map.of("region", "us-east", "service", "api"));
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0), new FloatSample(3000L, 3.0));
+        String alias = "test-alias";
+        TimeSeries ts = new TimeSeries(samples, labels, 1000L, 3000L, 1000L, alias);
+
+        // Act
+        long ramBytes = ts.ramBytesUsed();
+
+        // Assert
+        // Should be at least the object overhead
+        assertTrue("ramBytesUsed should be at least ESTIMATED_MEMORY_OVERHEAD", ramBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD);
+
+        // Should include samples contribution
+        assertTrue(
+            "ramBytesUsed should be greater than object overhead alone (should include samples)",
+            ramBytes > TimeSeries.ESTIMATED_MEMORY_OVERHEAD
+        );
+
+        // Sanity check: should be reasonable (not absurdly large)
+        // A TimeSeries with 3 samples, labels, and alias should be under 1KB
+        assertTrue("ramBytesUsed should be under 1KB for small TimeSeries", ramBytes < 1024);
+
+        logger.info("TimeSeries.ramBytesUsed() returned {} bytes for 3-sample series with labels and alias", ramBytes);
+    }
+
+    /**
+     * Tests that ramBytesUsed() correctly handles null labels and alias.
+     */
+    public void testRamBytesUsedWithNullComponents() {
+        // Arrange: Create a minimal TimeSeries with null labels and alias
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0));
+        TimeSeries ts = new TimeSeries(samples, null, 1000L, 1000L, 1000L, null);
+
+        // Act
+        long ramBytes = ts.ramBytesUsed();
+
+        // Assert: Should be at least object overhead + samples
+        assertTrue(
+            "ramBytesUsed should be at least ESTIMATED_MEMORY_OVERHEAD with null labels/alias",
+            ramBytes >= TimeSeries.ESTIMATED_MEMORY_OVERHEAD
+        );
+    }
+
+    /**
+     * Tests that ramBytesUsed() scales with the number of samples.
+     */
+    public void testRamBytesUsedScalesWithSamples() {
+        // Arrange: Create two TimeSeries with different sample counts
+        List<Sample> smallSamples = Arrays.asList(new FloatSample(1000L, 1.0));
+        List<Sample> largeSamples = Arrays.asList(
+            new FloatSample(1000L, 1.0),
+            new FloatSample(2000L, 2.0),
+            new FloatSample(3000L, 3.0),
+            new FloatSample(4000L, 4.0),
+            new FloatSample(5000L, 5.0)
+        );
+
+        TimeSeries smallTs = new TimeSeries(smallSamples, null, 1000L, 1000L, 1000L, null);
+        TimeSeries largeTs = new TimeSeries(largeSamples, null, 1000L, 5000L, 1000L, null);
+
+        // Act
+        long smallEstimate = smallTs.ramBytesUsed();
+        long largeEstimate = largeTs.ramBytesUsed();
+
+        // Assert: Larger sample count should result in larger estimate
+        assertTrue(
+            "TimeSeries with more samples should have larger estimate. Small: " + smallEstimate + ", Large: " + largeEstimate,
+            largeEstimate > smallEstimate
+        );
+    }
+
+    /**
+     * Tests that getChildResources() returns the samples as a child resource.
+     */
+    public void testGetChildResourcesReturnsSamples() {
+        // Arrange: Create a TimeSeries with samples
+        List<Sample> samples = Arrays.asList(new FloatSample(1000L, 1.0), new FloatSample(2000L, 2.0));
+        TimeSeries ts = new TimeSeries(samples, null, 1000L, 2000L, 1000L, null);
+
+        // Act
+        var children = ts.getChildResources();
+
+        // Assert: Should contain exactly one child (the samples)
+        assertNotNull("getChildResources should not return null", children);
+        assertEquals("Should have exactly 1 child resource (samples)", 1, children.size());
+
+        // The child should be the SampleList
+        var child = children.iterator().next();
+        assertEquals("Child should be the samples", ts.getSamples(), child);
+    }
+
+    /**
+     * Tests that getChildResources() returns empty collection when samples is null.
+     */
+    public void testGetChildResourcesWithNullSamples() {
+        // Arrange: Create a TimeSeries with null samples (using SampleList directly)
+        TimeSeries ts = new TimeSeries((SampleList) null, null, 1000L, 2000L, 1000L, null);
+
+        // Act
+        var children = ts.getChildResources();
+
+        // Assert: Should return empty collection
+        assertNotNull("getChildResources should not return null even with null samples", children);
+        assertTrue("Should have no child resources when samples is null", children.isEmpty());
     }
 }

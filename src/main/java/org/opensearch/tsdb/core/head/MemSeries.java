@@ -9,7 +9,6 @@ package org.opensearch.tsdb.core.head;
 
 import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.model.Labels;
-import org.opensearch.tsdb.metrics.TSDBMetrics;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,6 +30,9 @@ public class MemSeries {
 
     // Series Labels
     private Labels labels;
+
+    // Event listener for chunk lifecycle events
+    private final SeriesEventListener eventListener;
 
     // Indicates if this is a stub series created during recovery without labels
     private boolean isStub;
@@ -62,11 +64,13 @@ public class MemSeries {
      * Constructs a new MemSeries instance.
      * @param reference the unique series reference ID
      * @param labels the series labels
+     * @param eventListener the event listener for chunk lifecycle events
      */
-    public MemSeries(long reference, Labels labels) {
+    public MemSeries(long reference, Labels labels, SeriesEventListener eventListener) {
         this.reference = reference;
         this.labels = labels;
         this.isStub = false;
+        this.eventListener = eventListener;
     }
 
     /**
@@ -74,11 +78,13 @@ public class MemSeries {
      * @param reference the unique series reference ID
      * @param labels the series labels (can be empty/null for stub)
      * @param isStub whether this is a stub series
+     * @param eventListener the event listener for chunk lifecycle events
      */
-    public MemSeries(long reference, Labels labels, boolean isStub) {
+    public MemSeries(long reference, Labels labels, boolean isStub, SeriesEventListener eventListener) {
         this.reference = reference;
         this.labels = labels;
         this.isStub = isStub;
+        this.eventListener = eventListener;
     }
 
     /**
@@ -169,7 +175,7 @@ public class MemSeries {
                 if (chunk.getMaxTimestamp() <= cutoffTimestamp) {
                     closableChunks.addFirst(chunk);
                     // Record memchunk expiry due to inactivity (chunks past the cutoff timestamp)
-                    TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksExpiredTotal, 1);
+                    eventListener.onChunksExpired(1);
                 } else {
                     // record minSeqNumber of non-closable chunks
                     minSeqNo = Math.min(minSeqNo, chunk.getMinSeqNo());
@@ -319,7 +325,9 @@ public class MemSeries {
         long end = endRangeForTimestamp(timestamp, chunkRange);
 
         MemChunk chunk = new MemChunk(seqNo, start, end, headChunk, encoding);
-        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksCreated, 1);
+        // Notify listener of chunk creation
+        eventListener.onChunksCreated(1);
+
         return chunk;
     }
 
@@ -337,7 +345,8 @@ public class MemSeries {
         long start = startRangeForTimestamp(timestamp, chunkRange);
         long end = endRangeForTimestamp(timestamp, chunkRange);
         MemChunk newChunk = new MemChunk(seqNo, start, end, null, encoding);
-        TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.memChunksCreated, 1);
+        // Notify listener of chunk creation
+        eventListener.onChunksCreated(1);
 
         MemChunk current = headChunk;
         assert headChunk != null : "createOldChunk only called when there is at least one existing chunk";

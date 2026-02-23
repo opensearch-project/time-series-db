@@ -132,7 +132,7 @@ public class PercentileUtilsTests extends OpenSearchTestCase {
      * Test that the calculation matches the original logic for specific cases.
      */
     public void testMatchesOriginalLogic() {
-        // Test case from SortedValuesSample - should match exactly
+        // Test case from MultiValueSample - should match exactly
         List<Double> values = Arrays.asList(1.0, 2.0, 3.0, 4.0);
 
         // Original logic for 50th percentile:

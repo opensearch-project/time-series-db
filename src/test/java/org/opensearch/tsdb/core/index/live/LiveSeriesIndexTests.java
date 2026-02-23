@@ -27,6 +27,7 @@ import org.opensearch.index.engine.TSDBTragicException;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.head.MemSeries;
+import org.opensearch.tsdb.core.head.SeriesEventListener;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
@@ -116,7 +117,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
             }
         };
 
-        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader);
+        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader, SeriesEventListener.NOOP);
         assertEquals(20L, maxRef);
         liveSeriesIndex.close();
     }
@@ -142,8 +143,8 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
     public void testCommitWithMetadataAndLoad() throws IOException {
         Path tempDir = createTempDir("testCommitWithMetadataAndLoad");
         LiveSeriesIndex liveSeriesIndex = new LiveSeriesIndex(tempDir, Settings.EMPTY);
-        MemSeries series1 = new MemSeries(1L, ByteLabels.fromStrings("k1", "v1", "k2", "v2"));
-        MemSeries series2 = new MemSeries(2L, ByteLabels.fromStrings("k1", "v1", "k2", "v3"));
+        MemSeries series1 = new MemSeries(1L, ByteLabels.fromStrings("k1", "v1", "k2", "v2"), SeriesEventListener.NOOP);
+        MemSeries series2 = new MemSeries(2L, ByteLabels.fromStrings("k1", "v1", "k2", "v3"), SeriesEventListener.NOOP);
         series1.setMaxSeqNo(100);
         series2.setMaxSeqNo(999);
 
@@ -290,7 +291,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
 
         SeriesLoader mockLoader = series -> {};
 
-        expectThrows(AlreadyClosedException.class, () -> { liveSeriesIndex.loadSeriesFromIndex(mockLoader); });
+        expectThrows(AlreadyClosedException.class, () -> { liveSeriesIndex.loadSeriesFromIndex(mockLoader, SeriesEventListener.NOOP); });
     }
 
     public void testCommitWithMetadataCommitException() throws IOException {
@@ -302,7 +303,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
         // Close the index to make commit fail
         liveSeriesIndex.close();
 
-        MemSeries series = new MemSeries(0L, ByteLabels.fromStrings("k1", "v1"));
+        MemSeries series = new MemSeries(0L, ByteLabels.fromStrings("k1", "v1"), SeriesEventListener.NOOP);
         series.setMaxSeqNo(100);
 
         expectThrows(AlreadyClosedException.class, () -> { liveSeriesIndex.commitWithMetadata(List.of(series)); });
@@ -357,7 +358,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
             }
         };
 
-        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader);
+        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader, SeriesEventListener.NOOP);
         assertEquals("Max reference should be 300", 300L, maxRef);
         liveSeriesIndex.close();
     }
@@ -398,7 +399,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
             }
         };
 
-        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader);
+        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader, SeriesEventListener.NOOP);
         assertEquals("Max reference should be 300", 300L, maxRef);
         liveSeriesIndex.close();
     }
@@ -421,7 +422,7 @@ public class LiveSeriesIndexTests extends OpenSearchTestCase {
             }
         };
 
-        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader);
+        long maxRef = liveSeriesIndex.loadSeriesFromIndex(mockSeriesLoader, SeriesEventListener.NOOP);
         assertEquals("Max reference should be 0 for empty index", 0L, maxRef);
         liveSeriesIndex.close();
     }

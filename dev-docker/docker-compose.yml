@@ -1,0 +1,177 @@
+services:
+  opensearch-node1:
+    build:
+      context: ..
+      dockerfile: dev-docker/Dockerfile.custom
+    container_name: opensearch-tsdb-node1
+    environment:
+      - cluster.name=opensearch-tsdb-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g -Dopensearch.experimental.feature.telemetry.enabled=true -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED -Dio.netty.allocator.numDirectArenas=1 -Dio.netty.noUnsafe=false -Dio.netty.tryUnsafe=true -Dio.netty.tryReflectionSetAccessible=true"
+      # Network configuration - bind to all interfaces for Docker
+      - network.host=0.0.0.0
+      # Security settings - set DISABLE_SECURITY_PLUGIN=true for local testing
+      - DISABLE_SECURITY_PLUGIN=${DISABLE_SECURITY_PLUGIN:-false}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Resource limits - dedicated for benchmarking (predictable performance)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g
+        reservations:
+          cpus: '2'      # Dedicated: guarantees 2 CPUs always available
+          memory: 4g     # Dedicated: guarantees 4GB always available
+    volumes:
+      - opensearch-data1:/usr/share/opensearch/data
+      - ./config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+    ports:
+      - 9200:9200
+      - 9300:9300
+      - 9600:9600
+      - 9010:9010     # JMX remote port
+      - 4317:4317     # OTLP gRPC receiver (for otel-collector-node1)
+      - 4318:4318     # OTLP HTTP receiver (for otel-collector-node1)
+      - 9464:9464     # Prometheus exporter (for otel-collector-node1)
+    networks:
+      - opensearch-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  opensearch-node2:
+    build:
+      context: ..
+      dockerfile: dev-docker/Dockerfile.custom
+    container_name: opensearch-tsdb-node2
+    environment:
+      - cluster.name=opensearch-tsdb-cluster
+      - node.name=opensearch-node2
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g -Dopensearch.experimental.feature.telemetry.enabled=true"
+      # Network configuration - bind to all interfaces for Docker
+      - network.host=0.0.0.0
+      # Security settings - set DISABLE_SECURITY_PLUGIN=true for local testing
+      - DISABLE_SECURITY_PLUGIN=${DISABLE_SECURITY_PLUGIN:-false}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Resource limits - dedicated for benchmarking (predictable performance)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g
+        reservations:
+          cpus: '2'      # Dedicated: guarantees 2 CPUs always available
+          memory: 4g     # Dedicated: guarantees 4GB always available
+    volumes:
+      - opensearch-data2:/usr/share/opensearch/data
+      - ./config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+    ports:
+      - 9201:9200
+      - 9301:9300
+      - 9601:9600
+      - 4319:4317     # OTLP gRPC receiver (for otel-collector-node2)
+      - 4320:4318     # OTLP HTTP receiver (for otel-collector-node2)
+      - 9465:9464     # Prometheus exporter (for otel-collector-node2)
+    networks:
+      - opensearch-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Each OpenSearch node gets its own otel-collector sidecar sharing network namespace
+  # This allows both nodes to send metrics to localhost:4317
+  otel-collector-node1:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector-node1
+    command: ["--config=/etc/otel-collector-config.yml"]
+    network_mode: "service:opensearch-node1"
+    depends_on:
+      - opensearch-node1
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+
+  otel-collector-node2:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector-node2
+    command: ["--config=/etc/otel-collector-config.yml"]
+    network_mode: "service:opensearch-node2"
+    depends_on:
+      - opensearch-node2
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--enable-feature=native-histograms'
+    volumes:
+      - ./prometheus-cluster.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - opensearch-net
+    depends_on:
+      - otel-collector-node1
+      - otel-collector-node2
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - opensearch-net
+    depends_on:
+      - prometheus
+
+volumes:
+  opensearch-data1:
+    driver: local
+  opensearch-data2:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  opensearch-net:
+    driver: bridge

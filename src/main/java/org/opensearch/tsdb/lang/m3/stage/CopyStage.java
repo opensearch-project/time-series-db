@@ -59,6 +59,21 @@ public class CopyStage implements UnaryPipelineStage {
     }
 
     /**
+     * Estimate memory overhead for deep copy operations.
+     * CopyStage creates a full deep copy of all time series including labels, samples, and alias.
+     *
+     * <p>Delegates to {@link TimeSeries#ramBytesUsed()} for per-series estimation, ensuring
+     * the calculation stays accurate as underlying implementations change.</p>
+     *
+     * @param input The input time series
+     * @return Estimated memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        return UnaryPipelineStage.estimateDeepCopyOverhead(input);
+    }
+
+    /**
      * Create an CopyStage instance from the input stream for deserialization.
      *
      * @param in the stream input to read from

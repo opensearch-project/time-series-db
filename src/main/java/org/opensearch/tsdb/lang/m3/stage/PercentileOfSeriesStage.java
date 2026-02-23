@@ -15,11 +15,13 @@ import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
-import org.opensearch.tsdb.core.model.SortedValuesSample;
+import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.query.utils.PercentileUtils;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
+import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,6 +31,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.LongConsumer;
+
+import org.opensearch.tsdb.core.model.SampleList;
 
 /**
  * Pipeline stage that calculates percentiles across multiple time series at each timestamp.
@@ -39,9 +44,9 @@ import java.util.TreeSet;
  *
  * <h2>Aggregation Strategy:</h2>
  * <ul>
- *   <li><strong>Process Phase:</strong> Converts samples to sorted value lists</li>
- *   <li><strong>Reduce Phase:</strong> Merges sorted value lists from different shards</li>
- *   <li><strong>Materialize Phase:</strong> Calculates actual percentile values from merged lists</li>
+ *   <li><strong>Process Phase:</strong> Collects values in unsorted lists (O(1) per insert)</li>
+ *   <li><strong>Reduce Phase:</strong> Concatenates unsorted value lists from different shards (O(N))</li>
+ *   <li><strong>Materialize Phase:</strong> Sorts values once and calculates percentiles (O(N log N))</li>
  * </ul>
  *
  * <h2>Parameters:</h2>
@@ -58,7 +63,7 @@ import java.util.TreeSet;
  * @see AbstractGroupingStage
  */
 @PipelineStageAnnotation(name = "percentile_of_series")
-public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
+public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiValueSample> {
 
     /** The name identifier for this stage. */
     public static final String NAME = "percentile_of_series";
@@ -71,6 +76,13 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
 
     /** Label name added to output series to indicate percentile value. */
     private static final String PERCENTILE_LABEL = "__percentile";
+
+    /**
+     * Cached shallow size of MultiValueSample used as aggregation state.
+     * Composed of: MultiValueSample shallow size + ArrayList overhead + initial Double.
+     */
+    private static final long STATE_SIZE = MultiValueSample.SHALLOW_SIZE + SampleList.ARRAYLIST_OVERHEAD
+        + RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /** List of percentiles to calculate (0-100), sorted and deduplicated. */
     private final List<Float> percentiles;
@@ -233,35 +245,45 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
         return new PercentileOfSeriesStage(percentiles, interpolate, groupByLabels);
     }
 
-    /**
-     * Transform input sample to sorted values sample for aggregation.
-     * Converts FloatSample to SortedValuesSample containing a single value.
-     * If the sample is already a SortedValuesSample (during reduce), return it as-is.
-     */
     @Override
-    protected Sample transformInputSample(Sample sample) {
-        // During reduce phase, samples are already SortedValuesSample, so return as-is
-        if (sample instanceof SortedValuesSample) {
-            return sample;
+    protected MultiValueSample aggregateSingleSample(MultiValueSample bucket, Sample newSample) {
+        // TODO: If the total aggregation size can be passed in the beginning, we can use
+        // MultiValueSample.withCapacity() to avoid ArrayList resizing overhead, which can
+        // optimistically make the total merging process ~2x faster.
+        if (bucket == null) {
+            // First sample for this timestamp
+            if (newSample instanceof MultiValueSample multiValueSample) {
+                List<Double> values = new ArrayList<>();
+                for (Double value : multiValueSample.getValueList()) {
+                    if (!Double.isNaN(value)) {
+                        values.add(value);
+                    }
+                }
+                return new MultiValueSample(newSample.getTimestamp(), values);
+            }
+            // During initial collection from FloatSamples, start with single value
+            return new MultiValueSample(newSample.getTimestamp(), newSample.getValue());
         }
-        // During initial collection, convert FloatSample to SortedValuesSample
-        return new SortedValuesSample(sample.getTimestamp(), sample.getValue());
+
+        // If newSample is already MultiValueSample (from another shard during reduce),
+        // append all its values to the bucket (in-place mutation), skipping NaN
+        if (newSample instanceof MultiValueSample multiValueSample) {
+            for (Double value : multiValueSample.getValueList()) {
+                if (!Double.isNaN(value)) {
+                    bucket.insert(value);
+                }
+            }
+            return bucket;
+        }
+
+        // Otherwise, insert single value from FloatSample - Fast O(1) append
+        bucket.insert(newSample.getValue());
+        return bucket;
     }
 
-    /**
-     * Merge two sorted values samples by combining their value lists.
-     * The merge maintains sorted order for efficient percentile calculation.
-     */
     @Override
-    protected Sample mergeReducedSamples(Sample existing, Sample newSample) {
-        if (!(existing instanceof SortedValuesSample) || !(newSample instanceof SortedValuesSample)) {
-            throw new IllegalArgumentException("Can only merge SortedValuesSample instances");
-        }
-
-        SortedValuesSample existingSorted = (SortedValuesSample) existing;
-        SortedValuesSample newSorted = (SortedValuesSample) newSample;
-
-        return existingSorted.merge(newSorted);
+    protected Sample bucketToSample(long timestamp, MultiValueSample bucket) {
+        return bucket;
     }
 
     /**
@@ -272,17 +294,26 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
         return true;
     }
 
+    @Override
+    protected long estimateStateSize() {
+        return STATE_SIZE;
+    }
+
     /**
-     * Override the process method to handle percentile expansion when materialization is needed.
-     * For non-distributed queries, this is where the expansion to multiple percentile series happens.
+     * Process input series with percentile expansion on the coordinator.
+     * Groups series by labels first, then expands each group into multiple series (one per percentile).
      */
     @Override
-    public List<TimeSeries> process(List<TimeSeries> input, boolean isCoord) {
+    public List<TimeSeries> processWithContext(
+        List<TimeSeries> input,
+        boolean coordinatorExecution,
+        java.util.function.LongConsumer circuitBreakerConsumer
+    ) {
         // First, use the parent's grouping logic to aggregate values (without materialization)
-        List<TimeSeries> groupedSeries = super.process(input, false);
+        List<TimeSeries> groupedSeries = super.processWithContext(input, false, circuitBreakerConsumer);
 
         // If materialization is requested, expand each grouped series into multiple percentile series
-        if (isCoord) {
+        if (coordinatorExecution) {
             // Pre-allocate: each grouped series generates one series per percentile
             List<TimeSeries> result = new ArrayList<>(groupedSeries.size() * percentiles.size());
             for (TimeSeries series : groupedSeries) {
@@ -300,14 +331,15 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
      * When isFinalReduce is true, we expand each grouped series into multiple series (one per percentile).
      */
     @Override
-    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce) {
+    public InternalAggregation reduce(List<TimeSeriesProvider> aggregations, boolean isFinalReduce, LongConsumer circuitBreakerConsumer) {
         if (aggregations == null || aggregations.isEmpty()) {
             throw new IllegalArgumentException("Aggregations list cannot be null or empty");
         }
+        LongConsumer cb = ReduceCircuitBreakerConsumer.getConsumer(circuitBreakerConsumer);
 
         // Get the merged grouped series from parent (without materialization)
         // We temporarily disable materialization by calling with isFinalReduce=false
-        InternalAggregation reduced = super.reduce(aggregations, false);
+        InternalAggregation reduced = super.reduce(aggregations, false, cb);
 
         if (!isFinalReduce) {
             // For intermediate reduce, just return the merged samples as-is
@@ -318,10 +350,20 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
         TimeSeriesProvider provider = (TimeSeriesProvider) reduced;
         List<TimeSeries> groupedSeries = provider.getTimeSeries();
 
+        // Track expanded ArrayList allocation (one series per percentile per group)
+        cb.accept(SampleList.ARRAYLIST_OVERHEAD);
+
         // Pre-allocate: each grouped series generates one series per percentile
         List<TimeSeries> expandedSeries = new ArrayList<>(groupedSeries.size() * percentiles.size());
         for (TimeSeries series : groupedSeries) {
-            expandedSeries.addAll(expandToPercentileSeries(series));
+            List<TimeSeries> percentileSeries = expandToPercentileSeries(series);
+
+            // Track memory for each percentile series created
+            for (TimeSeries ts : percentileSeries) {
+                cb.accept(ts.ramBytesUsed());
+            }
+
+            expandedSeries.addAll(percentileSeries);
         }
 
         // Create the final reduced aggregation with expanded series
@@ -329,8 +371,9 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
     }
 
     /**
-     * Expand a single time series with sorted values into multiple series,
-     * one for each percentile.
+     * Expand a single time series with unsorted values into multiple series,
+     * one for each percentile. This is where we sort the values once (O(N log N))
+     * and calculate all percentiles from the sorted list.
      */
     private List<TimeSeries> expandToPercentileSeries(TimeSeries aggregatedSeries) {
         List<TimeSeries> result = new ArrayList<>(percentiles.size());
@@ -339,14 +382,19 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage {
             // Materialize percentile values for this specific percentile
             List<Sample> percentileSamples = new ArrayList<>(aggregatedSeries.getSamples().size());
             for (Sample sample : aggregatedSeries.getSamples()) {
-                if (!(sample instanceof SortedValuesSample sortedSample)) {
+                if (!(sample instanceof MultiValueSample multiValueSample)) {
                     throw new IllegalStateException(
-                        "Expected SortedValuesSample but got "
+                        "Expected MultiValueSample but got "
                             + sample.getClass().getSimpleName()
                             + ". This indicates a bug in the aggregation flow."
                     );
                 }
-                double percentileValue = PercentileUtils.calculatePercentile(sortedSample.getSortedValueList(), percentile, interpolate);
+                // Sort values once and calculate percentile - O(N log N) per timestamp
+                double percentileValue = PercentileUtils.calculatePercentile(
+                    multiValueSample.getSortedValueList(),
+                    percentile,
+                    interpolate
+                );
                 percentileSamples.add(new FloatSample(sample.getTimestamp(), percentileValue));
             }
 

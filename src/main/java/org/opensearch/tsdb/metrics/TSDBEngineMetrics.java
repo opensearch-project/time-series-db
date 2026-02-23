@@ -52,6 +52,9 @@ public class TSDBEngineMetrics {
     /** Gauge handle for minimum sequence number */
     public Closeable memChunksMinSeqGauge;
 
+    /** Gauge handle for current open chunks count */
+    public Closeable memChunksOpenGauge;
+
     /** Histogram for size of closed chunks */
     public Histogram closedChunkSize;
 
@@ -197,9 +200,16 @@ public class TSDBEngineMetrics {
      * @param registry The metrics registry
      * @param seriesCountSupplier Supplier that returns current open series count
      * @param minSeqSupplier Supplier that returns current minimum sequence number
+     * @param openChunksCountSupplier Supplier that returns current open chunks count
      * @param tags Tags to attach to the gauges (e.g., index name, shard ID)
      */
-    public void registerGauges(MetricsRegistry registry, Supplier<Double> seriesCountSupplier, Supplier<Double> minSeqSupplier, Tags tags) {
+    public void registerGauges(
+        MetricsRegistry registry,
+        Supplier<Double> seriesCountSupplier,
+        Supplier<Double> minSeqSupplier,
+        Supplier<Double> openChunksCountSupplier,
+        Tags tags
+    ) {
         if (registry == null) {
             return; // Metrics not initialized
         }
@@ -220,15 +230,25 @@ public class TSDBEngineMetrics {
             minSeqSupplier,
             tags
         );
+
+        memChunksOpenGauge = registry.createGauge(
+            TSDBMetricsConstants.MEMCHUNKS_OPEN,
+            TSDBMetricsConstants.MEMCHUNKS_OPEN_DESC,
+            TSDBMetricsConstants.UNIT_COUNT,
+            openChunksCountSupplier,
+            tags
+        );
     }
 
     public void cleanup() {
         // Close gauge handles first (important to unregister callbacks)
         closeQuietly(seriesOpenGauge);
         closeQuietly(memChunksMinSeqGauge);
+        closeQuietly(memChunksOpenGauge);
 
         seriesOpenGauge = null;
         memChunksMinSeqGauge = null;
+        memChunksOpenGauge = null;
 
         // Cleanup ingestion counters
         samplesIngested = null;

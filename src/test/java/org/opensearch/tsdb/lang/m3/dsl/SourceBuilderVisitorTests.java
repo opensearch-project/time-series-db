@@ -32,11 +32,13 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
@@ -48,10 +50,12 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ShowTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
@@ -294,6 +298,123 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
         assertEquals("TagSubPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    // ========== TagComparePlanNode Tests ==========
+
+    /**
+     * Test TagComparePlanNode with correct number of children (1).
+     */
+    public void testTagComparePlanNodeWithOneChild() {
+        TagComparePlanNode planNode = new TagComparePlanNode(
+            1,
+            org.opensearch.tsdb.lang.m3.common.TagComparisonOperator.LT,
+            "city",
+            "denver"
+        );
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test TagComparePlanNode with incorrect number of children (0).
+     */
+    public void testTagComparePlanNodeWithNoChildren() {
+        TagComparePlanNode planNode = new TagComparePlanNode(
+            1,
+            org.opensearch.tsdb.lang.m3.common.TagComparisonOperator.LT,
+            "city",
+            "denver"
+        );
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("TagComparePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test TagComparePlanNode with incorrect number of children (2).
+     */
+    public void testTagComparePlanNodeWithTwoChildren() {
+        TagComparePlanNode planNode = new TagComparePlanNode(
+            1,
+            org.opensearch.tsdb.lang.m3.common.TagComparisonOperator.LT,
+            "city",
+            "denver"
+        );
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("TagComparePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    // ========== WherePlanNode Tests ==========
+
+    /**
+     * Test WherePlanNode with correct number of children (1).
+     */
+    public void testWherePlanNodeWithOneChild() {
+        WherePlanNode planNode = new WherePlanNode(1, org.opensearch.tsdb.lang.m3.common.WhereOperator.EQ, "region", "uber_region");
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test WherePlanNode with incorrect number of children (0).
+     */
+    public void testWherePlanNodeWithNoChildren() {
+        WherePlanNode planNode = new WherePlanNode(1, org.opensearch.tsdb.lang.m3.common.WhereOperator.EQ, "region", "uber_region");
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("WherePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test WherePlanNode with incorrect number of children (2).
+     */
+    public void testWherePlanNodeWithTwoChildren() {
+        WherePlanNode planNode = new WherePlanNode(1, org.opensearch.tsdb.lang.m3.common.WhereOperator.EQ, "region", "uber_region");
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("WherePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    // ========== MapKeyPlanNode Tests ==========
+
+    /**
+     * Test MapKeyPlanNode with correct number of children (1).
+     */
+    public void testMapKeyPlanNodeWithOneChild() {
+        MapKeyPlanNode planNode = new MapKeyPlanNode(1, "city", "cityName");
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test MapKeyPlanNode with incorrect number of children (0).
+     */
+    public void testMapKeyPlanNodeWithNoChildren() {
+        MapKeyPlanNode planNode = new MapKeyPlanNode(1, "city", "cityName");
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("MapKeyPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test MapKeyPlanNode with incorrect number of children (2).
+     */
+    public void testMapKeyPlanNodeWithTwoChildren() {
+        MapKeyPlanNode planNode = new MapKeyPlanNode(1, "city", "cityName");
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("MapKeyPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**
@@ -607,6 +728,27 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
         assertEquals("HeadPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test TailPlanNode with correct number of children (1).
+     */
+    public void testTailPlanNodeWithOneChild() {
+        TailPlanNode planNode = new TailPlanNode(1, 7);
+        planNode.addChild(createMockFetchNode(2));
+
+        // Should not throw an exception
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test TailPlanNode with incorrect number of children (0).
+     */
+    public void testTailPlanNodeWithNoChildren() {
+        TailPlanNode planNode = new TailPlanNode(1, 15);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("TailPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**

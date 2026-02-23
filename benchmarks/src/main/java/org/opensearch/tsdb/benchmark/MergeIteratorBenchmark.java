@@ -25,7 +25,7 @@ import org.opensearch.tsdb.core.chunk.MergeIterator;
 import org.opensearch.tsdb.core.chunk.XORAppender;
 import org.opensearch.tsdb.core.chunk.XORChunk;
 import org.opensearch.tsdb.core.chunk.XORIterator;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -137,7 +137,7 @@ public class MergeIteratorBenchmark {
     @Benchmark
     public void benchmarkHeapMergeDecode(Blackhole bh) {
         MergeIterator mergeIterator = new MergeIterator(chunkIterators);
-        List<Sample> result = mergeIterator.decodeSamples(0, Long.MAX_VALUE).samples();
+        SampleList result = mergeIterator.decodeSamples(0, Long.MAX_VALUE).samples();
         bh.consume(result);
     }
 

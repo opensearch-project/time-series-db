@@ -20,8 +20,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
@@ -106,34 +105,38 @@ public class KeepLastValueStage implements UnaryPipelineStage {
         }
 
         TimestampGeneratorIterator tsIt = new TimestampGeneratorIterator(ts.getMinTimestamp(), ts.getMaxTimestamp(), ts.getStep());
-        List<Sample> filledSamples = new ArrayList<>((int) ((ts.getMaxTimestamp() - ts.getMinTimestamp()) / ts.getStep()) + 1);
+        FloatSampleList.Builder filledSamplesBuilder = new FloatSampleList.Builder(
+            (int) ((ts.getMaxTimestamp() - ts.getMinTimestamp()) / ts.getStep()) + 1
+        );
         long lookBackLimitMs = lookBackWindow != null ? lookBackWindow : Long.MAX_VALUE;
         Double lastSeenValue = null;
         long lastSeenTimestamp = Long.MIN_VALUE;
         int originalSampleIndex = 0;
         while (tsIt.hasNext()) {
             long timestamp = tsIt.next();
-            Sample existingSample = null;
+            boolean exists = false;
+            double existingValue = 0.0; // only valid if exists == true
             if (originalSampleIndex < originalSamples.size() && originalSamples.getTimestamp(originalSampleIndex) == timestamp) {
                 // there exists a sample for this timestamp already
-                existingSample = originalSamples.getSample(originalSampleIndex);
+                exists = true;
+                existingValue = originalSamples.getValue(originalSampleIndex);
                 originalSampleIndex++;
             }
 
-            if (existingSample != null) {
-                filledSamples.add(existingSample);
-                lastSeenValue = existingSample.getValue();
+            if (exists) {
+                filledSamplesBuilder.add(timestamp, existingValue);
+                lastSeenValue = existingValue;
                 lastSeenTimestamp = timestamp;
 
             } else {
                 // missing sample, try to fill
                 if (lastSeenValue != null && (timestamp - lastSeenTimestamp) <= lookBackLimitMs) {
-                    filledSamples.add(new FloatSample(timestamp, lastSeenValue));
+                    filledSamplesBuilder.add(timestamp, lastSeenValue);
                 }
                 // else skip this timestamp (remains null/missing)
             }
         }
-        return SampleList.fromList(filledSamples);
+        return filledSamplesBuilder.build();
     }
 
     /**
@@ -256,5 +259,38 @@ public class KeepLastValueStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(lookBackWindow);
+    }
+
+    /**
+     * Estimate temporary memory overhead for keep last value operations.
+     * KeepLastValueStage can expand sparse series to dense series.
+     *
+     * @param input The input time series
+     * @return Estimated temporary memory overhead in bytes
+     */
+    @Override
+    public long estimateMemoryOverhead(List<TimeSeries> input) {
+        if (input == null || input.isEmpty()) {
+            return 0;
+        }
+
+        long totalOverhead = 0;
+        for (TimeSeries ts : input) {
+            // Estimate potential expansion: (maxTimestamp - minTimestamp) / step + 1
+            long minTs = ts.getMinTimestamp();
+            long maxTs = ts.getMaxTimestamp();
+            long step = ts.getStep();
+
+            if (step > 0 && maxTs >= minTs) {
+                int potentialSamples = (int) ((maxTs - minTs) / step) + 1;
+                int currentSamples = ts.getSamples().size();
+
+                // Only track expansion (new samples beyond current)
+                int expansion = Math.max(0, potentialSamples - currentSamples);
+                totalOverhead += SampleList.ARRAYLIST_OVERHEAD + (expansion * TimeSeries.ESTIMATED_SAMPLE_SIZE);
+            }
+        }
+
+        return totalOverhead;
     }
 }

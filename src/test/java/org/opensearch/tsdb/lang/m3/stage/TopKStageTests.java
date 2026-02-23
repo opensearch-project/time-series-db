@@ -33,6 +33,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongConsumer;
 
 public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
 
@@ -235,7 +237,7 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         List<TimeSeriesProvider> aggregations = Arrays.asList(agg1, agg2);
 
         // Act
-        InternalAggregation result = topKStage.reduce(aggregations, true);
+        InternalAggregation result = topKStage.reduce(aggregations, true, null);
 
         // Assert
         assertTrue(result instanceof InternalTimeSeries);
@@ -265,7 +267,7 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         List<TimeSeriesProvider> aggregations = Arrays.asList(agg1, agg2);
 
         // Act
-        InternalAggregation result = topKStage.reduce(aggregations, true);
+        InternalAggregation result = topKStage.reduce(aggregations, true, null);
 
         // Assert
         assertTrue(result instanceof InternalTimeSeries);
@@ -285,7 +287,7 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         // Act & Assert
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> topKStage.reduce(Collections.emptyList(), true)
+            () -> topKStage.reduce(Collections.emptyList(), true, null)
         );
         assertEquals("Aggregations list cannot be null or empty", exception.getMessage());
     }
@@ -295,7 +297,7 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         TopKStage topKStage = new TopKStage(5);
 
         // Act & Assert
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> topKStage.reduce(null, true));
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> topKStage.reduce(null, true, null));
         assertEquals("Aggregations list cannot be null or empty", exception.getMessage());
     }
 
@@ -316,7 +318,7 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         List<TimeSeriesProvider> aggregations = Arrays.asList(agg1, agg2);
 
         // Act
-        InternalAggregation result = topKStage.reduce(aggregations, true);
+        InternalAggregation result = topKStage.reduce(aggregations, true, null);
 
         // Assert
         assertTrue(result instanceof InternalTimeSeries);
@@ -327,6 +329,24 @@ public class TopKStageTests extends AbstractWireSerializingTestCase<TopKStage> {
         assertEquals(2, resultSeries.size());
         assertEquals("low_avg", resultSeries.get(0).getLabels().get("name"));  // avg=2.0 (lowest)
         assertEquals("mid_avg", resultSeries.get(1).getLabels().get("name"));  // avg=5.0 (second lowest)
+    }
+
+    public void testReduceWithCircuitBreakerConsumerInvoked() {
+        // Verify that reduce(aggregations, isFinalReduce, consumer) invokes the consumer when non-null
+        TopKStage topKStage = new TopKStage(2, SortByType.CURRENT, SortOrderType.DESC);
+        List<TimeSeries> shard1Series = Arrays.asList(StageTestUtils.createTimeSeries("ts1", Map.of("name", "a"), Arrays.asList(1.0)));
+        List<TimeSeries> shard2Series = Arrays.asList(StageTestUtils.createTimeSeries("ts2", Map.of("name", "b"), Arrays.asList(2.0)));
+        TimeSeriesProvider agg1 = new InternalTimeSeries("test", shard1Series, Collections.emptyMap());
+        TimeSeriesProvider agg2 = new InternalTimeSeries("test", shard2Series, Collections.emptyMap());
+        List<TimeSeriesProvider> aggregations = Arrays.asList(agg1, agg2);
+
+        AtomicLong totalAccepted = new AtomicLong(0L);
+        LongConsumer circuitBreakerConsumer = totalAccepted::addAndGet;
+
+        InternalAggregation result = topKStage.reduce(aggregations, true, circuitBreakerConsumer);
+
+        assertTrue(result instanceof InternalTimeSeries);
+        assertTrue("Circuit breaker consumer should have been called with positive bytes", totalAccepted.get() > 0);
     }
 
     // ========== FromArgs Tests ==========
