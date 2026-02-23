@@ -144,13 +144,15 @@ public class RestPromQLActionTests extends OpenSearchTestCase {
         TSDBMetrics.cleanup();
     }
 
-    public void testGetOrCreateTagsCachesAndReturns() {
-        Map<String, String> tags = new HashMap<>();
-        tags.put("query_type", "instant");
-        tags.put("status", "200");
+    public void testGetOrCreateTagsCachesByContent() {
+        Map<String, String> tags1 = new HashMap<>();
+        tags1.put("query_type", "instant");
+        tags1.put("status", "200");
 
-        Tags result1 = RestPromQLAction.getOrCreateTags(tags);
-        Tags result2 = RestPromQLAction.getOrCreateTags(tags);
+        Map<String, String> tags2 = new HashMap<>(tags1);
+
+        Tags result1 = RestPromQLAction.getOrCreateTags(tags1);
+        Tags result2 = RestPromQLAction.getOrCreateTags(tags2);
 
         assertNotNull(result1);
         assertSame(result1, result2);
