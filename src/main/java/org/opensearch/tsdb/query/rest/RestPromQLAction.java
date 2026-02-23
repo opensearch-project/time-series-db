@@ -274,7 +274,7 @@ public class RestPromQLAction extends BaseTSDBAction {
         }
     }
 
-    private static Tags getOrCreateTags(Map<String, String> tags) {
+    static Tags getOrCreateTags(Map<String, String> tags) {
         return requestTagsCache.computeIfAbsent(tags, m -> {
             Tags t = Tags.create();
             m.forEach(t::addTag);
