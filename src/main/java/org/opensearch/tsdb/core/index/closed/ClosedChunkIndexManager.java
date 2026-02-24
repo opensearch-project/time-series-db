@@ -55,8 +55,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.LongConsumer;
 import java.util.stream.Collectors;
 
 /**
@@ -112,9 +112,7 @@ public class ClosedChunkIndexManager implements Closeable {
     // Duration of each block
     private final long blockDuration;
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
-
-    private volatile LongConsumer dedupCallback;
-    private volatile LongConsumer retentionDeletionCallback;
+    private final AtomicLong persistedSampleCount = new AtomicLong(0);
     private volatile Tags metricTags;
 
     /**
@@ -157,6 +155,7 @@ public class ClosedChunkIndexManager implements Closeable {
         closedChunkIndexMap = new TreeMap<>();
         pendingChunksToSeriesMMapTimestamps = new HashMap<>();
         openClosedChunkIndexes(this.dir);
+        initPersistedSampleCount();
         mgmtTaskScheduler = threadPool.scheduleWithFixedDelay(
             this::runOptimization,
             TimeValue.timeValueMinutes(1),
@@ -170,15 +169,6 @@ public class ClosedChunkIndexManager implements Closeable {
     }
 
     /**
-     * Sets the callback invoked when samples are deduplicated during flush.
-     *
-     * @param callback accepts the count of deduplicated samples
-     */
-    public void setDedupCallback(LongConsumer callback) {
-        this.dedupCallback = callback;
-    }
-
-    /**
      * Sets the metric tags (index, shard) for counter metrics emitted by this manager.
      *
      * @param tags metric tags
@@ -188,30 +178,10 @@ public class ClosedChunkIndexManager implements Closeable {
     }
 
     /**
-     * Sets the callback invoked when a block is deleted by retention.
-     *
-     * @param callback accepts the sample count of the deleted block
-     */
-    public void setRetentionDeletionCallback(LongConsumer callback) {
-        this.retentionDeletionCallback = callback;
-    }
-
-    /**
-     * Returns the sum of sample counts from all persisted block metadata.
-     *
      * @return total sample count across all closed chunk indexes
      */
-    public long getTotalPersistedSampleCount() {
-        lock.lock();
-        try {
-            long total = 0;
-            for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
-                total += index.getTotalSampleCount();
-            }
-            return total;
-        } finally {
-            lock.unlock();
-        }
+    public long getPersistedSampleCount() {
+        return persistedSampleCount.get();
     }
 
     /**
@@ -222,6 +192,14 @@ public class ClosedChunkIndexManager implements Closeable {
         if (this.isClosed.get()) {
             throw new AlreadyClosedException("ClosedChunkIndexManager is closed");
         }
+    }
+
+    private void initPersistedSampleCount() {
+        long total = 0;
+        for (ClosedChunkIndex index : closedChunkIndexMap.values()) {
+            total += index.getTotalSampleCount();
+        }
+        persistedSampleCount.set(total);
     }
 
     // visible for testing.
@@ -247,8 +225,8 @@ public class ClosedChunkIndexManager implements Closeable {
                             org.opensearch.tsdb.core.utils.Files.deleteDirectory(closedChunkIndex.getPath().toAbsolutePath());
                             pendingClosureIndexes.removeAll(removed);
                             TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.retentionSuccessTotal, removed.size());
-                            if (retentionDeletionCallback != null && blockSampleCount > 0) {
-                                retentionDeletionCallback.accept(blockSampleCount);
+                            if (blockSampleCount > 0) {
+                                persistedSampleCount.addAndGet(-blockSampleCount);
                             }
                         }
                     } catch (Exception e) {
@@ -651,11 +629,11 @@ public class ClosedChunkIndexManager implements Closeable {
                 return false;
             }
 
+            int rawSamples = chunk.getCompoundChunk().rawSampleCount();
             int samplesDeduped = closedChunkIndex.addNewChunk(labels, chunk);
+            int postDedupSamples = rawSamples - samplesDeduped;
+            persistedSampleCount.addAndGet(postDedupSamples);
             if (samplesDeduped > 0) {
-                if (dedupCallback != null) {
-                    dedupCallback.accept(samplesDeduped);
-                }
                 TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesDeduped, samplesDeduped, metricTags);
             }
 

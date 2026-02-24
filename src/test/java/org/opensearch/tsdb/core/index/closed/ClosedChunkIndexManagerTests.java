@@ -47,7 +47,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
@@ -824,13 +823,13 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
         manager.addMemChunk(series, TestUtils.getMemChunk(10, 1600, 2500));
         manager.commitChangedIndexes(List.of(series));
 
-        long totalSamples = manager.getTotalPersistedSampleCount();
+        long totalSamples = manager.getPersistedSampleCount();
         assertEquals(15, totalSamples);
 
         manager.close();
@@ -850,7 +849,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         );
 
         Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
         // Block 1
         manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
@@ -858,7 +857,7 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         manager.addMemChunk(series, TestUtils.getMemChunk(10, 7200000, 7800000));
         manager.commitChangedIndexes(List.of(series));
 
-        long totalSamples = manager.getTotalPersistedSampleCount();
+        long totalSamples = manager.getPersistedSampleCount();
         assertEquals(15, totalSamples);
 
         manager.close();
@@ -874,12 +873,12 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
             defaultSettings
         );
 
-        assertEquals(15, reopened.getTotalPersistedSampleCount());
+        assertEquals(15, reopened.getPersistedSampleCount());
         reopened.close();
     }
 
-    public void testDedupCallbackFired() throws IOException {
-        Path tempDir = createTempDir("testDedupCallbackFired");
+    public void testDedupReducesPersistedCount() throws IOException {
+        Path tempDir = createTempDir("testDedupReducesPersistedCount");
         MetadataStore metadataStore = new InMemoryMetadataStore();
         ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
             tempDir,
@@ -891,13 +890,10 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
             defaultSettings
         );
 
-        AtomicLong totalDeduped = new AtomicLong(0);
-        manager.setDedupCallback(totalDeduped::addAndGet);
-
         Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
-        // Create an OOO memchunk with a duplicate timestamp
+        // Create an OOO memchunk with a duplicate timestamp (3 raw, 1 deduped → 2 persisted)
         var memChunk = new org.opensearch.tsdb.core.head.MemChunk(0, 0, 10000, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
         memChunk.append(1000L, 1.0, 1L);
         memChunk.append(2000L, 2.0, 2L);
@@ -906,13 +902,13 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
         manager.addMemChunk(series, memChunk);
         manager.commitChangedIndexes(List.of(series));
 
-        assertEquals(1, totalDeduped.get());
+        assertEquals(2, manager.getPersistedSampleCount());
 
         manager.close();
     }
 
-    public void testRetentionWithNullCallbackDoesNotThrow() throws Exception {
-        Path tempDir = createTempDir("testRetentionNullCallback");
+    public void testRetentionDecrementsPersistedCount() throws Exception {
+        Path tempDir = createTempDir("testRetentionDecrementsPersistedCount");
         MetadataStore metadataStore = new InMemoryMetadataStore();
 
         Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
@@ -935,95 +931,20 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
             settings
         );
 
-        // Intentionally do NOT set retentionDeletionCallback — it should remain null
-
         Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
 
         manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
         manager.commitChangedIndexes(List.of(series));
 
-        // Run optimization which triggers retention — should not throw with null callback
-        manager.runOptimization();
-
-        // Block should have been deleted
-        assertEquals(0, manager.getTotalPersistedSampleCount());
-
-        manager.close();
-    }
-
-    public void testDedupWithNullCallbackDoesNotThrow() throws IOException {
-        Path tempDir = createTempDir("testDedupNullCallback");
-        MetadataStore metadataStore = new InMemoryMetadataStore();
-        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
-            tempDir,
-            metadataStore,
-            new NOOPRetention(),
-            new NoopCompaction(),
-            threadPool,
-            new ShardId("index", "uuid", 0),
-            defaultSettings
-        );
-
-        // Intentionally do NOT set dedupCallback — it should remain null
-
-        Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
-
-        // Create an OOO memchunk with a duplicate timestamp
-        var memChunk = new org.opensearch.tsdb.core.head.MemChunk(0, 0, 10000, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
-        memChunk.append(1000L, 1.0, 1L);
-        memChunk.append(2000L, 2.0, 2L);
-        memChunk.append(1000L, 3.0, 3L); // duplicate
-
-        // Should not throw with null callback
-        manager.addMemChunk(series, memChunk);
-        manager.commitChangedIndexes(List.of(series));
-
-        manager.close();
-    }
-
-    public void testRetentionCallbackFired() throws Exception {
-        Path tempDir = createTempDir("testRetentionCallbackFired");
-        MetadataStore metadataStore = new InMemoryMetadataStore();
-
-        Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
-
-        Settings settings = Settings.builder()
-            .put(TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.getKey(), TimeValue.timeValueHours(2))
-            .put(TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.getKey(), 120)
-            .put(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.getKey(), org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_TIME_UNIT.toString())
-            .build();
-
-        // Use short retention so the block will be expired
-        TimeBasedRetention retention = new TimeBasedRetention(1L, 0L, frozenClock);
-
-        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
-            tempDir,
-            metadataStore,
-            retention,
-            new NoopCompaction(),
-            threadPool,
-            new ShardId("index", "uuid", 0),
-            settings
-        );
-
-        AtomicLong totalRemoved = new AtomicLong(0);
-        manager.setRetentionDeletionCallback(totalRemoved::addAndGet);
-
-        Labels labels = ByteLabels.fromStrings("metric", "cpu");
-        MemSeries series = new MemSeries(0, labels);
-
-        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
-        manager.commitChangedIndexes(List.of(series));
-
-        long samplesBefore = manager.getTotalPersistedSampleCount();
+        long samplesBefore = manager.getPersistedSampleCount();
         assertTrue(samplesBefore > 0);
 
-        // Run optimization which triggers retention
+        // Run optimization which triggers retention — should decrement persisted count
         manager.runOptimization();
 
-        assertEquals(samplesBefore, totalRemoved.get());
+        assertEquals(0, manager.getPersistedSampleCount());
+
         manager.close();
     }
 }

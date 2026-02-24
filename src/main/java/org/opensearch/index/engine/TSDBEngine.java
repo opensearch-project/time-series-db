@@ -134,7 +134,7 @@ public class TSDBEngine extends Engine {
 
     private final Tags metricTags; // tags for metrics (index name and shard ID)
 
-    private final AtomicLong totalSampleCount = new AtomicLong(0);
+    private final AtomicLong headSampleCount = new AtomicLong(0);
 
     private Head head;
     private Path metricsStorePath;
@@ -221,10 +221,7 @@ public class TSDBEngine extends Engine {
                 engineConfig.getIndexSettings().getSettings()
             );
 
-            closedChunkIndexManager.setDedupCallback(deduped -> totalSampleCount.addAndGet(-deduped));
-            closedChunkIndexManager.setRetentionDeletionCallback(removed -> totalSampleCount.addAndGet(-removed));
             closedChunkIndexManager.setMetricTags(metricTags);
-            totalSampleCount.set(closedChunkIndexManager.getTotalPersistedSampleCount());
 
             head = new Head(
                 metricsStorePath,
@@ -455,23 +452,32 @@ public class TSDBEngine extends Engine {
             // TODO: delete this once OOO is supported
             logger.error("Encountered empty label exception, operation origin " + indexOp.origin().name(), e);
             emptyLabelExceptionEncountered = true;
-            incrementSamplesFailed(TSDBMetricsConstants.TAG_REASON_EMPTY_LABELS);
+            incrementSamplesFailed(indexOp.origin(), TSDBMetricsConstants.TAG_REASON_EMPTY_LABELS);
         } catch (TSDBOutOfOrderException e) {
             // OOO sample rejected - expected failure, do not log as error
             logger.debug("Sample rejected due to OOO cutoff, writing NoOp to translog, operation origin " + indexOp.origin().name(), e);
             context.failureException = e;
-            incrementSamplesFailed(TSDBMetricsConstants.TAG_REASON_OOO_REJECTED);
+            incrementSamplesFailed(indexOp.origin(), TSDBMetricsConstants.TAG_REASON_OOO_REJECTED);
         } catch (Exception e) {
             logger.error("Index operation failed during preprocess or append, operation origin " + indexOp.origin().name(), e);
             context.failureException = e;
             incrementSamplesFailed(
+                indexOp.origin(),
                 (e instanceof TSDBTragicException) ? TSDBMetricsConstants.TAG_REASON_TRAGIC : TSDBMetricsConstants.TAG_REASON_OTHER
             );
         }
 
         if (appended) {
-            totalSampleCount.incrementAndGet();
-            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesAppended, 1, head.getMetricTags());
+            headSampleCount.incrementAndGet();
+            String origin = originTag(indexOp.origin());
+            TSDBMetrics.incrementCounter(
+                TSDBMetrics.ENGINE.samplesAppended,
+                1,
+                Tags.create()
+                    .addTag("index", engineConfig.getShardId().getIndexName())
+                    .addTag("shard", (long) engineConfig.getShardId().getId())
+                    .addTag(TSDBMetricsConstants.TAG_ORIGIN, origin)
+            );
         }
 
         // TODO: We ignore empty label exceptions temporarily. Delete this once OOO support is added.
@@ -818,6 +824,7 @@ public class TSDBEngine extends Engine {
                     long currentProcessedCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
 
                     Head.IndexChunksResult indexChunksResult = head.closeHeadChunks(postRecoveryRefreshCompleted, closeableChunkPercentage);
+                    headSampleCount.addAndGet(-indexChunksResult.totalFlushedRawSamples());
                     long minSeqNo = indexChunksResult.minSeqNo();
                     long checkpoint = minSeqNo == Long.MAX_VALUE ? Long.MAX_VALUE : minSeqNo - 1;
 
@@ -1715,47 +1722,52 @@ public class TSDBEngine extends Engine {
      */
     private void registerHeadGauges() {
         if (!TSDBMetrics.isInitialized() || head == null) {
-            return; // Metrics not initialized or head not created yet
+            return;
         }
 
         final Head headRef = this.head;
 
-        TSDBMetrics.ENGINE.registerGauges(
-            TSDBMetrics.getRegistry(),
-            () -> (double) headRef.getNumSeries(),           // Current series count
-            () -> {
-                // Minimum sequence number - convert Long.MAX_VALUE to 0 for metrics
-                // (Long.MAX_VALUE is internal sentinel, not meaningful for observability)
-                long minSeq = headRef.getMinSeqNo();
-                return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
-            },
-            () -> (double) headRef.getNumOpenChunks(),       // Current open chunks count
-            headRef.getMetricTags()
-        );
+        TSDBMetrics.ENGINE.registerGauges(TSDBMetrics.getRegistry(), () -> (double) headRef.getNumSeries(), () -> {
+            long minSeq = headRef.getMinSeqNo();
+            return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
+        }, () -> (double) headRef.getNumOpenChunks(), headRef.getMetricTags());
 
-        String role = engineConfig.isReadOnlyReplica() ? TSDBMetricsConstants.TAG_ROLE_REPLICA : TSDBMetricsConstants.TAG_ROLE_PRIMARY;
+        // TODO: Add a "role" tag (primary/replica) once EngineConfig exposes shard routing.
         Tags shardGaugeTags = Tags.create()
             .addTag("index", engineConfig.getShardId().getIndexName())
-            .addTag("shard", (long) engineConfig.getShardId().getId())
-            .addTag(TSDBMetricsConstants.TAG_ROLE, role);
+            .addTag("shard", (long) engineConfig.getShardId().getId());
 
-        TSDBMetrics.ENGINE.registerShardGauges(TSDBMetrics.getRegistry(), () -> (double) totalSampleCount.get(), () -> {
-            try {
-                return (double) store.stats(0L).getSizeInBytes();
-            } catch (Exception e) {
-                return 0.0;
-            }
-        }, shardGaugeTags);
+        TSDBMetrics.ENGINE.registerShardGauges(
+            TSDBMetrics.getRegistry(),
+            () -> (double) headSampleCount.get(),
+            () -> (double) closedChunkIndexManager.getPersistedSampleCount(),
+            () -> {
+                try {
+                    return (double) store.stats(0L).getSizeInBytes();
+                } catch (Exception e) {
+                    return 0.0;
+                }
+            },
+            shardGaugeTags
+        );
     }
 
-    private void incrementSamplesFailed(String reason) {
+    private void incrementSamplesFailed(Operation.Origin origin, String reason) {
         TSDBMetrics.incrementCounter(
             TSDBMetrics.ENGINE.samplesFailed,
             1,
             Tags.create()
                 .addTag("index", engineConfig.getShardId().getIndexName())
                 .addTag("shard", (long) engineConfig.getShardId().getId())
+                .addTag(TSDBMetricsConstants.TAG_ORIGIN, originTag(origin))
                 .addTag(TSDBMetricsConstants.TAG_REASON, reason)
         );
+    }
+
+    private static String originTag(Operation.Origin origin) {
+        return switch (origin) {
+            case PRIMARY, REPLICA -> TSDBMetricsConstants.TAG_ORIGIN_INGESTION;
+            default -> TSDBMetricsConstants.TAG_ORIGIN_RECOVERY;
+        };
     }
 }

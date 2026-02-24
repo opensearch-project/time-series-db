@@ -299,20 +299,30 @@ public class TSDBEngineMetricsTests extends OpenSearchTestCase {
     public void testRegisterShardGaugesCreatesGauges() {
         metrics.initialize(registry);
 
-        Supplier<Double> sampleCountSupplier = () -> 42000.0;
+        Supplier<Double> headCountSupplier = () -> 1000.0;
+        Supplier<Double> persistedCountSupplier = () -> 41000.0;
         Supplier<Double> sizeBytesSupplier = () -> 1024.0;
-        Tags tags = Tags.create().addTag("index", "test").addTag("shard", 0L).addTag("role", "primary");
+        Tags tags = Tags.create().addTag("index", "test").addTag("shard", 0L);
 
-        metrics.registerShardGauges(registry, sampleCountSupplier, sizeBytesSupplier, tags);
+        metrics.registerShardGauges(registry, headCountSupplier, persistedCountSupplier, sizeBytesSupplier, tags);
 
-        assertNotNull(metrics.shardSampleCountGauge);
+        assertNotNull(metrics.headSampleCountGauge);
+        assertNotNull(metrics.persistedSampleCountGauge);
         assertNotNull(metrics.shardSizeBytesGauge);
 
         verify(registry).createGauge(
-            eq(TSDBMetricsConstants.SHARD_SAMPLE_COUNT),
-            eq(TSDBMetricsConstants.SHARD_SAMPLE_COUNT_DESC),
+            eq(TSDBMetricsConstants.HEAD_SAMPLE_COUNT),
+            eq(TSDBMetricsConstants.HEAD_SAMPLE_COUNT_DESC),
             eq(TSDBMetricsConstants.UNIT_COUNT),
-            eq(sampleCountSupplier),
+            eq(headCountSupplier),
+            eq(tags)
+        );
+
+        verify(registry).createGauge(
+            eq(TSDBMetricsConstants.PERSISTED_SAMPLE_COUNT),
+            eq(TSDBMetricsConstants.PERSISTED_SAMPLE_COUNT_DESC),
+            eq(TSDBMetricsConstants.UNIT_COUNT),
+            eq(persistedCountSupplier),
             eq(tags)
         );
 
@@ -328,29 +338,34 @@ public class TSDBEngineMetricsTests extends OpenSearchTestCase {
     public void testRegisterShardGaugesWithNullRegistryDoesNothing() {
         metrics.initialize(registry);
 
-        metrics.registerShardGauges(null, () -> 0.0, () -> 0.0, Tags.EMPTY);
+        metrics.registerShardGauges(null, () -> 0.0, () -> 0.0, () -> 0.0, Tags.EMPTY);
 
-        assertNull(metrics.shardSampleCountGauge);
+        assertNull(metrics.headSampleCountGauge);
+        assertNull(metrics.persistedSampleCountGauge);
         assertNull(metrics.shardSizeBytesGauge);
     }
 
     public void testCleanupClosesShardGauges() throws Exception {
         metrics.initialize(registry);
 
-        Closeable sampleCountGauge = mock(Closeable.class);
+        Closeable headGauge = mock(Closeable.class);
+        Closeable persistedGauge = mock(Closeable.class);
         Closeable sizeBytesGauge = mock(Closeable.class);
 
         when(registry.createGauge(anyString(), anyString(), anyString(), any(Supplier.class), any(Tags.class))).thenReturn(
-            sampleCountGauge,
+            headGauge,
+            persistedGauge,
             sizeBytesGauge
         );
 
-        metrics.registerShardGauges(registry, () -> 0.0, () -> 0.0, Tags.EMPTY);
+        metrics.registerShardGauges(registry, () -> 0.0, () -> 0.0, () -> 0.0, Tags.EMPTY);
         metrics.cleanup();
 
-        verify(sampleCountGauge).close();
+        verify(headGauge).close();
+        verify(persistedGauge).close();
         verify(sizeBytesGauge).close();
-        assertNull(metrics.shardSampleCountGauge);
+        assertNull(metrics.headSampleCountGauge);
+        assertNull(metrics.persistedSampleCountGauge);
         assertNull(metrics.shardSizeBytesGauge);
     }
 }

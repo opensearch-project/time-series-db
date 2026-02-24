@@ -484,6 +484,7 @@ public class Head implements Closeable {
         long minTimestamp = Long.MAX_VALUE;
         Map<Long, Set<MemChunk>> seriesRefToClosedChunks = new HashMap<>();
         int totalClosedChunks = 0;
+        long totalFlushedRawSamples = 0;
 
         for (int i = 0; i < chunksToProcess; i++) {
             CloseableChunkInfo chunkInfo = allCloseableChunks.get(i);
@@ -503,6 +504,7 @@ public class Head implements Closeable {
                 }
                 // Mark the chunk as closed after successfully adding to the index manager
                 chunkInfo.chunk.setClosed(true);
+                totalFlushedRawSamples += chunkInfo.chunk.getCompoundChunk().rawSampleCount();
                 seriesRefToClosedChunks.computeIfAbsent(chunkInfo.series.getReference(), k -> new HashSet<>()).add(chunkInfo.chunk);
                 totalClosedChunks++;
             } catch (IOException e) {
@@ -532,7 +534,14 @@ public class Head implements Closeable {
             minTimestamp = minTimestampFromNonCloseable;
         }
 
-        return new IndexChunksResult(seriesRefToClosedChunks, minSeqNo, totalClosedChunks, minTimestamp, deferredChunks);
+        return new IndexChunksResult(
+            seriesRefToClosedChunks,
+            minSeqNo,
+            totalClosedChunks,
+            minTimestamp,
+            deferredChunks,
+            totalFlushedRawSamples
+        );
     }
 
     /**
@@ -551,7 +560,7 @@ public class Head implements Closeable {
      * @param deferredChunkCount      number of chunks that were closeable but deferred due to rate limiting
      */
     public record IndexChunksResult(Map<Long, Set<MemChunk>> seriesRefToClosedChunks, long minSeqNo, int numClosedChunks, long minTimestamp,
-        int deferredChunkCount) {
+        int deferredChunkCount, long totalFlushedRawSamples) {
     }
 
     private int dropEmptySeries(long minSeqNoToKeep) {

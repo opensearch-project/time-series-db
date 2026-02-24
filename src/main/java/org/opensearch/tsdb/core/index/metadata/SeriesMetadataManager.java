@@ -54,19 +54,28 @@ public class SeriesMetadataManager {
      * @throws IOException if commit fails
      */
     public void commitWithMetadata(Map<Long, Long> metadata) throws IOException {
-        // Get next generation from directory state directly
+        commitWithMetadata(metadata, Map.of());
+    }
+
+    /**
+     * Commit metadata to a separate file and store reference plus additional entries in commit data.
+     *
+     * @param metadata the map of series references to timestamps
+     * @param additionalCommitData additional entries to include in Lucene commit data
+     * @throws IOException if commit fails
+     */
+    public void commitWithMetadata(Map<Long, Long> metadata, Map<String, String> additionalCommitData) throws IOException {
         long nextGeneration = SegmentInfos.getLastCommitGeneration(directory) + 1;
 
         String metadataFilename = SeriesMetadataIO.writeMetadata(directory, nextGeneration, metadata);
 
-        // Store filename in commit data
         Map<String, String> commitData = new java.util.HashMap<>();
         commitData.put(SERIES_METADATA_FILE_KEY, metadataFilename);
+        commitData.putAll(additionalCommitData);
 
         indexWriter.setLiveCommitData(commitData.entrySet(), true);
         indexWriter.commit();
 
-        // Cleanup old metadata files AFTER commit
         cleanupOldMetadataFiles();
     }
 

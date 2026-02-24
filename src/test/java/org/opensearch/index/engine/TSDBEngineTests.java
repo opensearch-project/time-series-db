@@ -1728,20 +1728,23 @@ public class TSDBEngineTests extends EngineTestCase {
             ArgumentCaptor<Supplier<Double>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
             ArgumentCaptor<Tags> tagsCaptor = ArgumentCaptor.forClass(Tags.class);
 
-            Mockito.verify(mockRegistry, Mockito.atLeast(4))
+            Mockito.verify(mockRegistry, Mockito.atLeast(5))
                 .createGauge(nameCaptor.capture(), anyString(), anyString(), supplierCaptor.capture(), tagsCaptor.capture());
 
             List<String> names = nameCaptor.getAllValues();
             List<Supplier<Double>> suppliers = supplierCaptor.getAllValues();
             List<Tags> tagsList = tagsCaptor.getAllValues();
 
-            int sampleCountIdx = names.indexOf(TSDBMetricsConstants.SHARD_SAMPLE_COUNT);
+            int headSampleIdx = names.indexOf(TSDBMetricsConstants.HEAD_SAMPLE_COUNT);
+            int persistedSampleIdx = names.indexOf(TSDBMetricsConstants.PERSISTED_SAMPLE_COUNT);
             int sizeBytesIdx = names.indexOf(TSDBMetricsConstants.SHARD_SIZE_BYTES);
 
-            assertTrue("shard.sample_count gauge should be registered", sampleCountIdx >= 0);
+            assertTrue("head.sample_count gauge should be registered", headSampleIdx >= 0);
+            assertTrue("persisted.sample_count gauge should be registered", persistedSampleIdx >= 0);
             assertTrue("shard.size_bytes gauge should be registered", sizeBytesIdx >= 0);
 
-            assertEquals(0.0, suppliers.get(sampleCountIdx).get(), 0.001);
+            assertEquals(0.0, suppliers.get(headSampleIdx).get(), 0.001);
+            assertEquals(0.0, suppliers.get(persistedSampleIdx).get(), 0.001);
             assertTrue("size bytes should be >= 0", suppliers.get(sizeBytesIdx).get() >= 0.0);
         } finally {
             TSDBMetrics.cleanup();
@@ -1774,7 +1777,7 @@ public class TSDBEngineTests extends EngineTestCase {
             ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
             ArgumentCaptor<Supplier<Double>> supplierCaptor = ArgumentCaptor.forClass(Supplier.class);
 
-            Mockito.verify(mockRegistry, Mockito.atLeast(4))
+            Mockito.verify(mockRegistry, Mockito.atLeast(5))
                 .createGauge(nameCaptor.capture(), anyString(), anyString(), supplierCaptor.capture(), any(Tags.class));
 
             List<String> names = nameCaptor.getAllValues();

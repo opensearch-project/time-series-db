@@ -282,6 +282,8 @@ public class ClosedChunkIndex implements Closeable {
         commitWithMetadata(metadata);
     }
 
+    static final String COMMIT_DATA_SAMPLE_COUNT_KEY = "stats.sample_count";
+
     /**
      * Commit the live series metadata map including seriesRef and corresponding max mmap timestamps.
      *
@@ -289,7 +291,7 @@ public class ClosedChunkIndex implements Closeable {
      */
     public void commitWithMetadata(Map<Long, Long> liveSeries) {
         try {
-            metadataManager.commitWithMetadata(liveSeries);
+            metadataManager.commitWithMetadata(liveSeries, Map.of(COMMIT_DATA_SAMPLE_COUNT_KEY, Long.toString(getTotalSampleCount())));
         } catch (IOException e) {
             throw new RuntimeException("Failed to commit with metadata", e);
         }
@@ -469,22 +471,31 @@ public class ClosedChunkIndex implements Closeable {
                     )
             ) {
                 Map<String, Object> map = parser.map();
+                int version = map.containsKey("version") ? ((Number) map.get("version")).intValue() : 1;
                 String directoryName = (String) map.get("directory_name");
                 long minTimestamp = ((Number) map.get("min_timestamp")).longValue();
                 long maxTimestamp = ((Number) map.get("max_timestamp")).longValue();
 
-                Stats stats = Stats.EMPTY;
-                Object statsObj = map.get("stats");
-                if (statsObj instanceof Map) {
-                    Map<String, Object> statsMap = (Map<String, Object>) statsObj;
-                    long sampleCount = statsMap.containsKey("sample_count") ? ((Number) statsMap.get("sample_count")).longValue() : 0;
-                    stats = new Stats(sampleCount);
-                }
+                Stats stats = switch (version) {
+                    case 2 -> parseStatsV2(map);
+                    default -> Stats.EMPTY;
+                };
 
                 return new Metadata(directoryName, minTimestamp, maxTimestamp, stats);
             } catch (IOException e) {
                 throw new RuntimeException("Failed to deserialize Metadata", e);
             }
+        }
+
+        @SuppressWarnings("unchecked")
+        private static Stats parseStatsV2(Map<String, Object> map) {
+            Object statsObj = map.get("stats");
+            if (!(statsObj instanceof Map)) {
+                return Stats.EMPTY;
+            }
+            Map<String, Object> statsMap = (Map<String, Object>) statsObj;
+            long sampleCount = statsMap.containsKey("sample_count") ? ((Number) statsMap.get("sample_count")).longValue() : 0;
+            return new Stats(sampleCount);
         }
     }
 }
