@@ -906,7 +906,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
 
     @Override
     public void onIndexModule(IndexModule indexModule) {
-        if (ingestionLagIndexingListener != null) {
+        if (ingestionLagIndexingListener != null && TSDB_ENGINE_ENABLED.get(indexModule.getSettings())) {
             indexModule.addIndexOperationListener(ingestionLagIndexingListener);
             indexModule.addIndexEventListener(ingestionLagIndexingListener);
         }

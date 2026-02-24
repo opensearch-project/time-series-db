@@ -92,11 +92,7 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 long now = System.currentTimeMillis();
 
                 String indexName = getPrimaryIndex(bulkRequest);
-                Tags tags = indexTagsCache.get(indexName);
-                if (tags == null) {
-                    tags = Tags.create().addTag("index", indexName);
-                    indexTagsCache.put(indexName, tags);
-                }
+                Tags tags = indexTagsCache.computeIfAbsent(indexName, idx -> Tags.create().addTag("index", idx));
 
                 long coordinatorLagMs = now - minSampleTimestamp;
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
