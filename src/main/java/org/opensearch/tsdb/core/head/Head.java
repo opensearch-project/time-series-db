@@ -75,6 +75,9 @@ public class Head implements Closeable {
     private final AtomicLong createdChunksCount = new AtomicLong(0);
     private final AtomicLong closedChunksCount = new AtomicLong(0);
 
+    // Cached minSeqNo updated by closeHeadChunks() to avoid full series iteration on gauge poll
+    private volatile long cachedMinSeqNo = Long.MAX_VALUE;
+
     /**
      * Singleton event listener implementation for tracking chunk lifecycle events.
      */
@@ -319,6 +322,8 @@ public class Head implements Closeable {
         if (indexChunksResult.deferredChunkCount() > 0) {
             TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.deferredChunkCloseCount, indexChunksResult.deferredChunkCount(), metricTags);
         }
+
+        cachedMinSeqNo = indexChunksResult.minSeqNo();
 
         // TODO consider returning in an incremental fashion, to avoid no-op reprocessing if the server crashes between CCI commits
         return indexChunksResult;
@@ -567,20 +572,13 @@ public class Head implements Closeable {
     }
 
     /**
-     * Get the minimum sequence number across all open memory chunks.
-     * Made public to support pull-based gauge metrics.
+     * Returns the minimum sequence number across all open memory chunks,
+     * refreshed on each {@link #closeHeadChunks} call.
      *
      * @return minimum sequence number, or Long.MAX_VALUE if no memchunks exist
      */
     public long getMinSeqNo() {
-        long minSeqNo = Long.MAX_VALUE;
-        for (MemSeries s : seriesMap.getSeriesMap()) {
-            MemChunk hc = s.getHeadChunk();
-            if (hc != null && hc.getMinSeqNo() < minSeqNo) {
-                minSeqNo = hc.getMinSeqNo();
-            }
-        }
-        return minSeqNo;
+        return cachedMinSeqNo;
     }
 
     /**
