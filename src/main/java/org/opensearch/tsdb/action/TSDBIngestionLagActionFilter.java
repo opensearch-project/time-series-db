@@ -8,7 +8,6 @@
 package org.opensearch.tsdb.action;
 
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -22,6 +21,9 @@ import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.support.ActionFilter;
 import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.action.support.ActionRequestMetadata;
+import org.opensearch.common.cache.Cache;
+import org.opensearch.common.cache.CacheBuilder;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.action.ActionResponse;
@@ -41,10 +43,16 @@ import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 public class TSDBIngestionLagActionFilter implements ActionFilter {
     private static final Logger logger = LogManager.getLogger(TSDBIngestionLagActionFilter.class);
 
+    private static final long INDEX_TAGS_TTL_HOURS = 12;
+    private static final int INDEX_TAGS_MAX_SIZE = 10_000;
+
     private final ThreadContext threadContext;
     private final TSDBIngestionLagMetrics metrics;
     private final Supplier<Boolean> enabledSupplier;
-    private final ConcurrentHashMap<String, Tags> indexTagsCache = new ConcurrentHashMap<>();
+    private final Cache<String, Tags> indexTagsCache = CacheBuilder.<String, Tags>builder()
+        .setMaximumWeight(INDEX_TAGS_MAX_SIZE)
+        .setExpireAfterAccess(TimeValue.timeValueHours(INDEX_TAGS_TTL_HOURS))
+        .build();
 
     public TSDBIngestionLagActionFilter(ThreadContext threadContext, TSDBIngestionLagMetrics metrics, Supplier<Boolean> enabledSupplier) {
         this.threadContext = threadContext;
@@ -84,7 +92,11 @@ public class TSDBIngestionLagActionFilter implements ActionFilter {
                 long now = System.currentTimeMillis();
 
                 String indexName = getPrimaryIndex(bulkRequest);
-                Tags tags = indexTagsCache.computeIfAbsent(indexName, idx -> Tags.create().addTag("index", idx));
+                Tags tags = indexTagsCache.get(indexName);
+                if (tags == null) {
+                    tags = Tags.create().addTag("index", indexName);
+                    indexTagsCache.put(indexName, tags);
+                }
 
                 long coordinatorLagMs = now - minSampleTimestamp;
                 TSDBMetrics.recordHistogram(metrics.coordinatorLag, coordinatorLagMs, tags);
