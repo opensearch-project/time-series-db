@@ -141,6 +141,7 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException if there is an error adding the chunk
      */
     public int addNewChunk(Labels labels, MemChunk memChunk) throws IOException {
+        // compoundChunk cannot change between rawSampleCount() and toChunk() — we hold the index writer lock
         int rawSampleCount = memChunk.getCompoundChunk().rawSampleCount();
         // Convert MemChunk to Chunk once and reuse for both serialization and metrics
         Chunk chunk = memChunk.getCompoundChunk().toChunk();
