@@ -471,14 +471,18 @@ public class ClosedChunkIndex implements Closeable {
                     )
             ) {
                 Map<String, Object> map = parser.map();
-                int version = map.containsKey("version") ? ((Number) map.get("version")).intValue() : 1;
+                if (!map.containsKey("version")) {
+                    throw new IllegalStateException("Metadata missing required 'version' field");
+                }
+                int version = ((Number) map.get("version")).intValue();
                 String directoryName = (String) map.get("directory_name");
                 long minTimestamp = ((Number) map.get("min_timestamp")).longValue();
                 long maxTimestamp = ((Number) map.get("max_timestamp")).longValue();
 
                 Stats stats = switch (version) {
+                    case 1 -> Stats.EMPTY;
                     case 2 -> parseStatsV2(map);
-                    default -> Stats.EMPTY;
+                    default -> throw new IllegalStateException("Unrecognized metadata version: " + version);
                 };
 
                 return new Metadata(directoryName, minTimestamp, maxTimestamp, stats);
@@ -494,7 +498,10 @@ public class ClosedChunkIndex implements Closeable {
                 return Stats.EMPTY;
             }
             Map<String, Object> statsMap = (Map<String, Object>) statsObj;
-            long sampleCount = statsMap.containsKey("sample_count") ? ((Number) statsMap.get("sample_count")).longValue() : 0;
+            if (!statsMap.containsKey("sample_count")) {
+                throw new IllegalStateException("v2 stats missing required 'sample_count' field");
+            }
+            long sampleCount = ((Number) statsMap.get("sample_count")).longValue();
             return new Stats(sampleCount);
         }
     }

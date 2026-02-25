@@ -133,6 +133,8 @@ public class TSDBEngine extends Engine {
     private volatile int maxCloseableChunksPerChunkRangePercentage; // controls the percentage of chunks closed per chunk range
 
     private final Tags metricTags; // tags for metrics (index name and shard ID)
+    private final Tags samplesAppendTags;
+    private final Tags samplesRecoveryTags;
 
     private final AtomicLong headSampleCount = new AtomicLong(0);
 
@@ -169,10 +171,18 @@ public class TSDBEngine extends Engine {
             engineConfig.getIndexSettings().getSettings()
         );
 
-        // Initialize metric tags for this shard
-        this.metricTags = Tags.create()
-            .addTag("index", engineConfig.getShardId().getIndexName())
-            .addTag("shard", (long) engineConfig.getShardId().getId());
+        String indexName = engineConfig.getShardId().getIndexName();
+        long shardNum = engineConfig.getShardId().getId();
+
+        this.metricTags = Tags.create().addTag("index", indexName).addTag("shard", shardNum);
+        this.samplesAppendTags = Tags.create()
+            .addTag("index", indexName)
+            .addTag("shard", shardNum)
+            .addTag(TSDBMetricsConstants.TAG_ORIGIN, TSDBMetricsConstants.TAG_ORIGIN_INGESTION);
+        this.samplesRecoveryTags = Tags.create()
+            .addTag("index", indexName)
+            .addTag("shard", shardNum)
+            .addTag(TSDBMetricsConstants.TAG_ORIGIN, TSDBMetricsConstants.TAG_ORIGIN_RECOVERY);
 
         // Initialize rate-limited translog deletion policy with metric tags
         this.rateLimitedTranslogDeletionPolicy = new RateLimitedTranslogDeletionPolicy(
@@ -469,15 +479,10 @@ public class TSDBEngine extends Engine {
 
         if (appended) {
             headSampleCount.incrementAndGet();
-            String origin = originTag(indexOp.origin());
-            TSDBMetrics.incrementCounter(
-                TSDBMetrics.ENGINE.samplesAppended,
-                1,
-                Tags.create()
-                    .addTag("index", engineConfig.getShardId().getIndexName())
-                    .addTag("shard", (long) engineConfig.getShardId().getId())
-                    .addTag(TSDBMetricsConstants.TAG_ORIGIN, origin)
-            );
+            Tags tags = indexOp.origin() == Operation.Origin.PRIMARY || indexOp.origin() == Operation.Origin.REPLICA
+                ? samplesAppendTags
+                : samplesRecoveryTags;
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesAppended, 1, tags);
         }
 
         // TODO: We ignore empty label exceptions temporarily. Delete this once OOO support is added.
