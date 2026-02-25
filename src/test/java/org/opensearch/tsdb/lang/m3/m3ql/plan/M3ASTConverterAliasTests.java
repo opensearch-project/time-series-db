@@ -52,13 +52,32 @@ public class M3ASTConverterAliasTests extends OpenSearchTestCase {
     }
 
     /**
+     * Test that burnRate alias produces AS_BURN_RATE node (same as asBurnRate).
+     */
+    public void testBurnRateAliasProducesAsBurnRateNode() {
+        assertBinaryAliasProducesNode("burnRate", "1d 99.9", "AS_BURN_RATE");
+    }
+
+    /**
      * Helper method to test that a binary function alias produces the expected node type.
      *
      * @param aliasName the binary alias function name (e.g., "ratio", "divide", "subtract")
      * @param expectedNodeType the expected node type in the plan (e.g., "AS_PERCENT", "DIVIDE_SERIES", "DIFF")
      */
     private void assertBinaryAliasProducesNode(String aliasName, String expectedNodeType) {
-        String query = "fetch name:a | " + aliasName + "(fetch name:b)";
+        assertBinaryAliasProducesNode(aliasName, "", expectedNodeType);
+    }
+
+    /**
+     * Helper method to test that a binary function alias with extra parameters produces the expected node type.
+     *
+     * @param aliasName the binary alias function name (e.g., "burnRate", "asBurnRate")
+     * @param extraParams additional parameters appended after the pipeline argument (e.g., "1h 99.9")
+     * @param expectedNodeType the expected node type in the plan (e.g., "AS_BURN_RATE")
+     */
+    private void assertBinaryAliasProducesNode(String aliasName, String extraParams, String expectedNodeType) {
+        String suffix = extraParams.isEmpty() ? "" : " " + extraParams;
+        String query = "fetch name:a | " + aliasName + "(fetch name:b)" + suffix;
         try (M3PlannerContext context = M3PlannerContext.create()) {
             M3ASTConverter converter = new M3ASTConverter(context);
             String plan = getPlanString(converter.buildPlan(M3QLParser.parse(query, true)));

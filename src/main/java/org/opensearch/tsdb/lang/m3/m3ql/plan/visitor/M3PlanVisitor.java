@@ -11,6 +11,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsBurnRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
@@ -107,6 +108,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the AliasByTagsPlanNode
      */
     public T visit(AliasByTagsPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for AsBurnRatePlanNode.
+     * @param planNode the AsBurnRatePlanNode to visit
+     * @return the result of processing the AsBurnRatePlanNode
+     */
+    public T visit(AsBurnRatePlanNode planNode) {
         return process(planNode);
     }
 

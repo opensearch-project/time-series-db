@@ -1,0 +1,3 @@
+AS_BURN_RATE(interval=1d,slo=99.9)
+  FETCH({name=[errors]}, !{})
+  FETCH({name=[total]}, !{})

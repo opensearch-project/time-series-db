@@ -8,6 +8,7 @@
 package org.opensearch.tsdb.lang.m3.m3ql.plan;
 
 import org.opensearch.tsdb.lang.m3.common.Constants;
+import org.opensearch.tsdb.lang.m3.common.M3Duration;
 import org.opensearch.tsdb.lang.m3.common.Utils;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.GroupNode;
@@ -15,6 +16,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.PipelineNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.RootNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsBurnRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
@@ -43,7 +45,9 @@ public class M3ASTConverter {
         Constants.Functions.Binary.SUBTRACT,
         Constants.Functions.Binary.DIVIDE,
         Constants.Functions.Binary.DIVIDE_SERIES,
-        Constants.Functions.Binary.INTERSECT
+        Constants.Functions.Binary.INTERSECT,
+        Constants.Functions.Binary.AS_BURN_RATE,
+        Constants.Functions.Binary.BURN_RATE
     );
 
     /**
@@ -308,6 +312,13 @@ public class M3ASTConverter {
                 yield new IntersectPlanNode(M3PlannerContext.generateId(), tags);
             }
 
+            case Constants.Functions.Binary.AS_BURN_RATE, Constants.Functions.Binary.BURN_RATE -> {
+                validateChildCount(functionNode, 3);
+                String interval = extractIntervalParameter(functionNode, 1);
+                double slo = extractSloParameter(functionNode, 2);
+                yield new AsBurnRatePlanNode(M3PlannerContext.generateId(), interval, slo);
+            }
+
             default -> throw new IllegalArgumentException("Binary function " + functionName + " is not supported.");
         };
     }
@@ -345,6 +356,43 @@ public class M3ASTConverter {
             }
         }
         return false;
+    }
+
+    private void validateChildCount(FunctionNode functionNode, int expectedCount) {
+        int actual = functionNode.getChildren().size();
+        if (actual != expectedCount) {
+            throw new IllegalArgumentException(
+                functionNode.getFunctionName() + " expects exactly " + expectedCount + " arguments, got " + actual
+            );
+        }
+    }
+
+    private String extractIntervalParameter(FunctionNode functionNode, int index) {
+        M3ASTNode child = functionNode.getChildren().get(index);
+        if (!(child instanceof ValueNode valueNode)) {
+            throw new IllegalArgumentException("Argument 'interval' of " + functionNode.getFunctionName() + " must be a value");
+        }
+        String interval = Utils.stripDoubleQuotes(valueNode.getValue());
+        M3Duration.valueOf(interval);
+        return interval;
+    }
+
+    private double extractSloParameter(FunctionNode functionNode, int index) {
+        M3ASTNode child = functionNode.getChildren().get(index);
+        if (!(child instanceof ValueNode valueNode)) {
+            throw new IllegalArgumentException("Argument 'slo' of " + functionNode.getFunctionName() + " must be a value");
+        }
+        String raw = Utils.stripDoubleQuotes(valueNode.getValue());
+        double slo;
+        try {
+            slo = Double.parseDouble(raw);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("SLO must be a numeric value, got: " + raw, e);
+        }
+        if (slo <= 0 || slo >= 100) {
+            throw new IllegalArgumentException("SLO must be between 0 and 100 (exclusive), got: " + slo);
+        }
+        return slo;
     }
 
     // Handles a regular function node by creating the corresponding plan node and chaining appropriately

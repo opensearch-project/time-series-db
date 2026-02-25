@@ -1,0 +1,3 @@
+# Test asBurnRate function with pipeline argument
+total = fetch name:total;
+fetch name:errors | asBurnRate(total) 1d 99.9

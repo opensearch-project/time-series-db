@@ -23,6 +23,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsBurnRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ExcludeByTagPlanNode;
@@ -420,6 +421,28 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
         assertEquals("MapKeyPlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test AsBurnRatePlanNode with correct number of children (2).
+     */
+    public void testAsBurnRatePlanNodeWithTwoChildren() {
+        AsBurnRatePlanNode planNode = new AsBurnRatePlanNode(1, "1d", 99.9);
+        planNode.addChild(createMockFetchNode(2));
+        planNode.addChild(createMockFetchNode(3));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test AsBurnRatePlanNode with incorrect number of children (1).
+     */
+    public void testAsBurnRatePlanNodeWithOneChild() {
+        AsBurnRatePlanNode planNode = new AsBurnRatePlanNode(1, "1d", 99.9);
+        planNode.addChild(createMockFetchNode(2));
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("AsBurnRatePlanNode must have exactly two children", exception.getMessage());
     }
 
     /**

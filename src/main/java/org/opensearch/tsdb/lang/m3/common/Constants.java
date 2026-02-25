@@ -552,6 +552,17 @@ public class Constants {
              * intersect function name.
              */
             public static final String INTERSECT = "intersect";
+
+            /**
+             * asBurnRate function name.
+             */
+            public static final String AS_BURN_RATE = "asBurnRate";
+
+            /**
+             * burnRate function name (alias for asBurnRate).
+             */
+            public static final String BURN_RATE = "burnRate";
+
         }
 
         /**

@@ -1,0 +1,12 @@
+ROOT
+  PIPELINE
+    FUNCTION(fetch)
+      TAG_KEY(name)
+        TAG_VALUE(errors)
+    FUNCTION(asBurnRate)
+      PIPELINE
+        FUNCTION(fetch)
+          TAG_KEY(name)
+            TAG_VALUE(total)
+      VALUE(1d)
+      VALUE(99.9)

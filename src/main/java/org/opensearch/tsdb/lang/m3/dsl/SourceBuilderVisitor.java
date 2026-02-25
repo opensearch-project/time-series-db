@@ -22,6 +22,7 @@ import org.opensearch.tsdb.core.model.LabelConstants;
 import org.opensearch.tsdb.lang.m3.common.AggregationType;
 import org.opensearch.tsdb.lang.m3.common.HeadTailMode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsBurnRatePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
@@ -35,6 +36,7 @@ import org.opensearch.tsdb.lang.m3.stage.AbsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasByTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
+import org.opensearch.tsdb.lang.m3.stage.AsBurnRateStage;
 import org.opensearch.tsdb.lang.m3.stage.ChangedStage;
 import org.opensearch.tsdb.lang.m3.stage.CopyStage;
 import org.opensearch.tsdb.lang.m3.stage.ExcludeByTagStage;
@@ -978,6 +980,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         }
         if (planNode instanceof IntersectPlanNode intersectPlanNode) {
             return new IntersectStage(rhsReferenceName, intersectPlanNode.getTags());
+        }
+        if (planNode instanceof AsBurnRatePlanNode burnRatePlanNode) {
+            return new AsBurnRateStage(rhsReferenceName, burnRatePlanNode.getIntervalMillis(), burnRatePlanNode.getSlo());
         }
         if (planNode instanceof UnionPlanNode) {
             return new UnionStage(rhsReferenceName);
