@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -116,6 +117,7 @@ public class RestM3QLAction extends BaseTSDBAction {
     public static final String NAME = "m3ql_action";
 
     private static final Logger logger = LogManager.getLogger(RestM3QLAction.class);
+    private static final ConcurrentHashMap<Map<String, String>, Tags> requestTagsCache = new ConcurrentHashMap<>();
 
     // Cluster service for accessing index settings
     private final ClusterService clusterService;
@@ -314,8 +316,11 @@ public class RestM3QLAction extends BaseTSDBAction {
      * Helper method to increment metrics with tags.
      */
     private void incrementMetrics(Map<String, String> tags) {
-        Tags finalTags = Tags.create();
-        tags.forEach(finalTags::addTag);
+        Tags finalTags = requestTagsCache.computeIfAbsent(tags, m -> {
+            Tags t = Tags.create();
+            m.forEach(t::addTag);
+            return t;
+        });
         TSDBMetrics.incrementCounter(METRICS.requestsTotal, 1, finalTags);
     }
 

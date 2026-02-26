@@ -18,7 +18,11 @@ import org.opensearch.tsdb.TSDBPlugin;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+
+import org.opensearch.telemetry.metrics.tags.Tags;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -138,5 +142,19 @@ public class RestPromQLActionTests extends OpenSearchTestCase {
 
         // Final cleanup
         TSDBMetrics.cleanup();
+    }
+
+    public void testGetOrCreateTagsCachesByContent() {
+        Map<String, String> tags1 = new HashMap<>();
+        tags1.put("query_type", "instant");
+        tags1.put("status", "200");
+
+        Map<String, String> tags2 = new HashMap<>(tags1);
+
+        Tags result1 = RestPromQLAction.getOrCreateTags(tags1);
+        Tags result2 = RestPromQLAction.getOrCreateTags(tags2);
+
+        assertNotNull(result1);
+        assertSame(result1, result2);
     }
 }
