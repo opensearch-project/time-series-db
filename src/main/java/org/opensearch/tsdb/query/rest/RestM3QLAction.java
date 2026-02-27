@@ -278,10 +278,40 @@ public class RestM3QLAction extends BaseTSDBAction {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
                         tags.put("error_type", "unimplemented_function");
+                        logger.error(
+                            "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                            params.query,
+                            params.startMs,
+                            params.endMs,
+                            params.stepMs,
+                            Strings.arrayToCommaDelimitedString(params.indices),
+                            params.explain,
+                            params.pushdown,
+                            params.profile,
+                            params.includeMetadata,
+                            params.federationMetadata(),
+                            params.ccsMinimizeRoundTrips,
+                            e
+                        );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.NOT_IMPLEMENTED);
                     } catch (Exception e) {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
+                        logger.error(
+                            "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                            params.query,
+                            params.startMs,
+                            params.endMs,
+                            params.stepMs,
+                            Strings.arrayToCommaDelimitedString(params.indices),
+                            params.explain,
+                            params.pushdown,
+                            params.profile,
+                            params.includeMetadata,
+                            params.federationMetadata(),
+                            params.ccsMinimizeRoundTrips,
+                            e
+                        );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.BAD_REQUEST);
                     } finally {
                         // Increment metrics once for all paths (success, early returns, and errors)
@@ -293,11 +323,30 @@ public class RestM3QLAction extends BaseTSDBAction {
                 public void onFailure(Exception e) {
                     if (e instanceof IndexSettingsResolutionException) {
                         tags.put("reached_step", "error__index_settings_resolution");
-                        logger.error("Failed to resolve index settings {}", e.getMessage(), e);
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
+                        logger.error(
+                            "Failed to parse M3QL request params: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
+                            queryParam,
+                            startParam,
+                            endParam,
+                            stepParam,
+                            partitionsParam,
+                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            e
+                        );
                     } else {
                         tags.put("reached_step", "error__parse_request_params");
+                        logger.error(
+                            "Unexpected error parsing M3QL request: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
+                            queryParam,
+                            startParam,
+                            endParam,
+                            stepParam,
+                            partitionsParam,
+                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            e
+                        );
                     }
                     incrementMetrics(tags);
 
@@ -449,6 +498,20 @@ public class RestM3QLAction extends BaseTSDBAction {
 
                 @Override
                 public void onFailure(Exception e) {
+                    logger.error(
+                        "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                        query,
+                        startMs,
+                        endMs,
+                        Strings.arrayToCommaDelimitedString(indicesToQuery),
+                        explain,
+                        pushdown,
+                        profile,
+                        includeMetadata,
+                        federationMetadata,
+                        ccsMinimizeRoundTrips,
+                        e
+                    );
                     listener.onFailure(e);
                 }
             });
