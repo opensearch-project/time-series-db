@@ -116,6 +116,7 @@ public class RestM3QLAction extends BaseTSDBAction {
     public static final String NAME = "m3ql_action";
 
     private static final Logger logger = LogManager.getLogger(RestM3QLAction.class);
+    private static final Logger requestContextLogger = LogManager.getLogger(RestM3QLAction.class.getName() + ".verboseLogger");
 
     // Cluster service for accessing index settings
     private final ClusterService clusterService;
@@ -278,7 +279,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
                         tags.put("error_type", "unimplemented_function");
-                        logger.error(
+                        requestContextLogger.debug(
                             "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                             params.query,
                             params.startMs,
@@ -298,7 +299,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                     } catch (Exception e) {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
-                        logger.error(
+                        requestContextLogger.debug(
                             "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                             params.query,
                             params.startMs,
@@ -327,7 +328,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         tags.put("reached_step", "error__index_settings_resolution");
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
-                        logger.error(
+                        requestContextLogger.debug(
                             "Failed to parse M3QL request params: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
                             queryParam,
                             startParam,
@@ -339,7 +340,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         );
                     } else {
                         tags.put("reached_step", "error__parse_request_params");
-                        logger.error(
+                        requestContextLogger.debug(
                             "Unexpected error parsing M3QL request: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
                             queryParam,
                             startParam,
@@ -500,7 +501,7 @@ public class RestM3QLAction extends BaseTSDBAction {
 
                 @Override
                 public void onFailure(Exception e) {
-                    logger.error(
+                    requestContextLogger.debug(
                         "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                         query,
                         startMs,
