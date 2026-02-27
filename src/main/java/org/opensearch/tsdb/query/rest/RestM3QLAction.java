@@ -279,7 +279,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         tags.put("reached_step", "error__" + stepReached);
                         tags.put("error_type", "unimplemented_function");
                         logger.error(
-                            "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                            "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                             params.query,
                             params.startMs,
                             params.endMs,
@@ -291,6 +291,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                             params.includeMetadata,
                             params.federationMetadata(),
                             params.ccsMinimizeRoundTrips,
+                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
                             e
                         );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.NOT_IMPLEMENTED);
@@ -298,7 +299,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
                         logger.error(
-                            "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                            "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                             params.query,
                             params.startMs,
                             params.endMs,
@@ -310,6 +311,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                             params.includeMetadata,
                             params.federationMetadata(),
                             params.ccsMinimizeRoundTrips,
+                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
                             e
                         );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.BAD_REQUEST);
@@ -499,7 +501,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                 @Override
                 public void onFailure(Exception e) {
                     logger.error(
-                        "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}",
+                        "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
                         query,
                         startMs,
                         endMs,
@@ -510,6 +512,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                         includeMetadata,
                         federationMetadata,
                         ccsMinimizeRoundTrips,
+                        request.hasContent() ? request.content().utf8ToString() : "<no body>",
                         e
                     );
                     listener.onFailure(e);
