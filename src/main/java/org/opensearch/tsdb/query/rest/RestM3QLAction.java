@@ -331,6 +331,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                 public void onFailure(Exception e) {
                     if (e instanceof IndexSettingsResolutionException) {
                         tags.put("reached_step", "error__index_settings_resolution");
+                        logger.error("Failed to resolve index settings {}", e.getMessage(), e);
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
                         requestContextLogger.debug(
@@ -524,8 +525,7 @@ public class RestM3QLAction extends BaseTSDBAction {
                             federationMetadata,
                             ccsMinimizeRoundTrips,
                             request.hasContent() ? request.content().utf8ToString() : "{}"
-                        ),
-                        e
+                        )
                     );
                     listener.onFailure(e);
                 }
