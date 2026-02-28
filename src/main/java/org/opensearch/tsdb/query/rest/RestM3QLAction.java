@@ -16,6 +16,7 @@ import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.action.support.IndicesOptions;
@@ -280,19 +281,21 @@ public class RestM3QLAction extends BaseTSDBAction {
                         tags.put("reached_step", "error__" + stepReached);
                         tags.put("error_type", "unimplemented_function");
                         requestContextLogger.debug(
-                            "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
-                            params.query,
-                            params.startMs,
-                            params.endMs,
-                            params.stepMs,
-                            Strings.arrayToCommaDelimitedString(params.indices),
-                            params.explain,
-                            params.pushdown,
-                            params.profile,
-                            params.includeMetadata,
-                            params.federationMetadata(),
-                            params.ccsMinimizeRoundTrips,
-                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            () -> new ParameterizedMessage(
+                                "Unsupported operation in M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
+                                params.query,
+                                params.startMs,
+                                params.endMs,
+                                params.stepMs,
+                                Strings.arrayToCommaDelimitedString(params.indices),
+                                params.explain,
+                                params.pushdown,
+                                params.profile,
+                                params.includeMetadata,
+                                params.federationMetadata(),
+                                params.ccsMinimizeRoundTrips,
+                                request.hasContent() ? request.content().utf8ToString() : "{}"
+                            ),
                             e
                         );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.NOT_IMPLEMENTED);
@@ -300,19 +303,21 @@ public class RestM3QLAction extends BaseTSDBAction {
                         String stepReached = tags.getOrDefault("reached_step", "unknown");
                         tags.put("reached_step", "error__" + stepReached);
                         requestContextLogger.debug(
-                            "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
-                            params.query,
-                            params.startMs,
-                            params.endMs,
-                            params.stepMs,
-                            Strings.arrayToCommaDelimitedString(params.indices),
-                            params.explain,
-                            params.pushdown,
-                            params.profile,
-                            params.includeMetadata,
-                            params.federationMetadata(),
-                            params.ccsMinimizeRoundTrips,
-                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            () -> new ParameterizedMessage(
+                                "Error processing M3QL request: query='{}', start={}, end={}, step={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
+                                params.query,
+                                params.startMs,
+                                params.endMs,
+                                params.stepMs,
+                                Strings.arrayToCommaDelimitedString(params.indices),
+                                params.explain,
+                                params.pushdown,
+                                params.profile,
+                                params.includeMetadata,
+                                params.federationMetadata(),
+                                params.ccsMinimizeRoundTrips,
+                                request.hasContent() ? request.content().utf8ToString() : "{}"
+                            ),
                             e
                         );
                         sendErrorResponse(channel, e.getMessage(), RestStatus.BAD_REQUEST);
@@ -329,25 +334,29 @@ public class RestM3QLAction extends BaseTSDBAction {
                     } else if (e instanceof IllegalArgumentException) {
                         tags.put("reached_step", "error__parse_request_params");
                         requestContextLogger.debug(
-                            "Failed to parse M3QL request params: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
-                            queryParam,
-                            startParam,
-                            endParam,
-                            stepParam,
-                            partitionsParam,
-                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            () -> new ParameterizedMessage(
+                                "Failed to parse M3QL request params: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
+                                queryParam,
+                                startParam,
+                                endParam,
+                                stepParam,
+                                partitionsParam,
+                                request.hasContent() ? request.content().utf8ToString() : "{}"
+                            ),
                             e
                         );
                     } else {
                         tags.put("reached_step", "error__parse_request_params");
                         requestContextLogger.debug(
-                            "Unexpected error parsing M3QL request: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
-                            queryParam,
-                            startParam,
-                            endParam,
-                            stepParam,
-                            partitionsParam,
-                            request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                            () -> new ParameterizedMessage(
+                                "Unexpected error parsing M3QL request: query='{}', start='{}', end='{}', step='{}', partitions='{}', body={}",
+                                queryParam,
+                                startParam,
+                                endParam,
+                                stepParam,
+                                partitionsParam,
+                                request.hasContent() ? request.content().utf8ToString() : "{}"
+                            ),
                             e
                         );
                     }
@@ -502,18 +511,20 @@ public class RestM3QLAction extends BaseTSDBAction {
                 @Override
                 public void onFailure(Exception e) {
                     requestContextLogger.debug(
-                        "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
-                        query,
-                        startMs,
-                        endMs,
-                        Strings.arrayToCommaDelimitedString(indicesToQuery),
-                        explain,
-                        pushdown,
-                        profile,
-                        includeMetadata,
-                        federationMetadata,
-                        ccsMinimizeRoundTrips,
-                        request.hasContent() ? request.content().utf8ToString() : "<no body>",
+                        () -> new ParameterizedMessage(
+                            "Failed to resolve index settings for M3QL request: query='{}', start={}, end={}, indices={}, explain={}, pushdown={}, profile={}, include_metadata={}, federation_metadata={}, ccs_minimize_roundtrips={}, body={}",
+                            query,
+                            startMs,
+                            endMs,
+                            Strings.arrayToCommaDelimitedString(indicesToQuery),
+                            explain,
+                            pushdown,
+                            profile,
+                            includeMetadata,
+                            federationMetadata,
+                            ccsMinimizeRoundTrips,
+                            request.hasContent() ? request.content().utf8ToString() : "{}"
+                        ),
                         e
                     );
                     listener.onFailure(e);
