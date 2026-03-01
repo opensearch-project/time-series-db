@@ -37,6 +37,7 @@ public class M3QLQueryCorrectnessRestIT extends RestTimeSeriesTestFramework {
         "test_cases/m3ql_resolved_partitions_index_parsing_rest_it.yaml";
     private static final String GOLDEN_DATASET_REST_IT = "test_cases/golden_dataset_rest_it.yaml";
     private static final String MOCKFETCH_TEST_IT = "test_cases/mockfetch_test_it.yaml";
+    private static final String BURN_RATE_IT = "test_cases/burn_rate_it.yaml";
 
     /**
      * Runs the E2E M3QL query execution test suite via REST API.
@@ -111,6 +112,15 @@ public class M3QLQueryCorrectnessRestIT extends RestTimeSeriesTestFramework {
     */
     public void testMockFetch() throws Exception {
         initializeTest(MOCKFETCH_TEST_IT);
+        runBasicTest();
+    }
+
+    /**
+     * Tests burnRate, burnRateMultiplier, and multiBurnRate functions via REST API.
+     * @throws Exception if any test fails
+     */
+    public void testBurnRate() throws Exception {
+        initializeTest(BURN_RATE_IT);
         runBasicTest();
     }
 }

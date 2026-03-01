@@ -18,7 +18,6 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.tsdb.lang.m3.stage.AbsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasByTagsStage;
 import org.opensearch.tsdb.lang.m3.stage.AliasStage;
-import org.opensearch.tsdb.lang.m3.stage.AsBurnRateStage;
 import org.opensearch.tsdb.lang.m3.stage.AsPercentStage;
 import org.opensearch.tsdb.lang.m3.stage.AvgStage;
 import org.opensearch.tsdb.lang.m3.stage.ChangedStage;
@@ -134,7 +133,6 @@ public class PipelineStageFactory {
             registerStage(AliasStage.class);
             registerStage(AsPercentStage.class);
             registerStage(AvgStage.class);
-            registerStage(AsBurnRateStage.class);
             registerStage(ChangedStage.class);
             registerStage(CountStage.class);
             registerStage(DerivativeStage.class);

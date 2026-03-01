@@ -9,7 +9,12 @@ package org.opensearch.tsdb.lang.m3.m3ql.plan;
 
 import org.opensearch.tsdb.lang.m3.common.AggregationType;
 import org.opensearch.tsdb.lang.m3.common.Constants;
+import org.opensearch.tsdb.lang.m3.common.Utils;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
+import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
+
+import java.util.List;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
@@ -146,6 +151,8 @@ public class M3PlanNodeFactory {
                 return SummarizePlanNode.of(functionNode);
             case Constants.Functions.SCALE:
                 return ScalePlanNode.of(functionNode);
+            case Constants.Functions.BURN_RATE_MULTIPLIER:
+                return createBurnRateMultiplierNode(functionNode);
             case Constants.Functions.SCALE_TO_SECONDS:
                 return ScaleToSecondsPlanNode.of(functionNode);
             case Constants.Functions.DIVIDE_SCALAR:
@@ -196,5 +203,27 @@ public class M3PlanNodeFactory {
                     throw new IllegalArgumentException("Unknown function: " + functionName);
                 }
         }
+    }
+
+    private static ScalePlanNode createBurnRateMultiplierNode(FunctionNode functionNode) {
+        List<M3ASTNode> childNodes = functionNode.getChildren();
+        if (childNodes.size() != 1) {
+            throw new IllegalArgumentException("burnRateMultiplier expects exactly one argument");
+        }
+        if (!(childNodes.getFirst() instanceof ValueNode valueNode)) {
+            throw new IllegalArgumentException("Argument to burnRateMultiplier should be a value node");
+        }
+        String raw = Utils.stripDoubleQuotes(valueNode.getValue());
+        double slo;
+        try {
+            slo = Double.parseDouble(raw);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("SLO must be a numeric value, got: " + raw, e);
+        }
+        if (!(slo > 0.0 && slo < 100.0)) {
+            throw new IllegalArgumentException("SLO must be between 0 and 100 (exclusive), got: " + slo);
+        }
+        double scaleFactor = 100.0 / (100.0 - slo);
+        return new ScalePlanNode(M3PlannerContext.generateId(), scaleFactor);
     }
 }
