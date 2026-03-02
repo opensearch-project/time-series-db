@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -103,6 +104,7 @@ public class ClosedChunkIndexManager implements Closeable {
     private final Compaction compaction;
     private final Set<ClosedChunkIndex> indexesUndergoingCompaction;
     private final Set<ClosedChunkIndex> pendingClosureIndexes;
+    private final Set<ClosedChunkIndex> snapshottedIndexes = ConcurrentHashMap.newKeySet();
     private final Scheduler.Cancellable mgmtTaskScheduler;
     private final TimeUnit resolution;
     private final Settings indexSettings;
@@ -202,7 +204,12 @@ public class ClosedChunkIndexManager implements Closeable {
         persistedSampleCount.set(total);
     }
 
-    // visible for testing.
+    /**
+     * Retention, compaction and orphan directory cleanup avoid deleting snapshotted closed chunk index. The entire index directory is protected
+     * from deletion.
+     *
+     * Visible for testing.
+     */
     synchronized void runOptimization() {
         log.debug("Starting optimization cycle");
         try {
@@ -466,6 +473,12 @@ public class ClosedChunkIndexManager implements Closeable {
         var closedIndexes = new HashSet<ClosedChunkIndex>();
         for (ClosedChunkIndex index : indexes) {
             log.debug("Attempting to close index: {}", index.getMetadata().directoryName());
+
+            if (isIndexSnapshotted(index)) {
+                log.debug("Skipping close of index {} - has active snapshot, will retry later", index.getMetadata().directoryName());
+                continue;
+            }
+
             try {
                 var readerManager = index.getDirectoryReaderManager();
                 var reader = readerManager.acquire();
@@ -476,6 +489,15 @@ public class ClosedChunkIndexManager implements Closeable {
 
                 while (Instant.now().isBefore(deadline)) {
                     if (refCount == 1) {
+                        // The isIndexSnapshotted check here is just a defensive check. It should not be possible for
+                        // the index to be snapshotted at this place as index is already removed from the closedChunkIndexMap.
+                        if (isIndexSnapshotted(index)) {
+                            log.debug(
+                                "Index {} acquired snapshot while waiting for refCount, skipping close",
+                                index.getMetadata().directoryName()
+                            );
+                            break;
+                        }
                         index.close();
                         closedIndexes.add(index);
                         log.info(
@@ -506,6 +528,10 @@ public class ClosedChunkIndexManager implements Closeable {
         return closedIndexes;
     }
 
+    private boolean isIndexSnapshotted(ClosedChunkIndex index) {
+        return snapshottedIndexes.contains(index);
+    }
+
     private void deleteOrphanDirectories() throws IOException {
         log.debug("Starting cleanup of orphan directories");
         List<Path> currentPaths = new ArrayList<>();
@@ -519,6 +545,8 @@ public class ClosedChunkIndexManager implements Closeable {
             }
             // read live indexes
             closedChunkIndexMap.values().stream().map(ClosedChunkIndex::getPath).forEach(livePaths::add);
+            // protect snapshotted indexes from deletion
+            snapshottedIndexes.stream().map(ClosedChunkIndex::getPath).forEach(livePaths::add);
         } finally {
             lock.unlock();
         }
@@ -777,6 +805,7 @@ public class ClosedChunkIndexManager implements Closeable {
 
     /**
      * Snapshot all closed chunk indexes.
+     * Snapshotted indexes are protected from deletion during retention/compaction until released.
      *
      * @return a SnapshotResult containing the list of IndexCommits and release actions
      */
@@ -790,12 +819,14 @@ public class ClosedChunkIndexManager implements Closeable {
                 try {
                     IndexCommit snapshot = index.snapshot();
                     snapshots.add(snapshot);
+                    snapshottedIndexes.add(index);
                     releaseActions.add(() -> {
                         try {
                             index.release(snapshot);
                         } catch (IOException e) {
                             log.warn("Failed to release closed chunk index snapshot", e);
                         }
+                        snapshottedIndexes.remove(index);
                     });
                 } catch (IOException | IllegalStateException e) {
                     log.warn("No index commit available for snapshot in closed chunk index", e);

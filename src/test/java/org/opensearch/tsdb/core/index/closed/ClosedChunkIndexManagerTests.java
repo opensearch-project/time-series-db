@@ -947,4 +947,87 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         manager.close();
     }
+
+    /**
+     * Test that verifies snapshot protection prevents retention from deleting index files.
+     */
+    public void testSnapshotFilesDeletedDuringRetention() throws Exception {
+        Path tempDir = createTempDir("testSnapshotFilesDeletedDuringRetention");
+        MetadataStore metadataStore = new InMemoryMetadataStore();
+
+        // Use a clock that makes the index eligible for retention
+        Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
+
+        Settings settings = Settings.builder()
+            .put(TSDBPlugin.TSDB_ENGINE_BLOCK_DURATION.getKey(), TimeValue.timeValueHours(2))
+            .put(TSDBPlugin.TSDB_ENGINE_SAMPLES_PER_CHUNK.getKey(), 120)
+            .put(TSDBPlugin.TSDB_ENGINE_TIME_UNIT.getKey(), org.opensearch.tsdb.core.utils.Constants.Time.DEFAULT_TIME_UNIT.toString())
+            .build();
+
+        // Retention with very short window - index at timestamp 0 will be deleted
+        TimeBasedRetention retention = new TimeBasedRetention(1L, 0L, frozenClock);
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            metadataStore,
+            retention,
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            settings
+        );
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
+
+        // Create an index with old timestamps (will be eligible for retention)
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        manager.commitChangedIndexes(List.of(series));
+
+        assertEquals("Should have 1 index", 1, manager.getNumBlocks());
+
+        // Step 1: Take a snapshot
+        ClosedChunkIndexManager.SnapshotResult snapshotResult = manager.snapshotAllIndexes();
+        assertEquals("Should have 1 snapshot", 1, snapshotResult.indexCommits().size());
+
+        // Collect all files from the snapshot
+        IndexCommit snapshot = snapshotResult.indexCommits().get(0);
+        Collection<String> snapshotFiles = snapshot.getFileNames();
+        Path snapshotDirectory = ((org.apache.lucene.store.FSDirectory) snapshot.getDirectory()).getDirectory();
+
+        assertFalse("Snapshot should have files", snapshotFiles.isEmpty());
+
+        // Verify files exist before retention
+        for (String fileName : snapshotFiles) {
+            Path filePath = snapshotDirectory.resolve(fileName);
+            assertTrue("File should exist before retention: " + filePath, Files.exists(filePath));
+        }
+
+        // Step 2: Run optimization which triggers retention.
+        // Snapshotted closed chunk index must not be deleted.
+        manager.runOptimization();
+
+        // Step 3: Verify the index was removed from the map (retention ran)
+        // but the directory should still exist because of snapshot protection
+        assertEquals("Index should be removed from map by retention", 0, manager.getNumBlocks());
+
+        // Step 4: Verify ALL snapshot files still exist (protected by snapshot)
+        for (String fileName : snapshotFiles) {
+            Path filePath = snapshotDirectory.resolve(fileName);
+            assertTrue("Snapshot file should still exist after retention (protected by snapshot): " + filePath, Files.exists(filePath));
+        }
+
+        // Step 5: Release the snapshot
+        for (Runnable releaseAction : snapshotResult.releaseActions()) {
+            releaseAction.run();
+        }
+
+        // Step 6: Run optimization again - now the index should be cleaned up
+        manager.runOptimization();
+
+        // Step 7: Verify the directory is now deleted (snapshot released, so cleanup can proceed)
+        assertFalse("Directory should be deleted after snapshot release and optimization", Files.exists(snapshotDirectory));
+
+        manager.close();
+    }
 }
