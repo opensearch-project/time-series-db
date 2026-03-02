@@ -1,12 +1,28 @@
 ROOT
   PIPELINE
-    FUNCTION(fetch)
-      TAG_KEY(name)
-        TAG_VALUE(errors)
-    FUNCTION(asBurnRate)
+    PIPELINE
+      FUNCTION(fetch)
+        TAG_KEY(name)
+          TAG_VALUE(errors)
+      FUNCTION(burnRate)
+        PIPELINE
+          FUNCTION(fetch)
+            TAG_KEY(name)
+              TAG_VALUE(total)
+        VALUE(1d)
+        VALUE(99.9)
+    FUNCTION(diff)
       PIPELINE
         FUNCTION(fetch)
           TAG_KEY(name)
-            TAG_VALUE(total)
-      VALUE(1d)
-      VALUE(99.9)
+            TAG_VALUE(errors)
+        FUNCTION(multiBurnRate)
+          PIPELINE
+            FUNCTION(fetch)
+              TAG_KEY(name)
+                TAG_VALUE(total)
+          VALUE(24h)
+          VALUE(2h)
+          VALUE(99.9)
+        FUNCTION(burnRateMultiplier)
+          VALUE(99.9)

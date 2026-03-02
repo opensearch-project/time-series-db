@@ -1,7 +1,0 @@
-ROOT
-  PIPELINE
-    FUNCTION(fetch)
-      TAG_KEY(name)
-        TAG_VALUE(error_rate)
-    FUNCTION(burnRateMultiplier)
-      VALUE(99.9)

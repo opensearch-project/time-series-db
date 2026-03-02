@@ -1,3 +1,5 @@
-# Test asBurnRate function with pipeline argument
+# comprehensive burn rate: burnRate, multiBurnRate, burnRateMultiplier
 total = fetch name:total;
-fetch name:errors | asBurnRate(total) 1d 99.9
+burn_rate = fetch name:errors | burnRate(total) 1d 99.9;
+multi_burn_rate = fetch name:errors | multiBurnRate(total) 24h 2h 99.9 | burnRateMultiplier 99.9;
+burn_rate | diff(multi_burn_rate)

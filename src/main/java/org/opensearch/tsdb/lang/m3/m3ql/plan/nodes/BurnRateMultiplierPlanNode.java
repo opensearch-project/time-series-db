@@ -16,8 +16,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.M3PlannerContext;
 import java.util.List;
 
 /**
- * Factory for creating a ScalePlanNode from a burnRateMultiplier function node.
- * Validates SLO and computes scale factor 100/(100-slo) so the visitor only sees ScalePlanNode.
+ * BurnRateMultiplierPlanNode is a factory for a plan node that handles burnRateMultiplier in M3QL.
+ *
+ * burnRateMultiplier calculates burn rate of a given set of error series against a given
+ * service-level objective (SLO) in percentage 0-100
  */
 public final class BurnRateMultiplierPlanNode {
 
@@ -25,10 +27,10 @@ public final class BurnRateMultiplierPlanNode {
 
     /**
      * Creates a ScalePlanNode from a burnRateMultiplier function node.
-     * Validates exactly one argument as numeric SLO in (0, 100) and returns a scale node with factor 100/(100-slo).
+     * burnRateMultiplier(slo) is equivalent to scale(100 / (100 - slo)).
      *
      * @param functionNode the function node representing burnRateMultiplier(slo)
-     * @return a ScalePlanNode with the burn-rate multiplier factor
+     * @return a ScalePlanNode with scale factor 100/(100 - slo)
      * @throws IllegalArgumentException if arguments are invalid or SLO is out of range
      */
     public static ScalePlanNode of(FunctionNode functionNode) {

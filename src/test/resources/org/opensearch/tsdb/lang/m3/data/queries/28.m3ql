@@ -1,2 +1,0 @@
-# Test burnRateMultiplier function
-fetch name:error_rate | burnRateMultiplier 99.9

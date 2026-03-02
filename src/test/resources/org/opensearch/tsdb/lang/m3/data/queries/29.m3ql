@@ -1,3 +1,0 @@
-# Test multiBurnRate function (alias for asMultiBurnRate)
-total = fetch name:total;
-fetch name:errors | multiBurnRate(total) 24h 2h 99.9

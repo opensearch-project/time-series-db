@@ -344,8 +344,8 @@ public class M3ASTConverter {
     }
 
     // Expands multiBurnRate(total) interval1 interval2 slo into:
-    // min(burnRate(interval1), burnRate(interval2))
-    // Equivalent M3QL: multiBurnRate = burnRate(total) slo interval1 | exec (burnRate(total) slo interval2) | minSeries
+    // min(burnRate(total, interval1, slo), burnRate(total, interval2, slo))
+    // Equivalent M3QL: fetch errors | multiBurnRate(fetch total) interval1 interval2 slo
     private M3PlanNode expandMultiBurnRate(List<M3ASTNode> pipelineChildren, int lhsEndIndex, FunctionNode functionNode) {
         validateChildCount(functionNode, 4);
         String interval1 = extractIntervalParameter(functionNode, 1);

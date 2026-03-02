@@ -227,7 +227,7 @@ public abstract class BaseQueryExecutor {
                 double exp = toDouble(expectedVal);
                 double act = toDouble(actualVal);
                 if (Double.isNaN(exp) && Double.isNaN(act)) {
-                    return; // NaN == NaN
+                    continue; // NaN == NaN
                 }
                 assertEquals(message + " - value at index " + i, exp, act, tolerance);
             } else {

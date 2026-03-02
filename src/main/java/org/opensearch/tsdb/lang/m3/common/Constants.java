@@ -57,7 +57,6 @@ public class Constants {
             "jainCP",
             "mockFetchLinear",
             "mockFetchPeriodic",
-            "multiBurnRate",
             "nPercentile",
             "promHistogramPercentile",
             "removeAbovePercentile",
