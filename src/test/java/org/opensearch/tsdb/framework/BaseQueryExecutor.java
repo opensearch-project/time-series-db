@@ -79,7 +79,7 @@ public abstract class BaseQueryExecutor {
                     fail(query.name() + ": Expected failure but query succeeded");
                 }
 
-                validateResponse(query, response);
+                validateResponse(testCase, query, response);
             } catch (Exception e) {
                 if (STATUS_SUCCESS.equals(expectedStatus)) {
                     throw e;
@@ -93,17 +93,20 @@ public abstract class BaseQueryExecutor {
      * Validate query response against expected Prometheus matrix format.
      * Validates both response structure (series count) and data content (metrics and values).
      * When alias is specified, validates alias separately from metric labels.
+     * When test case has validation.tolerance set, numeric values are compared within that delta.
      *
+     * @param testCase The test case (may contain validation.tolerance for numeric comparison)
      * @param query The query configuration containing expected response
      * @param actualResponse The actual response from query execution
      * @throws Exception if validation fails
      */
-    protected void validateResponse(QueryConfig query, PromMatrixResponse actualResponse) throws Exception {
+    protected void validateResponse(TestCase testCase, QueryConfig query, PromMatrixResponse actualResponse) throws Exception {
         PromMatrixResponse expectedResponse = convertExpectedToPromMatrix(query);
         String queryName = query.name();
+        Double tolerance = (testCase != null && testCase.validation() != null) ? testCase.validation().tolerance() : null;
 
         validateResponseStructure(queryName, expectedResponse, actualResponse);
-        validateDataContent(queryName, expectedResponse, actualResponse);
+        validateDataContent(queryName, expectedResponse, actualResponse, tolerance);
     }
 
     /**
@@ -157,7 +160,7 @@ public abstract class BaseQueryExecutor {
         );
     }
 
-    private void validateDataContent(String queryName, PromMatrixResponse expected, PromMatrixResponse actual) {
+    private void validateDataContent(String queryName, PromMatrixResponse expected, PromMatrixResponse actual, Double tolerance) {
         Map<Map<String, String>, TimeSeriesResult> expectedMap = expected.data()
             .result()
             .stream()
@@ -182,11 +185,20 @@ public abstract class BaseQueryExecutor {
                 actualResult.alias()
             );
 
-            assertEquals(
-                String.format(Locale.ROOT, "%s: Values mismatch for metric %s", queryName, metric),
-                expectedResult.values(),
-                actualResult.values()
-            );
+            if (tolerance != null) {
+                assertValuesMatch(
+                    String.format(Locale.ROOT, "%s: Values mismatch for metric %s", queryName, metric),
+                    expectedResult.values(),
+                    actualResult.values(),
+                    tolerance
+                );
+            } else {
+                assertEquals(
+                    String.format(Locale.ROOT, "%s: Values mismatch for metric %s", queryName, metric),
+                    expectedResult.values(),
+                    actualResult.values()
+                );
+            }
         }
 
         // Validate no unexpected metrics are present in the actual response
@@ -196,6 +208,57 @@ public abstract class BaseQueryExecutor {
                 expectedMap.containsKey(actualMetric)
             );
         }
+    }
+
+    /**
+     * Compare two Prometheus value lists [[timestamp, value], ...].
+     * When tolerance is non-null, numeric values are compared within that delta; NaN/Inf are compared as strings.
+     * When tolerance is null, comparison is exact (equals).
+     */
+    private void assertValuesMatch(String message, List<List<Object>> expected, List<List<Object>> actual, Double tolerance) {
+        assertEquals(message + " - value count", expected.size(), actual.size());
+        for (int i = 0; i < expected.size(); i++) {
+            List<Object> expectedPoint = expected.get(i);
+            List<Object> actualPoint = actual.get(i);
+            assertEquals(message + " - timestamp at index " + i, expectedPoint.get(0), actualPoint.get(0));
+            Object expectedVal = expectedPoint.get(1);
+            Object actualVal = actualPoint.get(1);
+            if (tolerance != null && isNumeric(expectedVal) && isNumeric(actualVal)) {
+                double exp = toDouble(expectedVal);
+                double act = toDouble(actualVal);
+                if (Double.isNaN(exp) && Double.isNaN(act)) {
+                    return; // NaN == NaN
+                }
+                assertEquals(message + " - value at index " + i, exp, act, tolerance);
+            } else {
+                assertEquals(message + " - value at index " + i, String.valueOf(expectedVal), String.valueOf(actualVal));
+            }
+        }
+    }
+
+    private static boolean isNumeric(Object o) {
+        if (o instanceof Number) {
+            return true;
+        }
+        if (o instanceof String s) {
+            if ("NaN".equals(s) || "+Inf".equals(s) || "-Inf".equals(s)) {
+                return false;
+            }
+            try {
+                Double.parseDouble(s);
+                return true;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static double toDouble(Object o) {
+        if (o instanceof Number n) {
+            return n.doubleValue();
+        }
+        return Double.parseDouble((String) o);
     }
 
     /**

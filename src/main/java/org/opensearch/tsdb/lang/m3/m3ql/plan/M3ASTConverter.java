@@ -489,9 +489,7 @@ public class M3ASTConverter {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("SLO must be a numeric value, got: " + raw, e);
         }
-        if (slo <= 0 || slo >= 100) {
-            throw new IllegalArgumentException("SLO must be between 0 and 100 (exclusive), got: " + slo);
-        }
+        Utils.validateSlo(slo);
         return slo;
     }
 

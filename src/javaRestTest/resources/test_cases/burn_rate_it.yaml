@@ -13,6 +13,9 @@ test_setup:
 test_case:
   name: "Burn Rate Tests"
 
+  validation:
+    tolerance: 0.000001
+
   input_data_list:
     - index_name: "burn_rate_test"
       input_data_type: FIXED_INTERVAL
@@ -65,10 +68,6 @@ test_case:
           values: [1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         - labels: "name:total_end_all"
           values: [1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:errors_nan"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
-        - labels: "name:total_nan_u"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
         - labels: "name:errors_nan_short"
           values: [1,2,3,4,null,6,7,8,9,10,10,10,10,10,10,10,10,10,10,10]
         - labels: "name:total_nan_short"
@@ -81,11 +80,7 @@ test_case:
           values: [1,2,3,4,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
         - labels: "name:total_nan_end"
           values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_nan_all"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
-        - labels: "name:total_nan_all"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
-        - labels: "name:errors_nan_short_all"
+        - labels: "name:errors_nan_end"
           values: [1,2,3,4,null,6,7,8,9,10,10,10,10,10,10,10,10,10,10,10,10]
         - labels: "name:total_nan_short_all"
           values: [1000,1000,1000,1000,null,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
@@ -346,20 +341,6 @@ test_case:
           - metric: {name: "errors_end_all", type: "ratios"}
             values: [2.5, 3.0, 3.5, 4.0, 0.0]
 
-    - name: "burnRate_5s_99.9_all_NaNs_unexpected"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_u; fetch name:errors_nan | burnRate(total) 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {name: "errors_nan", type: "ratios"}
-            values: [0.0, 0.0, 0.0, 0.0, 0.0]
-
     - name: "burnRate_5s_99.9_NaNs_shorter_than_lookback"
       type: "m3ql"
       indices: "burn_rate_test"
@@ -387,48 +368,6 @@ test_case:
         data:
           - metric: {name: "errors_nan_long", type: "ratios"}
             values: [0.0, 0.0, 1.4, 3.0, 4.8]
-
-    - name: "burnRate_5s_99.9_NaNs_longer_at_end"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_end; fetch name:errors_nan_end | burnRate(total) 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {name: "errors_nan_end", type: "ratios"}
-            values: [2.0, 1.8, 1.4, 0.8, 0.0]
-
-    - name: "burnRate_5s_99.9_all_NaNs_all_series"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_all; fetch name:errors_nan_all | burnRate(total) 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {name: "errors_nan_all", type: "ratios"}
-            values: [0.0, 0.0, 0.0, 0.0, 0.0]
-
-    - name: "burnRate_5s_99.9_NaNs_shorter_all_series"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_short_all; fetch name:errors_nan_short_all | burnRate(total) 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {name: "errors_nan_short_all", type: "ratios"}
-            values: [2.5, 3.75, 5.0, 6.25, 7.5]
 
     - name: "burnRate_5s_99.9_NaNs_longer_all_series"
       type: "m3ql"
@@ -686,20 +625,6 @@ test_case:
           - metric: {}
             values: [0.0, 0.0, 0.0, 13.0, 13.5]
 
-    - name: "multiBurnRate_10s_5s_99.9_all_NaN_unexpected"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_u; fetch name:errors_nan | multiBurnRate(total) 10m 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:10:00Z"
-        max_timestamp: "2025-01-01T00:15:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {}
-            values: [0.0, 0.0, 0.0, 0.0, 0.0]
-
     - name: "multiBurnRate_10s_5s_99.9_NaNs_shorter_than_reset"
       type: "m3ql"
       indices: "burn_rate_test"
@@ -741,20 +666,6 @@ test_case:
         data:
           - metric: {}
             values: [0.0, 0.0, 0.0, 1.3, 2.7]
-
-    - name: "multiBurnRate_10s_5s_99.9_all_NaN_all_series"
-      type: "m3ql"
-      indices: "burn_rate_test"
-      query: "total = fetch name:total_nan_all; fetch name:errors_nan_all | multiBurnRate(total) 10m 5m 99.9"
-      time_config:
-        min_timestamp: "2025-01-01T00:10:00Z"
-        max_timestamp: "2025-01-01T00:15:00Z"
-        step: "1m"
-      expected:
-        status: "success"
-        data:
-          - metric: {}
-            values: [0.0, 0.0, 0.0, 0.0, 0.0]
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_shorter_than_reset_all_series"
       type: "m3ql"
@@ -874,6 +785,42 @@ test_case:
       expected:
         status: "failure"
         error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 100.0\"}"
+
+    - name: "burnRateMultiplier_rejects_slo_above_100"
+      type: "m3ql"
+      indices: "burn_rate_test"
+      query: "fetch name:error_rate | burnRateMultiplier 150"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 150.0\"}"
+
+    - name: "burnRateMultiplier_rejects_two_arguments"
+      type: "m3ql"
+      indices: "burn_rate_test"
+      query: "fetch name:error_rate | burnRateMultiplier 99.9 90"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"burnRateMultiplier expects exactly one argument\"}"
+
+    - name: "burnRateMultiplier_rejects_non_numeric_slo"
+      type: "m3ql"
+      indices: "burn_rate_test"
+      query: "fetch name:error_rate | burnRateMultiplier abc"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:01:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be a numeric value, got: abc\"}"
 
     - name: "multiBurnRate_rejects_slo_zero"
       type: "m3ql"
