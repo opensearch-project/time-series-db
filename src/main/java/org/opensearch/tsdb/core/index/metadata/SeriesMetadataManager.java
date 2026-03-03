@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -32,6 +33,7 @@ public class SeriesMetadataManager {
     private final IndexWriter indexWriter;
     private final SnapshotDeletionPolicy snapshotDeletionPolicy;
     private final Map<IndexCommit, MetadataAwareIndexCommit> activeSnapshots;
+    private final ReentrantLock metadataLock;
 
     /**
      * Create a new SeriesMetadataManager.
@@ -45,6 +47,7 @@ public class SeriesMetadataManager {
         this.indexWriter = indexWriter;
         this.snapshotDeletionPolicy = snapshotDeletionPolicy;
         this.activeSnapshots = new ConcurrentHashMap<>();
+        this.metadataLock = new ReentrantLock();
     }
 
     /**
@@ -65,18 +68,23 @@ public class SeriesMetadataManager {
      * @throws IOException if commit fails
      */
     public void commitWithMetadata(Map<Long, Long> metadata, Map<String, String> additionalCommitData) throws IOException {
-        long nextGeneration = SegmentInfos.getLastCommitGeneration(directory) + 1;
+        metadataLock.lock();
+        try {
+            long nextGeneration = SegmentInfos.getLastCommitGeneration(directory) + 1;
 
-        String metadataFilename = SeriesMetadataIO.writeMetadata(directory, nextGeneration, metadata);
+            String metadataFilename = SeriesMetadataIO.writeMetadata(directory, nextGeneration, metadata);
 
-        Map<String, String> commitData = new java.util.HashMap<>();
-        commitData.put(SERIES_METADATA_FILE_KEY, metadataFilename);
-        commitData.putAll(additionalCommitData);
+            Map<String, String> commitData = new java.util.HashMap<>();
+            commitData.put(SERIES_METADATA_FILE_KEY, metadataFilename);
+            commitData.putAll(additionalCommitData);
 
-        indexWriter.setLiveCommitData(commitData.entrySet(), true);
-        indexWriter.commit();
+            indexWriter.setLiveCommitData(commitData.entrySet(), true);
+            indexWriter.commit();
 
-        cleanupOldMetadataFiles();
+            cleanupOldMetadataFiles();
+        } finally {
+            metadataLock.unlock();
+        }
     }
 
     /**
@@ -163,31 +171,36 @@ public class SeriesMetadataManager {
      * @throws IOException if cleanup fails
      */
     void cleanupOldMetadataFiles() throws IOException {
-        // Get current metadata filename from commit data (source of truth)
-        Iterable<Map.Entry<String, String>> commitData = indexWriter.getLiveCommitData();
-        String currentMetadataFile = null;
-        if (commitData != null) {
-            for (Map.Entry<String, String> entry : commitData) {
-                if (entry.getKey().equals(SERIES_METADATA_FILE_KEY)) {
-                    currentMetadataFile = entry.getValue();
-                    break;
+        metadataLock.lock();
+        try {
+            // Get current metadata filename from commit data (source of truth)
+            Iterable<Map.Entry<String, String>> commitData = indexWriter.getLiveCommitData();
+            String currentMetadataFile = null;
+            if (commitData != null) {
+                for (Map.Entry<String, String> entry : commitData) {
+                    if (entry.getKey().equals(SERIES_METADATA_FILE_KEY)) {
+                        currentMetadataFile = entry.getValue();
+                        break;
+                    }
                 }
             }
+
+            // Collect protected files (from active snapshots)
+            Set<String> protectedFiles = activeSnapshots.values()
+                .stream()
+                .map(MetadataAwareIndexCommit::getMetadataFilename)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+            // Always protect current file if it exists
+            if (currentMetadataFile != null) {
+                protectedFiles.add(currentMetadataFile);
+            }
+
+            // Delete all metadata files NOT in protected set
+            SeriesMetadataIO.cleanupOldFiles(directory, protectedFiles);
+        } finally {
+            metadataLock.unlock();
         }
-
-        // Collect protected files (from active snapshots)
-        Set<String> protectedFiles = activeSnapshots.values()
-            .stream()
-            .map(MetadataAwareIndexCommit::getMetadataFilename)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
-
-        // Always protect current file if it exists
-        if (currentMetadataFile != null) {
-            protectedFiles.add(currentMetadataFile);
-        }
-
-        // Delete all metadata files NOT in protected set
-        SeriesMetadataIO.cleanupOldFiles(directory, protectedFiles);
     }
 }
