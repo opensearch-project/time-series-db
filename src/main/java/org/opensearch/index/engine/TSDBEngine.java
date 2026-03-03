@@ -47,6 +47,7 @@ import org.opensearch.index.translog.TranslogManager;
 import org.opensearch.index.translog.TranslogOperationHelper;
 import org.opensearch.index.translog.listener.TranslogEventListener;
 import org.opensearch.search.suggest.completion.CompletionStats;
+import org.opensearch.telemetry.metrics.MetricsRegistry;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.MetadataStore;
 import org.opensearch.tsdb.core.chunk.MMappedChunksManager;
@@ -137,6 +138,10 @@ public class TSDBEngine extends Engine {
     private final Tags samplesRecoveryTags;
 
     private final AtomicLong headSampleCount = new AtomicLong(0);
+
+    // Metric closeables (gauges, etc.) that must be closed when engine is closed.
+    // These hold references to engine components like Head, so failing to close them could cause memory leaks.
+    private final List<Closeable> metricCloseables = new ArrayList<>();
 
     private Head head;
     private Path metricsStorePath;
@@ -323,6 +328,8 @@ public class TSDBEngine extends Engine {
         ENGINE_REGISTRY.remove(shardId);
 
         metricsStorePath = null;
+        // Close metric closeables first to unregister callbacks that reference Head and other engine components
+        closeMetricCloseables();
         if (tsdbReaderManager != null) {
             tsdbReaderManager.closeReaderCapacityGauges();
         }
@@ -1387,6 +1394,8 @@ public class TSDBEngine extends Engine {
     protected void closeNoLock(String reason, CountDownLatch closedLatch) {
         if (isClosed.compareAndSet(false, true)) {
             try {
+                // Close metric closeables first to unregister callbacks that reference Head and other engine components
+                closeMetricCloseables();
                 if (head != null) {
                     head.close();
                 }
@@ -1730,31 +1739,94 @@ public class TSDBEngine extends Engine {
             return;
         }
 
+        MetricsRegistry registry = TSDBMetrics.getRegistry();
         final Head headRef = this.head;
+        Tags headTags = headRef.getMetricTags();
 
-        TSDBMetrics.ENGINE.registerGauges(TSDBMetrics.getRegistry(), () -> (double) headRef.getNumSeries(), () -> {
-            long minSeq = headRef.getMinSeqNo();
-            return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
-        }, () -> (double) headRef.getNumOpenChunks(), headRef.getMetricTags());
+        // Register head-level gauges
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.SERIES_OPEN,
+                TSDBMetricsConstants.SERIES_OPEN_DESC,
+                TSDBMetricsConstants.UNIT_COUNT,
+                () -> (double) headRef.getNumSeries(),
+                headTags
+            )
+        );
+
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.MEMCHUNKS_MINSEQ,
+                TSDBMetricsConstants.MEMCHUNKS_MINSEQ_DESC,
+                TSDBMetricsConstants.UNIT_COUNT,
+                () -> {
+                    long minSeq = headRef.getMinSeqNo();
+                    return minSeq == Long.MAX_VALUE ? 0.0 : (double) minSeq;
+                },
+                headTags
+            )
+        );
+
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.MEMCHUNKS_OPEN,
+                TSDBMetricsConstants.MEMCHUNKS_OPEN_DESC,
+                TSDBMetricsConstants.UNIT_COUNT,
+                () -> (double) headRef.getNumOpenChunks(),
+                headTags
+            )
+        );
 
         // TODO: Add a "role" tag (primary/replica) once EngineConfig exposes shard routing.
         Tags shardGaugeTags = Tags.create()
             .addTag("index", engineConfig.getShardId().getIndexName())
             .addTag("shard", (long) engineConfig.getShardId().getId());
 
-        TSDBMetrics.ENGINE.registerShardGauges(
-            TSDBMetrics.getRegistry(),
-            () -> (double) headSampleCount.get(),
-            () -> (double) closedChunkIndexManager.getPersistedSampleCount(),
-            () -> {
-                try {
-                    return (double) store.stats(0L).getSizeInBytes();
-                } catch (Exception e) {
-                    return 0.0;
-                }
-            },
-            shardGaugeTags
+        // Register shard-level gauges
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.HEAD_SAMPLE_COUNT,
+                TSDBMetricsConstants.HEAD_SAMPLE_COUNT_DESC,
+                TSDBMetricsConstants.UNIT_COUNT,
+                () -> (double) headSampleCount.get(),
+                shardGaugeTags
+            )
         );
+
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.PERSISTED_SAMPLE_COUNT,
+                TSDBMetricsConstants.PERSISTED_SAMPLE_COUNT_DESC,
+                TSDBMetricsConstants.UNIT_COUNT,
+                () -> (double) closedChunkIndexManager.getPersistedSampleCount(),
+                shardGaugeTags
+            )
+        );
+
+        metricCloseables.add(
+            registry.createGauge(
+                TSDBMetricsConstants.SHARD_SIZE_BYTES,
+                TSDBMetricsConstants.SHARD_SIZE_BYTES_DESC,
+                TSDBMetricsConstants.UNIT_BYTES,
+                () -> {
+                    try {
+                        return (double) store.stats(0L).getSizeInBytes();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                },
+                shardGaugeTags
+            )
+        );
+    }
+
+    /**
+     * Closes all metric closeables (gauges, etc.) registered for this engine.
+     * This must be called when the engine is closed.
+     */
+    private void closeMetricCloseables() {
+        IOUtils.closeWhileHandlingException(metricCloseables);
+        metricCloseables.clear();
     }
 
     private void incrementSamplesFailed(Operation.Origin origin, String reason) {

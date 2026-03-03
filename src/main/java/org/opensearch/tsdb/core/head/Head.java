@@ -607,6 +607,8 @@ public class Head implements Closeable {
      */
     public void close() throws IOException {
         IOUtils.close(liveSeriesIndex, closedChunkIndexManager);
+        // Clear the series map to release MemSeries instances
+        seriesMap.clear();
     }
 
     private void loadSeries() {

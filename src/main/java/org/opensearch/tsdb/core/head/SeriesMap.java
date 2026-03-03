@@ -104,4 +104,12 @@ public class SeriesMap {
     public long getStubSeriesCount() {
         return stubSeriesCounter.get();
     }
+
+    /**
+     * Clears all series from the map and resets the stub series counter.
+     */
+    public void clear() {
+        seriesMap.clear();
+        stubSeriesCounter.set(0);
+    }
 }
