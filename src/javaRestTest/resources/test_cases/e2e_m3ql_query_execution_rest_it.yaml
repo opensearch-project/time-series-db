@@ -346,6 +346,45 @@ test_case:
         data:
           - metric: { name: "http_requests_total_A", method: "GET", status: "200" }
             values: [ null, null, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335 ]
+    - name: "pipeline - nonNegativeDerivative without maxValue (increases only)"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch name:http_requests_total_A | nonNegativeDerivative"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_A", method: "GET", status: "200" }
+            values: [null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    - name: "pipeline - nonNegativeDerivative with maxValue"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch name:http_requests_total_B | nonNegativeDerivative 15"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_B", method: "GET", status: "200" }
+            values: [null, 2, 2, 2, 2, 14, 14, 14, 14, 12, 14, 14]
+    - name: "pipeline - timestamp (value = timestamp in seconds)"
+      type: "m3ql"
+      indices: "e2e_query_execution"
+      query: "fetch name:http_requests_total_A | timestamp"
+      time_config:
+        min_timestamp: "2025-01-01T02:00:00Z"
+        max_timestamp: "2025-01-01T03:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "http_requests_total_A", method: "GET", status: "200" }
+            values: [1735696800, 1735697100, 1735697400, 1735697700, 1735698000, 1735698300, 1735698600, 1735698900, 1735699200, 1735699500, 1735699800, 1735700100]
     - name: "error - invalid function"
       type: "m3ql"
       indices: "e2e_query_execution"

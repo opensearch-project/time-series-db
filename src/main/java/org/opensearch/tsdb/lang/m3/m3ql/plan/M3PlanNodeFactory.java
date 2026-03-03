@@ -35,6 +35,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.NonNegativeDerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
@@ -48,6 +49,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SortPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimestampPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
@@ -83,6 +85,8 @@ public class M3PlanNodeFactory {
                 return ChangedPlanNode.of(functionNode);
             case Constants.Functions.DERIVATIVE:
                 return DerivativePlanNode.of(functionNode);
+            case Constants.Functions.NON_NEGATIVE_DERIVATIVE:
+                return NonNegativeDerivativePlanNode.of(functionNode);
             case Constants.Functions.EXCLUDE_BY_TAG:
                 return ExcludeByTagPlanNode.of(functionNode);
             case Constants.Functions.TAG_SUB:
@@ -145,6 +149,8 @@ public class M3PlanNodeFactory {
                 return DivideScalarPlanNode.of(functionNode);
             case Constants.Functions.SUSTAIN:
                 return SustainPlanNode.of(functionNode);
+            case Constants.Functions.TIMESTAMP:
+                return TimestampPlanNode.of(functionNode);
             case Constants.Functions.TIMESHIFT:
                 return TimeshiftPlanNode.of(functionNode);
             case Constants.Functions.TRANSFORM_NULL:

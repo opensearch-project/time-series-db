@@ -1,0 +1,3 @@
+NON_NEGATIVE_DERIVATIVE(1.0)
+  TIMESTAMP
+    FETCH({name=[counter]}, !{})

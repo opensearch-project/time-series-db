@@ -59,7 +59,6 @@ public class Constants {
             "mockFetchLinear",
             "mockFetchPeriodic",
             "multiBurnRate",
-            "nonNegativeDerivative",
             "nPercentile",
             "promHistogramPercentile",
             "removeAbovePercentile",
@@ -70,7 +69,6 @@ public class Constants {
             "sustainedAbove",
             "sustainedBelow",
             "switch",
-            "timestamp",
             "toHistogram",
             "toHistogramLinearBuckets"
         );
@@ -134,6 +132,11 @@ public class Constants {
          * derivative function name.
          */
         public static final String DERIVATIVE = "derivative";
+
+        /**
+         * nonNegativeDerivative function name.
+         */
+        public static final String NON_NEGATIVE_DERIVATIVE = "nonNegativeDerivative";
 
         /**
          * changed function name.
@@ -319,6 +322,11 @@ public class Constants {
          * round function name.
          */
         public static final String ROUND = "round";
+
+        /**
+         * timestamp function name.
+         */
+        public static final String TIMESTAMP = "timestamp";
 
         /**
          * Functions used for value comparison.

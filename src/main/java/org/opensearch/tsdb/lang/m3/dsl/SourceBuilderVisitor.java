@@ -62,6 +62,7 @@ import org.opensearch.tsdb.lang.m3.stage.RangeStage;
 import org.opensearch.tsdb.lang.m3.stage.IsNonNullStage;
 import org.opensearch.tsdb.lang.m3.stage.RemoveEmptyStage;
 import org.opensearch.tsdb.lang.m3.stage.DerivativeStage;
+import org.opensearch.tsdb.lang.m3.stage.NonNegativeDerivativeStage;
 import org.opensearch.tsdb.lang.m3.stage.IntegralStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleStage;
 import org.opensearch.tsdb.lang.m3.stage.ScaleToSecondsStage;
@@ -76,6 +77,7 @@ import org.opensearch.tsdb.lang.m3.stage.SummarizeStage;
 import org.opensearch.tsdb.lang.m3.stage.TopKStage;
 import org.opensearch.tsdb.lang.m3.stage.SumStage;
 import org.opensearch.tsdb.lang.m3.stage.MultiplyStage;
+import org.opensearch.tsdb.lang.m3.stage.TimestampStage;
 import org.opensearch.tsdb.lang.m3.stage.TimeshiftStage;
 import org.opensearch.tsdb.lang.m3.stage.TransformNullStage;
 import org.opensearch.tsdb.lang.m3.stage.TruncateStage;
@@ -87,6 +89,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DerivativePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.NonNegativeDerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesConstantPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HeadPlanNode;
@@ -113,6 +116,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SqrtPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimestampPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
@@ -564,6 +568,15 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     }
 
     @Override
+    public ComponentHolder visit(NonNegativeDerivativePlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+
+        stageStack.add(new NonNegativeDerivativeStage(planNode.getMaxValue()));
+
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
     public ComponentHolder visit(DivideScalarPlanNode planNode) {
         validateChildCountExact(planNode, 1);
         stageStack.add(new DivideScalarStage(planNode.getDivisor()));
@@ -757,6 +770,15 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     public ComponentHolder visit(SqrtPlanNode planNode) {
         validateChildCountExact(planNode, 1);
         stageStack.add(new SqrtStage());
+        return planNode.getChildren().getFirst().accept(this);
+    }
+
+    @Override
+    public ComponentHolder visit(TimestampPlanNode planNode) {
+        validateChildCountExact(planNode, 1);
+
+        stageStack.add(new TimestampStage());
+
         return planNode.getChildren().getFirst().accept(this);
     }
 

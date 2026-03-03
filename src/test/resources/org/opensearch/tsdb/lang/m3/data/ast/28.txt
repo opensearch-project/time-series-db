@@ -1,0 +1,8 @@
+ROOT
+  PIPELINE
+    FUNCTION(fetch)
+      TAG_KEY(name)
+        TAG_VALUE(counter)
+    FUNCTION(timestamp)
+    FUNCTION(nonNegativeDerivative)
+      VALUE(1)

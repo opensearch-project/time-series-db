@@ -1,0 +1,2 @@
+# test timestamp then nonNegativeDerivative
+fetch name:counter | timestamp | nonNegativeDerivative 1

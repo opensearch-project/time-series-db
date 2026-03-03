@@ -30,6 +30,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.NonNegativeDerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.PerSecondRatePlanNode;
@@ -45,6 +46,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SustainPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.SummarizePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagComparePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TagSubPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimestampPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimeshiftPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TopKPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
@@ -194,6 +196,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the DerivativePlanNode
      */
     public T visit(DerivativePlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for NonNegativeDerivativePlanNode.
+     * @param planNode the NonNegativeDerivativePlanNode to visit
+     * @return the result of processing the NonNegativeDerivativePlanNode
+     */
+    public T visit(NonNegativeDerivativePlanNode planNode) {
         return process(planNode);
     }
 
@@ -409,6 +420,15 @@ public abstract class M3PlanVisitor<T> {
      * @return the result of processing the SustainPlanNode
      */
     public T visit(SustainPlanNode planNode) {
+        return process(planNode);
+    }
+
+    /**
+     * Visit method for TimestampPlanNode.
+     * @param planNode the TimestampPlanNode to visit
+     * @return the result of processing the TimestampPlanNode
+     */
+    public T visit(TimestampPlanNode planNode) {
         return process(planNode);
     }
 
