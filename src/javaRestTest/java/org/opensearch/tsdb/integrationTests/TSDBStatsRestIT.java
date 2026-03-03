@@ -10,7 +10,9 @@ package org.opensearch.tsdb.integrationTests;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
-import org.opensearch.test.rest.OpenSearchRestTestCase;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.tsdb.framework.RestTimeSeriesTestFramework;
 
 import java.io.IOException;
 import java.util.Map;
@@ -23,194 +25,154 @@ import java.util.Map;
  *   <li>Endpoint availability and basic functionality</li>
  *   <li>Parameter validation (include, format)</li>
  *   <li>Query parameter validation</li>
+ *   <li>Stats aggregation with real time series data</li>
  * </ul>
- *
- * <p>NOTE: This test suite validates the endpoint infrastructure only.
- * Full aggregator functionality will be tested in a future PR.
  */
-public class TSDBStatsRestIT extends OpenSearchRestTestCase {
+public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
+
+    private static final String TEST_DATA_YAML = "test_cases/tsdb_stats_rest_it.yaml";
+    private boolean dataLoaded = false;
 
     /**
-     * Tests that the _tsdb/stats endpoint exists and accepts GET requests.
+     * Lazily initialize test data on first use for each test.
+     * This ensures the REST client is ready before we try to create indices.
      */
-    public void testTSDBStatsEndpointExists() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
-
-        Map<String, Object> responseBody = entityAsMap(response);
-        assertTrue(responseBody.containsKey("message"));
-        assertEquals("TSDB Stats endpoint - aggregator implementation pending", responseBody.get("message"));
+    private void ensureDataLoaded() throws Exception {
+        if (!dataLoaded) {
+            initializeTest(TEST_DATA_YAML);
+            setupTest();
+            dataLoaded = true;
+        }
     }
 
     /**
-     * Tests that the _tsdb/stats endpoint accepts POST requests with body.
+     * Tests basic endpoint functionality with both GET and POST methods.
+     * Verifies default parameters (grouped format, all stats included).
      */
-    public void testTSDBStatsEndpointWithPost() throws IOException {
-        Request request = new Request("POST", "/_tsdb/stats");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-        request.setJsonEntity("{\"query\": \"fetch name:*\"}");
+    public void testBasicEndpoint() throws Exception {
+        ensureDataLoaded();
 
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
+        String expectedJson = """
+            {
+              "labelStats": {
+                "numSeries": 10,
+                "name": {
+                  "numSeries": 10,
+                  "values": ["http_requests_total", "http_response_time_ms", "db_connections"],
+                  "valuesStats": {
+                    "http_requests_total": 6,
+                    "http_response_time_ms": 2,
+                    "db_connections": 2
+                  }
+                },
+                "service": {
+                  "numSeries": 10,
+                  "values": ["api", "web", "postgres"],
+                  "valuesStats": {
+                    "api": 5,
+                    "web": 3,
+                    "postgres": 2
+                  }
+                },
+                "method": {
+                  "numSeries": 8,
+                  "values": ["GET", "POST"],
+                  "valuesStats": {
+                    "GET": 6,
+                    "POST": 2
+                  }
+                },
+                "status": {
+                  "numSeries": 8,
+                  "values": ["200", "404", "201"],
+                  "valuesStats": {
+                    "200": 6,
+                    "404": 1,
+                    "201": 1
+                  }
+                },
+                "env": {
+                  "numSeries": 10,
+                  "values": ["prod", "staging"],
+                  "valuesStats": {
+                    "prod": 9,
+                    "staging": 1
+                  }
+                },
+                "pool": {
+                  "numSeries": 2,
+                  "values": ["primary", "replica"],
+                  "valuesStats": {
+                    "primary": 1,
+                    "replica": 1
+                  }
+                }
+              }
+            }
+            """;
 
-        Map<String, Object> responseBody = entityAsMap(response);
-        assertTrue(responseBody.containsKey("message"));
-        assertEquals("TSDB Stats endpoint - aggregator implementation pending", responseBody.get("message"));
+        // Test GET request
+        Request getRequest = new Request("GET", "/_tsdb/stats");
+        getRequest.addParameter("query", "fetch name:*");
+        getRequest.addParameter("start", "1735689600000"); // 2025-01-01T00:00:00Z
+        getRequest.addParameter("end", "1735693200000");   // 2025-01-01T01:00:00Z
+
+        Response getResponse = client().performRequest(getRequest);
+        assertEquals(200, getResponse.getStatusLine().getStatusCode());
+
+        Map<String, Object> expected = parseJsonString(expectedJson);
+        Map<String, Object> actualGet = parseJsonResponse(getResponse);
+        assertEquals(expected, actualGet);
+
+        // Test POST request returns same result
+        Request postRequest = new Request("POST", "/_tsdb/stats");
+        postRequest.addParameter("start", "1735689600000");
+        postRequest.addParameter("end", "1735693200000");
+        postRequest.setJsonEntity("{\"query\": \"fetch name:*\"}");
+
+        Response postResponse = client().performRequest(postRequest);
+        assertEquals(200, postResponse.getStatusLine().getStatusCode());
+
+        Map<String, Object> actualPost = parseJsonResponse(postResponse);
+        assertEquals(expected, actualPost);
     }
 
     /**
-     * Tests that missing query parameter returns error.
+     * Tests parameter validation: missing query, invalid time range, missing required filters.
      */
-    public void testMissingQueryParameterReturnsError() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
+    public void testParameterValidation() throws IOException {
+        // Missing query parameter
+        Request missingQuery = new Request("GET", "/_tsdb/stats");
+        missingQuery.addParameter("start", "now-1h");
+        missingQuery.addParameter("end", "now");
 
-        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
-
+        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(missingQuery));
         assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
         Map<String, Object> responseBody = entityAsMap(exception.getResponse());
         assertTrue(responseBody.containsKey("error"));
         assertEquals("Query parameter is required", responseBody.get("error"));
-    }
 
-    /**
-     * Tests that invalid time range returns error.
-     */
-    public void testInvalidTimeRangeReturnsError() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now");
-        request.addParameter("end", "now-1h");
+        // Invalid time range (start > end)
+        Request invalidTimeRange = new Request("GET", "/_tsdb/stats");
+        invalidTimeRange.addParameter("query", "fetch name:*");
+        invalidTimeRange.addParameter("start", "now");
+        invalidTimeRange.addParameter("end", "now-1h");
 
-        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
-
+        exception = expectThrows(ResponseException.class, () -> client().performRequest(invalidTimeRange));
         assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
-        Map<String, Object> responseBody = entityAsMap(exception.getResponse());
+        responseBody = entityAsMap(exception.getResponse());
         assertTrue(responseBody.containsKey("error"));
         assertEquals("Start time must be before end time", responseBody.get("error"));
-    }
 
-    /**
-     * Tests valid include parameter values.
-     */
-    public void testValidIncludeParameter() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-        request.addParameter("include", "headStats,labelStats");
+        // Query without required filters (service or name)
+        Request missingFilters = new Request("GET", "/_tsdb/stats");
+        missingFilters.addParameter("query", "fetch host:server1");
+        missingFilters.addParameter("start", "now-1h");
+        missingFilters.addParameter("end", "now");
 
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
-
-        Map<String, Object> responseBody = entityAsMap(response);
-        assertTrue(responseBody.containsKey("include"));
-    }
-
-    /**
-     * Tests invalid include parameter value returns error.
-     */
-    public void testInvalidIncludeParameterReturnsError() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-        request.addParameter("include", "invalidOption");
-
-        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
-
-        // Verify we get a 400 Bad Request
+        exception = expectThrows(ResponseException.class, () -> client().performRequest(missingFilters));
         assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
-        // Verify error response contains error field
-        Map<String, Object> responseBody = entityAsMap(exception.getResponse());
-        assertTrue(responseBody.containsKey("error"));
-    }
-
-    /**
-     * Tests valid format parameter values.
-     */
-    public void testValidFormatParameter() throws IOException {
-        // Test grouped format
-        Request groupedRequest = new Request("GET", "/_tsdb/stats");
-        groupedRequest.addParameter("query", "fetch name:*");
-        groupedRequest.addParameter("start", "now-1h");
-        groupedRequest.addParameter("end", "now");
-        groupedRequest.addParameter("format", "grouped");
-
-        Response groupedResponse = client().performRequest(groupedRequest);
-        assertEquals(200, groupedResponse.getStatusLine().getStatusCode());
-        Map<String, Object> groupedBody = entityAsMap(groupedResponse);
-        assertEquals("grouped", groupedBody.get("format"));
-
-        // Test flat format
-        Request flatRequest = new Request("GET", "/_tsdb/stats");
-        flatRequest.addParameter("query", "fetch name:*");
-        flatRequest.addParameter("start", "now-1h");
-        flatRequest.addParameter("end", "now");
-        flatRequest.addParameter("format", "flat");
-
-        Response flatResponse = client().performRequest(flatRequest);
-        assertEquals(200, flatResponse.getStatusLine().getStatusCode());
-        Map<String, Object> flatBody = entityAsMap(flatResponse);
-        assertEquals("flat", flatBody.get("format"));
-    }
-
-    /**
-     * Tests invalid format parameter value returns error.
-     */
-    public void testInvalidFormatParameterReturnsError() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-        request.addParameter("format", "invalidFormat");
-
-        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
-
-        // Verify we get a 400 Bad Request
-        assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
-        // Verify error response contains error field
-        Map<String, Object> responseBody = entityAsMap(exception.getResponse());
-        assertTrue(responseBody.containsKey("error"));
-    }
-
-    /**
-     * Tests default values when optional parameters are not specified.
-     */
-    public void testDefaultParameterValues() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
-
-        Map<String, Object> responseBody = entityAsMap(response);
-        assertEquals("grouped", responseBody.get("format")); // Default format
-        assertEquals("all", responseBody.get("include")); // Default include
-    }
-
-    /**
-     * Tests that query without service or name filters returns error.
-     */
-    public void testQueryWithoutRequiredFiltersReturnsError() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch host:server1");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-
-        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
-
-        assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
-        Map<String, Object> responseBody = entityAsMap(exception.getResponse());
+        responseBody = entityAsMap(exception.getResponse());
         assertTrue(responseBody.containsKey("error"));
         Object error = responseBody.get("error");
         String errorMessage = error instanceof String ? (String) error : error.toString();
@@ -218,55 +180,302 @@ public class TSDBStatsRestIT extends OpenSearchRestTestCase {
     }
 
     /**
-     * Tests that query with service filter is accepted.
+     * Tests include parameter options (all stats vs labelStats only).
      */
-    public void testQueryWithServiceFilter() throws IOException {
+    public void testIncludeOptions() throws Exception {
+        ensureDataLoaded();
         Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch service:api");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
+        request.addParameter("query", "fetch name:*");
+        request.addParameter("start", "1735689600000"); // 2025-01-01T00:00:00Z
+        request.addParameter("end", "1735693200000");   // 2025-01-01T01:00:00Z
+        request.addParameter("include", "labelStats");
 
         Response response = client().performRequest(request);
         assertEquals(200, response.getStatusLine().getStatusCode());
+
+        // When include=labelStats, valuesStats and numSeries per label should NOT be present (only values)
+        String expectedJson = """
+            {
+              "labelStats": {
+                "numSeries": 10,
+                "name": {
+                  "values": ["http_requests_total", "http_response_time_ms", "db_connections"]
+                },
+                "service": {
+                  "values": ["api", "web", "postgres"]
+                },
+                "method": {
+                  "values": ["GET", "POST"]
+                },
+                "status": {
+                  "values": ["200", "404", "201"]
+                },
+                "env": {
+                  "values": ["prod", "staging"]
+                },
+                "pool": {
+                  "values": ["primary", "replica"]
+                }
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonString(expectedJson);
+        Map<String, Object> actual = parseJsonResponse(response);
+        assertEquals(expected, actual);
     }
 
     /**
-     * Tests that query with name filter is accepted.
+     * Tests format parameter options (grouped vs flat).
      */
-    public void testQueryWithNameFilter() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch name:http_*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
+    public void testFormatOptions() throws Exception {
+        ensureDataLoaded();
+        // Test grouped format
+        Request groupedRequest = new Request("GET", "/_tsdb/stats");
+        groupedRequest.addParameter("query", "fetch name:*");
+        groupedRequest.addParameter("start", "1735689600000"); // 2025-01-01T00:00:00Z
+        groupedRequest.addParameter("end", "1735693200000");   // 2025-01-01T01:00:00Z
+        groupedRequest.addParameter("format", "grouped");
 
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
+        Response groupedResponse = client().performRequest(groupedRequest);
+        assertEquals(200, groupedResponse.getStatusLine().getStatusCode());
+
+        // Grouped format - same as default/testTSDBStatsEndpointExists
+        String expectedGroupedJson = """
+            {
+              "labelStats": {
+                "numSeries": 10,
+                "name": {
+                  "numSeries": 10,
+                  "values": ["http_requests_total", "http_response_time_ms", "db_connections"],
+                  "valuesStats": {
+                    "http_requests_total": 6,
+                    "http_response_time_ms": 2,
+                    "db_connections": 2
+                  }
+                },
+                "service": {
+                  "numSeries": 10,
+                  "values": ["api", "web", "postgres"],
+                  "valuesStats": {
+                    "api": 5,
+                    "web": 3,
+                    "postgres": 2
+                  }
+                },
+                "method": {
+                  "numSeries": 8,
+                  "values": ["GET", "POST"],
+                  "valuesStats": {
+                    "GET": 6,
+                    "POST": 2
+                  }
+                },
+                "status": {
+                  "numSeries": 8,
+                  "values": ["200", "404", "201"],
+                  "valuesStats": {
+                    "200": 6,
+                    "404": 1,
+                    "201": 1
+                  }
+                },
+                "env": {
+                  "numSeries": 10,
+                  "values": ["prod", "staging"],
+                  "valuesStats": {
+                    "prod": 9,
+                    "staging": 1
+                  }
+                },
+                "pool": {
+                  "numSeries": 2,
+                  "values": ["primary", "replica"],
+                  "valuesStats": {
+                    "primary": 1,
+                    "replica": 1
+                  }
+                }
+              }
+            }
+            """;
+
+        Map<String, Object> expectedGrouped = parseJsonString(expectedGroupedJson);
+        Map<String, Object> actualGrouped = parseJsonResponse(groupedResponse);
+        assertEquals(expectedGrouped, actualGrouped);
+
+        // Test flat format
+        Request flatRequest = new Request("GET", "/_tsdb/stats");
+        flatRequest.addParameter("query", "fetch name:*");
+        flatRequest.addParameter("start", "1735689600000"); // 2025-01-01T00:00:00Z
+        flatRequest.addParameter("end", "1735693200000");   // 2025-01-01T01:00:00Z
+        flatRequest.addParameter("format", "flat");
+
+        Response flatResponse = client().performRequest(flatRequest);
+        assertEquals(200, flatResponse.getStatusLine().getStatusCode());
+
+        // Flat format has arrays sorted by count descending
+        String expectedFlatJson = """
+            {
+              "seriesCountByMetricName": [
+                {"name": "http_requests_total", "value": 6},
+                {"name": "http_response_time_ms", "value": 2},
+                {"name": "db_connections", "value": 2}
+              ],
+              "labelValueCountByLabelName": [
+                {"name": "service", "value": 3},
+                {"name": "name", "value": 3},
+                {"name": "status", "value": 3},
+                {"name": "method", "value": 2},
+                {"name": "pool", "value": 2},
+                {"name": "env", "value": 2}
+              ],
+              "memoryInBytesByLabelName": [
+                {"name": "name", "value": 928},
+                {"name": "service", "value": 700},
+                {"name": "env", "value": 626},
+                {"name": "method", "value": 532},
+                {"name": "status", "value": 528},
+                {"name": "pool", "value": 140}
+              ],
+              "seriesCountByLabelValuePair": [
+                {"name": "env=prod", "value": 9},
+                {"name": "method=GET", "value": 6},
+                {"name": "name=http_requests_total", "value": 6},
+                {"name": "status=200", "value": 6},
+                {"name": "service=api", "value": 5},
+                {"name": "service=web", "value": 3},
+                {"name": "method=POST", "value": 2},
+                {"name": "service=postgres", "value": 2},
+                {"name": "name=http_response_time_ms", "value": 2},
+                {"name": "name=db_connections", "value": 2},
+                {"name": "pool=primary", "value": 1},
+                {"name": "pool=replica", "value": 1},
+                {"name": "env=staging", "value": 1},
+                {"name": "status=404", "value": 1},
+                {"name": "status=201", "value": 1}
+              ]
+            }
+            """;
+
+        Map<String, Object> expectedFlat = parseJsonString(expectedFlatJson);
+        Map<String, Object> actualFlat = parseJsonResponse(flatResponse);
+        assertEquals(expectedFlat, actualFlat);
     }
 
     /**
-     * Tests that query with both service and name filters is accepted.
+     * Tests invalid parameter values (format and include).
      */
-    public void testQueryWithBothFilters() throws IOException {
+    public void testInvalidParameterValues() throws IOException {
+        // Invalid format parameter
+        Request invalidFormat = new Request("GET", "/_tsdb/stats");
+        invalidFormat.addParameter("query", "fetch name:*");
+        invalidFormat.addParameter("start", "now-1h");
+        invalidFormat.addParameter("end", "now");
+        invalidFormat.addParameter("format", "invalidFormat");
+
+        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(invalidFormat));
+        assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
+        Map<String, Object> responseBody = entityAsMap(exception.getResponse());
+        assertTrue(responseBody.containsKey("error"));
+
+        // Invalid include parameter
+        Request invalidInclude = new Request("GET", "/_tsdb/stats");
+        invalidInclude.addParameter("query", "fetch name:*");
+        invalidInclude.addParameter("start", "now-1h");
+        invalidInclude.addParameter("end", "now");
+        invalidInclude.addParameter("include", "invalidOption");
+
+        exception = expectThrows(ResponseException.class, () -> client().performRequest(invalidInclude));
+        assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
+        responseBody = entityAsMap(exception.getResponse());
+        assertTrue(responseBody.containsKey("error"));
+    }
+
+    /**
+     * Tests query filtering with service and name filters.
+     */
+    public void testQueryFiltering() throws Exception {
+        ensureDataLoaded();
         Request request = new Request("GET", "/_tsdb/stats");
         request.addParameter("query", "fetch service:api name:http_*");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
+        request.addParameter("start", "1735689600000"); // 2025-01-01T00:00:00Z
+        request.addParameter("end", "1735693200000");   // 2025-01-01T01:00:00Z
 
         Response response = client().performRequest(request);
         assertEquals(200, response.getStatusLine().getStatusCode());
+
+        // Filtered to service:api AND name:http_* (5 series - all api series have http_* names)
+        String expectedJson = """
+            {
+              "labelStats": {
+                "numSeries": 5,
+                "name": {
+                  "numSeries": 5,
+                  "values": ["http_requests_total", "http_response_time_ms"],
+                  "valuesStats": {
+                    "http_requests_total": 4,
+                    "http_response_time_ms": 1
+                  }
+                },
+                "service": {
+                  "numSeries": 5,
+                  "values": ["api"],
+                  "valuesStats": {
+                    "api": 5
+                  }
+                },
+                "method": {
+                  "numSeries": 5,
+                  "values": ["GET", "POST"],
+                  "valuesStats": {
+                    "GET": 4,
+                    "POST": 1
+                  }
+                },
+                "status": {
+                  "numSeries": 5,
+                  "values": ["200", "404"],
+                  "valuesStats": {
+                    "200": 4,
+                    "404": 1
+                  }
+                },
+                "env": {
+                  "numSeries": 5,
+                  "values": ["prod", "staging"],
+                  "valuesStats": {
+                    "prod": 4,
+                    "staging": 1
+                  }
+                }
+              }
+            }
+            """;
+
+        Map<String, Object> expected = parseJsonString(expectedJson);
+        Map<String, Object> actual = parseJsonResponse(response);
+        assertEquals(expected, actual);
+    }
+
+    // ========== Helper Methods ==========
+
+    /**
+     * Parses JSON response content into a Map for structured assertions.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJsonResponse(Response response) throws IOException {
+        String content = entityAsMap(response).toString();
+        return entityAsMap(response);
     }
 
     /**
-     * Tests that query with pipeline operations after fetch is allowed (pipeline is ignored).
+     * Parses JSON string into a Map.
      */
-    public void testQueryWithPipelineOperationsIsAllowed() throws IOException {
-        Request request = new Request("GET", "/_tsdb/stats");
-        request.addParameter("query", "fetch service:api | sum");
-        request.addParameter("start", "now-1h");
-        request.addParameter("end", "now");
-
-        // Pipeline operations after fetch are allowed (but ignored for stats aggregation)
-        Response response = client().performRequest(request);
-        assertEquals(200, response.getStatusLine().getStatusCode());
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJsonString(String jsonString) throws IOException {
+        try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, jsonString)) {
+            return parser.map();
+        }
     }
 }

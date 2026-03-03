@@ -16,9 +16,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -281,7 +283,7 @@ public class ByteLabels implements Labels {
      * @param pos the position to parse from
      * @return a StringPosition containing the length, data start position, and next position
      */
-    private static StringPosition parseStringPos(byte[] data, int pos) {
+    static StringPosition parseStringPos(byte[] data, int pos) {
         int length, nextPos = pos + 1;
         int firstByte = data[pos] & 0xFF;
         if (firstByte == 255) {
@@ -360,6 +362,61 @@ public class ByteLabels implements Labels {
     private record StringPosition(int length, int dataStart, int nextPos) {
     }
 
+    /**
+     * Simple record to hold parsed key-value pair.
+     *
+     * @param key the label key/name
+     * @param value the label value
+     */
+    public record KeyValuePair(String key, String value) {
+    }
+
+    /**
+     * Iterator that yields BytesRef objects pointing to raw label key-value pairs.
+     * Each BytesRef points to: [name_len_header][name_bytes][value_len_header][value_bytes]
+     */
+    private static class KeyValuePairIterator implements Iterator<BytesRef> {
+        private final byte[] data;
+        private int pos;
+
+        KeyValuePairIterator(byte[] data) {
+            this.data = data;
+            this.pos = 0;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return pos < data.length;
+        }
+
+        @Override
+        public BytesRef next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+
+            // Remember where this key-value pair starts
+            int pairStart = pos;
+
+            // Parse name length header and skip over name bytes
+            StringPosition namePos = parseStringPos(data, pos);
+
+            // Parse value length header and skip over value bytes
+            StringPosition valuePos = parseStringPos(data, namePos.nextPos());
+
+            // Calculate total length: [name_header][name][value_header][value]
+            int pairLength = valuePos.nextPos() - pairStart;
+
+            // Create BytesRef pointing to this section (zero-copy!)
+            BytesRef pair = new BytesRef(data, pairStart, pairLength);
+
+            // Move position to next pair
+            pos = valuePos.nextPos();
+
+            return pair;
+        }
+    }
+
     @Override
     public String toKeyValueString() {
         if (data.length == 0) return EMPTY_STRING;
@@ -413,6 +470,42 @@ public class ByteLabels implements Labels {
         }
 
         return result;
+    }
+
+    /**
+     * Returns an iterator over raw label key-value pairs as BytesRef objects.
+     * Each BytesRef points directly to a section of the internal data array containing:
+     * [name_length_header][name_bytes][value_length_header][value_bytes]
+     *
+     * This is a zero-copy operation - BytesRefs point to the existing data array.
+     * Useful for operations that need to deduplicate or hash label pairs without
+     * needing the "key:value" string format.
+     *
+     * @return iterator over BytesRef objects representing key-value pairs
+     */
+    public Iterator<BytesRef> keyValuePairIterator() {
+        return new KeyValuePairIterator(this.data);
+    }
+
+    /**
+     * Parses a raw key-value pair BytesRef (created by keyValuePairIterator) into key and value strings.
+     *
+     * @param pair BytesRef pointing to [name_len_header][name_bytes][value_len_header][value_bytes]
+     * @return record containing the key and value strings
+     */
+    public static KeyValuePair parseKeyValuePair(BytesRef pair) {
+        byte[] data = pair.bytes;
+        int pos = pair.offset;
+
+        // Parse name
+        StringPosition namePos = parseStringPos(data, pos);
+        String key = new String(data, namePos.dataStart(), namePos.length(), StandardCharsets.UTF_8);
+
+        // Parse value
+        StringPosition valuePos = parseStringPos(data, namePos.nextPos());
+        String value = new String(data, valuePos.dataStart(), valuePos.length(), StandardCharsets.UTF_8);
+
+        return new KeyValuePair(key, value);
     }
 
     @Override

@@ -10,6 +10,7 @@ package org.opensearch.tsdb.core.model;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +31,19 @@ public interface Labels extends Accountable {
      * @return array of BytesRef objects containing key:value pairs
      */
     BytesRef[] toKeyValueBytesRefs();
+
+    /**
+     * Returns an iterator over raw label key-value pairs as BytesRef objects.
+     * Each BytesRef points directly to a section of the internal data array containing:
+     * [name_length_header][name_bytes][value_length_header][value_bytes]
+     *
+     * This is a zero-copy operation - BytesRefs point to the existing data array.
+     * Useful for operations that need to deduplicate or hash label pairs without
+     * needing the "key:value" string format.
+     *
+     * @return iterator over BytesRef objects representing key-value pairs
+     */
+    Iterator<BytesRef> keyValuePairIterator();
 
     /**
      * Get a read-only map view of the labels

@@ -68,6 +68,7 @@ import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 import org.opensearch.tsdb.query.aggregator.InternalTSDBStats;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
+import org.opensearch.tsdb.query.aggregator.TSDBStatsAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RemoteIndexSettingsCache;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
 import org.opensearch.tsdb.query.rest.RestPromQLAction;
@@ -769,7 +770,10 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
                 TimeSeriesUnfoldAggregationBuilder.NAME,
                 TimeSeriesUnfoldAggregationBuilder::new,
                 TimeSeriesUnfoldAggregationBuilder::parse
-            ).addResultReader(InternalTimeSeries::new).setAggregatorRegistrar(TimeSeriesUnfoldAggregationBuilder::registerAggregators)
+            ).addResultReader(InternalTimeSeries::new).setAggregatorRegistrar(TimeSeriesUnfoldAggregationBuilder::registerAggregators),
+            new AggregationSpec(TSDBStatsAggregationBuilder.NAME, TSDBStatsAggregationBuilder::new, TSDBStatsAggregationBuilder::parse)
+                .addResultReader(InternalTSDBStats::new)
+                .setAggregatorRegistrar(TSDBStatsAggregationBuilder::registerAggregators)
         );
     }
 

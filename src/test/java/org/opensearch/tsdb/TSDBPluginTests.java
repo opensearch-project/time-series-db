@@ -38,6 +38,7 @@ import org.opensearch.test.DummyShardLock;
 import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.tsdb.query.aggregator.TSDBStatsAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
 import org.opensearch.tsdb.query.rest.RestM3QLAction;
@@ -339,10 +340,17 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<SearchPlugin.AggregationSpec> aggregations = plugin.getAggregations();
 
         assertNotNull("Aggregations list should not be null", aggregations);
-        assertThat("Should have 1 aggregation", aggregations, hasSize(1));
+        assertThat("Should have 2 aggregations", aggregations, hasSize(2));
 
-        SearchPlugin.AggregationSpec spec = aggregations.get(0);
-        assertThat("Aggregation name should match", spec.getName().getPreferredName(), equalTo(TimeSeriesUnfoldAggregationBuilder.NAME));
+        SearchPlugin.AggregationSpec spec1 = aggregations.get(0);
+        assertThat(
+            "First aggregation name should match",
+            spec1.getName().getPreferredName(),
+            equalTo(TimeSeriesUnfoldAggregationBuilder.NAME)
+        );
+
+        SearchPlugin.AggregationSpec spec2 = aggregations.get(1);
+        assertThat("Second aggregation name should match", spec2.getName().getPreferredName(), equalTo(TSDBStatsAggregationBuilder.NAME));
     }
 
     public void testGetPipelineAggregations() {

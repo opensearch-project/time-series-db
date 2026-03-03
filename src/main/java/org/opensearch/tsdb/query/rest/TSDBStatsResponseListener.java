@@ -109,9 +109,9 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
      * @throws IOException if an I/O error occurs
      */
     private void formatGroupedResponse(InternalTSDBStats stats, XContentBuilder builder) throws IOException {
-        boolean includeValueStats = includeOptions.isEmpty() || includeOptions.contains("valueStats");
-        boolean includeHeadStats = includeOptions.isEmpty() || includeOptions.contains("headStats");
-        boolean includeLabelStats = includeOptions.isEmpty() || includeOptions.contains("labelStats");
+        boolean includeValueStats = includeOptions.contains("all") || includeOptions.contains("valueStats");
+        boolean includeHeadStats = includeOptions.contains("all") || includeOptions.contains("headStats");
+        boolean includeLabelStats = includeOptions.contains("all") || includeOptions.contains("labelStats");
 
         // Write headStats if included
         if (includeHeadStats && stats.getHeadStats() != null) {
@@ -133,16 +133,16 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
                 builder.field("numSeries", stats.getNumSeries());
             }
 
-            for (Map.Entry<String, InternalTSDBStats.LabelStats> entry : stats.getLabelStats().entrySet()) {
+            for (Map.Entry<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> entry : stats.getLabelStats().entrySet()) {
                 builder.startObject(entry.getKey());
-                InternalTSDBStats.LabelStats labelStats = entry.getValue();
-                if (labelStats.getNumSeries() != null) {
-                    builder.field("numSeries", labelStats.getNumSeries());
+                InternalTSDBStats.CoordinatorLevelStats.LabelStats labelStats = entry.getValue();
+                if (labelStats.numSeries() != null) {
+                    builder.field("numSeries", labelStats.numSeries());
                 }
-                builder.field("values", labelStats.getValues());
+                builder.field("values", labelStats.valuesStats().keySet());
                 // Only include valuesStats if valueStats is in includeOptions
-                if (includeValueStats && labelStats.getValuesStats() != null) {
-                    builder.field("valuesStats", labelStats.getValuesStats());
+                if (includeValueStats && labelStats.valuesStats() != null) {
+                    builder.field("valuesStats", labelStats.valuesStats());
                 }
                 builder.endObject();
             }
@@ -176,9 +176,9 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
      * @throws IOException if an I/O error occurs
      */
     private void formatFlatResponse(InternalTSDBStats stats, XContentBuilder builder) throws IOException {
-        boolean includeValueStats = includeOptions.isEmpty() || includeOptions.contains("valueStats");
-        boolean includeHeadStats = includeOptions.isEmpty() || includeOptions.contains("headStats");
-        boolean includeLabelStats = includeOptions.isEmpty() || includeOptions.contains("labelStats");
+        boolean includeValueStats = includeOptions.contains("all") || includeOptions.contains("valueStats");
+        boolean includeHeadStats = includeOptions.contains("all") || includeOptions.contains("headStats");
+        boolean includeLabelStats = includeOptions.contains("all") || includeOptions.contains("labelStats");
 
         // Write headStats if included
         if (includeHeadStats && stats.getHeadStats() != null) {
@@ -193,13 +193,13 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
 
         // Only process labelStats if included
         if (includeLabelStats) {
-            Map<String, InternalTSDBStats.LabelStats> labelStatsMap = stats.getLabelStats();
+            Map<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> labelStatsMap = stats.getLabelStats();
 
             // seriesCountByMetricName - series count for each name value
             List<NameValuePair> seriesCountByMetricName = new ArrayList<>();
-            InternalTSDBStats.LabelStats nameLabelStats = labelStatsMap.get("name");
-            if (nameLabelStats != null && nameLabelStats.getValuesStats() != null) {
-                for (Map.Entry<String, Long> entry : nameLabelStats.getValuesStats().entrySet()) {
+            InternalTSDBStats.CoordinatorLevelStats.LabelStats nameLabelStats = labelStatsMap.get("name");
+            if (nameLabelStats != null && nameLabelStats.valuesStats() != null) {
+                for (Map.Entry<String, Long> entry : nameLabelStats.valuesStats().entrySet()) {
                     seriesCountByMetricName.add(new NameValuePair(entry.getKey(), entry.getValue()));
                 }
                 // Sort by count descending
@@ -209,10 +209,10 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
 
             // labelValueCountByLabelName - count of distinct values for each label
             List<NameValuePair> labelValueCounts = new ArrayList<>();
-            for (Map.Entry<String, InternalTSDBStats.LabelStats> entry : labelStatsMap.entrySet()) {
+            for (Map.Entry<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> entry : labelStatsMap.entrySet()) {
                 String labelName = entry.getKey();
-                InternalTSDBStats.LabelStats labelStat = entry.getValue();
-                long valueCount = labelStat.getValues() != null ? labelStat.getValues().size() : 0;
+                InternalTSDBStats.CoordinatorLevelStats.LabelStats labelStat = entry.getValue();
+                long valueCount = labelStat.valuesStats() != null ? labelStat.valuesStats().size() : 0;
                 labelValueCounts.add(new NameValuePair(labelName, valueCount));
             }
             // Sort by count descending
@@ -223,17 +223,17 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
             // Follows Prometheus approach: (len(name) + header + len(value) + header) * numSeries
             // See: https://github.com/prometheus/prometheus/blob/main/model/labels/labels_slicelabels.go#L520
             List<NameValuePair> memoryByLabel = new ArrayList<>();
-            for (Map.Entry<String, InternalTSDBStats.LabelStats> entry : labelStatsMap.entrySet()) {
+            for (Map.Entry<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> entry : labelStatsMap.entrySet()) {
                 String labelName = entry.getKey();
-                InternalTSDBStats.LabelStats labelStat = entry.getValue();
+                InternalTSDBStats.CoordinatorLevelStats.LabelStats labelStat = entry.getValue();
                 long memoryBytes = 0;
 
                 // String header overhead in Java: ~24 bytes (object header + hashcode + length)
                 final long STRING_HEADER_BYTES = 24;
 
-                if (labelStat.getValuesStats() != null) {
+                if (labelStat.valuesStats() != null) {
                     // Calculate memory for each label name/value pair weighted by series count
-                    for (Map.Entry<String, Long> valueEntry : labelStat.getValuesStats().entrySet()) {
+                    for (Map.Entry<String, Long> valueEntry : labelStat.valuesStats().entrySet()) {
                         String value = valueEntry.getKey();
                         long numSeries = valueEntry.getValue();
 
@@ -244,10 +244,10 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
                         // Total memory = (name + value) * number of series with this label value
                         memoryBytes += (nameBytes + valueBytes) * numSeries;
                     }
-                } else if (labelStat.getValues() != null) {
-                    // Fallback when valuesStats is null but values list exists
+                } else {
+                    // Fallback when valuesStats has 0 counts (includeValueStats=false)
                     // Assume 1 series per value for estimation
-                    for (String value : labelStat.getValues()) {
+                    for (String value : labelStat.valuesStats().keySet()) {
                         long nameBytes = (labelName.length() * 2L) + STRING_HEADER_BYTES;
                         long valueBytes = (value.length() * 2L) + STRING_HEADER_BYTES;
                         memoryBytes += nameBytes + valueBytes;
@@ -262,11 +262,11 @@ public class TSDBStatsResponseListener implements ActionListener<SearchResponse>
             // seriesCountByLabelValuePair - only include if valueStats is in includeOptions
             if (includeValueStats) {
                 List<NameValuePair> seriesCountByPair = new ArrayList<>();
-                for (Map.Entry<String, InternalTSDBStats.LabelStats> entry : labelStatsMap.entrySet()) {
+                for (Map.Entry<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> entry : labelStatsMap.entrySet()) {
                     String labelName = entry.getKey();
-                    InternalTSDBStats.LabelStats labelStat = entry.getValue();
-                    if (labelStat.getValuesStats() != null) {
-                        for (Map.Entry<String, Long> valueEntry : labelStat.getValuesStats().entrySet()) {
+                    InternalTSDBStats.CoordinatorLevelStats.LabelStats labelStat = entry.getValue();
+                    if (labelStat.valuesStats() != null) {
+                        for (Map.Entry<String, Long> valueEntry : labelStat.valuesStats().entrySet()) {
                             String pairName = labelName + "=" + valueEntry.getKey();
                             seriesCountByPair.add(new NameValuePair(pairName, valueEntry.getValue()));
                         }
