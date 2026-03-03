@@ -266,15 +266,9 @@ def numZones = findProperty('numZones') as Integer ?: 1
 testClusters.integTest {
     testDistribution = "ARCHIVE"
 
-    // Enable benchmark telemetry plugin for realistic metrics overhead in local runs.
-    // Usage: ./gradlew run -PbenchmarkTelemetry
-    // NOTE: Mutually exclusive with telemetry-otel. OpenSearch throws
-    // "Cannot register more than one telemetry" if both plugins are installed.
-    if (project.hasProperty('benchmarkTelemetry')) {
-        systemProperty 'opensearch.experimental.feature.telemetry.enabled', 'true'
-        setting 'telemetry.feature.metrics.enabled', 'true'
-        plugin(project(':benchmark-telemetry').tasks.bundlePlugin.archiveFile)
-    }
+    // Enable feature flags for telemetryPlugin
+//    systemProperty 'opensearch.experimental.feature.telemetry.enabled', 'true'
+//    setting 'telemetry.feature.metrics.enabled', 'true'
 
     if (numZones > 1) numberOfZones = numZones
     if (numNodes > 1) numberOfNodes = numNodes
