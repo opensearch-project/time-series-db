@@ -65,8 +65,6 @@ import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.lookup.SearchLookup;
 import org.opensearch.tsdb.TSDBPlugin;
-import org.opensearch.tsdb.benchmark.metrics.BenchmarkMetricsRegistry;
-import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
@@ -126,12 +124,6 @@ public abstract class BaseTSDBBenchmark {
 
     protected void setupBenchmark(int cardinality, int sampleCount, int labelCount) throws IOException {
         configureBenchmarkLogging();
-
-        // Initialize TSDBMetrics with benchmark registry to simulate realistic OTel overhead.
-        // cleanup() first to ensure clean state across JMH forks.
-        TSDBMetrics.cleanup();
-        TSDBMetrics.initialize(new BenchmarkMetricsRegistry());
-
         tempDir = Files.createTempDirectory("jmh-tsdb-benchmark");
         // Set up index with ClosedChunkIndex only
         maxTs = MIN_TS * sampleCount;
@@ -185,8 +177,6 @@ public abstract class BaseTSDBBenchmark {
 
         Releasables.close(releasables);
         releasables.clear();
-
-        TSDBMetrics.cleanup();
     }
 
     private void deleteDirectory(Path directory) throws IOException {

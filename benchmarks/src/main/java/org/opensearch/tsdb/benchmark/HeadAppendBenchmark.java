@@ -33,8 +33,6 @@ import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexManager;
 import org.opensearch.tsdb.MetadataStore;
 import org.opensearch.tsdb.core.retention.NOOPRetention;
 import org.opensearch.tsdb.core.compaction.NoopCompaction;
-import org.opensearch.tsdb.benchmark.metrics.BenchmarkMetricsRegistry;
-import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.threadpool.FixedExecutorBuilder;
@@ -90,10 +88,6 @@ public class HeadAppendBenchmark {
 
     @Setup
     public void setup() throws IOException {
-        // Initialize TSDBMetrics with benchmark registry to simulate realistic OTel overhead
-        TSDBMetrics.cleanup();
-        TSDBMetrics.initialize(new BenchmarkMetricsRegistry());
-
         Path headDir = Files.createTempDirectory("head-benchmark");
         Path metricsDir = Files.createTempDirectory("metrics-benchmark");
 
@@ -161,7 +155,6 @@ public class HeadAppendBenchmark {
 
     @TearDown
     public void tearDown() throws IOException {
-        TSDBMetrics.cleanup();
         if (head != null) {
             head.close();
         }

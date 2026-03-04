@@ -11,6 +11,3 @@ rootProject.name = 'tsdb'
 
 // Include benchmarks subproject
 include 'benchmarks'
-
-// Include benchmark-telemetry plugin (for local runs with realistic metrics overhead)
-include 'benchmark-telemetry'

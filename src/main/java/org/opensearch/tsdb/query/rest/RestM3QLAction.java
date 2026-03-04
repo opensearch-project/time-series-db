@@ -377,7 +377,9 @@ public class RestM3QLAction extends BaseTSDBAction {
      */
     private void incrementMetrics(Map<String, String> tags) {
         Tags finalTags = Tags.create();
-        tags.forEach(finalTags::addTag);
+        for (Map.Entry<String, String> e : tags.entrySet()) {
+            finalTags = finalTags.addTag(e.getKey(), e.getValue());
+        }
         TSDBMetrics.incrementCounter(METRICS.requestsTotal, 1, finalTags);
     }
 
