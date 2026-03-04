@@ -631,69 +631,70 @@ public class ClosedChunkIndexManager implements Closeable {
      * @throws IOException if there is an error adding the chunk
      */
     public boolean addMemChunk(MemSeries series, MemChunk chunk) throws IOException {
-        // chunks are nearly always added to the latest index, so optimistically reverse iterate
-        Long targetIndexMaxTime = null;
-        for (long indexMaxTime : closedChunkIndexMap.descendingKeySet()) {
-            if (chunk.getMaxTimestamp() > indexMaxTime) {
-                break;
-            }
-            targetIndexMaxTime = indexMaxTime;
-        }
-
-        if (targetIndexMaxTime != null) {
-            ClosedChunkIndex targetIndex = closedChunkIndexMap.get(targetIndexMaxTime);
-            return addMemChunkToClosedChunkIndex(targetIndex, series.getLabels(), series, chunk);
-        }
-
-        ClosedChunkIndex newIndex = createNewIndex(chunk.getMaxTimestamp());
-        return addMemChunkToClosedChunkIndex(newIndex, series.getLabels(), series, chunk);
-    }
-
-    private boolean addMemChunkToClosedChunkIndex(ClosedChunkIndex closedChunkIndex, Labels labels, MemSeries series, MemChunk chunk)
-        throws IOException {
         lock.lock();
         try {
-            if (indexesUndergoingCompaction.contains(closedChunkIndex)) {
-                return false;
+            // Find the target index - chunks are nearly always added to the latest index, so optimistically reverse iterate
+            Long targetIndexMaxTime = null;
+            for (long indexMaxTime : closedChunkIndexMap.descendingKeySet()) {
+                if (chunk.getMaxTimestamp() > indexMaxTime) {
+                    break;
+                }
+                targetIndexMaxTime = indexMaxTime;
             }
 
-            int rawSamples = chunk.getCompoundChunk().rawSampleCount();
-            int samplesDeduped = closedChunkIndex.addNewChunk(labels, chunk);
-            int postDedupSamples = rawSamples - samplesDeduped;
-            persistedSampleCount.addAndGet(postDedupSamples);
-            if (samplesDeduped > 0) {
-                TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesDeduped, samplesDeduped, metricTags);
+            ClosedChunkIndex targetIndex;
+            if (targetIndexMaxTime != null) {
+                targetIndex = closedChunkIndexMap.get(targetIndexMaxTime);
+            } else {
+                targetIndex = createNewIndexUnderLock(chunk.getMaxTimestamp());
             }
 
-            // mark the max mmap timestamp for the series, so we can later update the series at the correct time
-            pendingChunksToSeriesMMapTimestamps.computeIfAbsent(closedChunkIndex, k -> new HashMap<>())
-                .compute(series, (MemSeries s, Long existingValue) -> {
-                    if (existingValue == null || existingValue < chunk.getMaxTimestamp()) {
-                        return chunk.getMaxTimestamp();
-                    }
-                    return existingValue;
-                });
-
-            return true;
+            return addMemChunkToIndexUnderLock(targetIndex, series.getLabels(), series, chunk);
         } finally {
             lock.unlock();
         }
     }
 
-    private ClosedChunkIndex createNewIndex(long chunkTimestamp) throws IOException {
+    /**
+     * Adds a MemChunk to the specified closed chunk index. Caller must hold the lock.
+     */
+    private boolean addMemChunkToIndexUnderLock(ClosedChunkIndex closedChunkIndex, Labels labels, MemSeries series, MemChunk chunk)
+        throws IOException {
+        if (indexesUndergoingCompaction.contains(closedChunkIndex)) {
+            return false;
+        }
+
+        int rawSamples = chunk.getCompoundChunk().rawSampleCount();
+        int samplesDeduped = closedChunkIndex.addNewChunk(labels, chunk);
+        int postDedupSamples = rawSamples - samplesDeduped;
+        persistedSampleCount.addAndGet(postDedupSamples);
+        if (samplesDeduped > 0) {
+            TSDBMetrics.incrementCounter(TSDBMetrics.ENGINE.samplesDeduped, samplesDeduped, metricTags);
+        }
+
+        // mark the max mmap timestamp for the series, so we can later update the series at the correct time
+        pendingChunksToSeriesMMapTimestamps.computeIfAbsent(closedChunkIndex, k -> new HashMap<>())
+            .compute(series, (MemSeries s, Long existingValue) -> {
+                if (existingValue == null || existingValue < chunk.getMaxTimestamp()) {
+                    return chunk.getMaxTimestamp();
+                }
+                return existingValue;
+            });
+
+        return true;
+    }
+
+    /**
+     * Creates a new closed chunk index for the given timestamp. Caller must hold the lock.
+     */
+    private ClosedChunkIndex createNewIndexUnderLock(long chunkTimestamp) throws IOException {
         long newIndexMaxTime = rangeForTimestamp(chunkTimestamp, blockDuration);
         long newIndexMinTime = newIndexMaxTime - blockDuration;
         String dirName = String.join("_", BLOCK_PREFIX, Long.toString(newIndexMinTime), Long.toString(newIndexMaxTime), UUIDs.base64UUID());
         ClosedChunkIndex.Metadata metadata = new ClosedChunkIndex.Metadata(dirName, newIndexMinTime, newIndexMaxTime);
-        ClosedChunkIndex newIndex;
 
-        lock.lock();
-        try {
-            newIndex = new ClosedChunkIndex(dir.resolve(dirName), metadata, resolution, indexSettings);
-            closedChunkIndexMap.put(newIndexMaxTime, newIndex);
-        } finally {
-            lock.unlock();
-        }
+        ClosedChunkIndex newIndex = new ClosedChunkIndex(dir.resolve(dirName), metadata, resolution, indexSettings);
+        closedChunkIndexMap.put(newIndexMaxTime, newIndex);
 
         log.info("Created new block dir:{}, range: [{},{}]", dirName, newIndexMinTime, newIndexMaxTime);
         TSDBMetrics.incrementCounter(TSDBMetrics.INDEX.indexCreatedTotal, 1);
