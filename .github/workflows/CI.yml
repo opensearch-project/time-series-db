@@ -44,7 +44,7 @@ jobs:
     - name: Build
       run: su `id -un 1000` -c "./gradlew assemble"
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: build-artifacts-java-${{ matrix.java }}
         path:
