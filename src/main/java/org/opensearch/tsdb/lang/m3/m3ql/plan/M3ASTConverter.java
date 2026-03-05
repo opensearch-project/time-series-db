@@ -8,17 +8,15 @@
 package org.opensearch.tsdb.lang.m3.m3ql.plan;
 
 import org.opensearch.tsdb.lang.m3.common.Constants;
-import org.opensearch.tsdb.lang.m3.common.AggregationType;
-import org.opensearch.tsdb.lang.m3.common.M3Duration;
 import org.opensearch.tsdb.lang.m3.common.Utils;
-import org.opensearch.tsdb.lang.m3.common.WindowAggregationType;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.GroupNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.M3ASTNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.PipelineNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.RootNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.expand.BurnRatePipelineExpander;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.expand.PipelineExpander;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AsPercentPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DiffPlanNode;
@@ -26,14 +24,10 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.DividePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.FallbackSeriesBinaryPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntersectPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ScalePlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TransformNullPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.UnionPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,20 +39,11 @@ import static org.opensearch.common.Booleans.parseBooleanStrict;
  */
 public class M3ASTConverter {
 
-    @FunctionalInterface
-    private interface PipelineExpandHandler {
-        M3PlanNode expand(List<M3ASTNode> pipelineChildren, int lhsEndIndex, FunctionNode functionNode);
-    }
-
-    private final Map<String, PipelineExpandHandler> PIPELINE_EXPAND_REGISTRY = Map.of(
+    private static final Set<String> PIPELINE_EXPAND_FUNCTIONS = Set.of(
         Constants.Functions.Binary.BURN_RATE,
-        this::expandBurnRate,
         Constants.Functions.Binary.AS_BURN_RATE,
-        this::expandBurnRate,
         Constants.Functions.Binary.MULTI_BURN_RATE,
-        this::expandMultiBurnRate,
-        Constants.Functions.Binary.AS_MULTI_BURN_RATE,
-        this::expandMultiBurnRate
+        Constants.Functions.Binary.AS_MULTI_BURN_RATE
     );
 
     private static final Set<String> FUNCTIONS_WITH_PIPELINE_ARG = Set.of(
@@ -143,8 +128,7 @@ public class M3ASTConverter {
                 assert resultPlanNode != null : "resultPlanNode should not be null when handling pipeline expand function";
                 resultPlanNode = finalizePlanNode(resultPlanNode, danglingPlanNode);
                 danglingPlanNode = null;
-                String fnName = ((FunctionNode) childNode).getFunctionName();
-                resultPlanNode = PIPELINE_EXPAND_REGISTRY.get(fnName).expand(node.getChildren(), childIndex, (FunctionNode) childNode);
+                resultPlanNode = handleExpandedPipeline(node.getChildren(), childIndex, (FunctionNode) childNode);
             } else if (isFunctionNodeWithPipelineArg(childNode)) {
                 assert resultPlanNode != null : "resultPlanNode should not be null when handling function with pipeline arg";
                 resultPlanNode = finalizePlanNode(resultPlanNode, danglingPlanNode);
@@ -299,9 +283,17 @@ public class M3ASTConverter {
         return binaryPlanNode;
     }
 
-    // True if M3ASTNode is a pipeline-expand function that needs access to the outer pipeline context
     private boolean isPipelineExpandFunction(M3ASTNode node) {
-        return node instanceof FunctionNode functionNode && PIPELINE_EXPAND_REGISTRY.containsKey(functionNode.getFunctionName());
+        return node instanceof FunctionNode fn && PIPELINE_EXPAND_FUNCTIONS.contains(fn.getFunctionName());
+    }
+
+    private M3PlanNode handleExpandedPipeline(List<M3ASTNode> children, int lhsEndIndex, FunctionNode functionNode) {
+        PipelineExpander expander = switch (functionNode.getFunctionName()) {
+            case Constants.Functions.Binary.BURN_RATE, Constants.Functions.Binary.AS_BURN_RATE, Constants.Functions.Binary.MULTI_BURN_RATE,
+                Constants.Functions.Binary.AS_MULTI_BURN_RATE -> new BurnRatePipelineExpander();
+            default -> throw new IllegalArgumentException("No pipeline expander for: " + functionNode.getFunctionName());
+        };
+        return expander.expand(children, lhsEndIndex, functionNode, this::handlePipelineOrGroupNode, this::handlePipelineChildren);
     }
 
     // True if M3ASTNode is a function node that takes a pipeline as an argument
@@ -329,70 +321,6 @@ public class M3ASTConverter {
         binaryPlanNode.addChild(lhs);
         binaryPlanNode.addChild(rhs);
         return binaryPlanNode;
-    }
-
-    // Expands burnRate(total) interval slo into:
-    // errors | moving(interval, sum) | asPercent(total | moving(interval, sum)) | scale(1/(100-slo)) | transformNull(0)
-    private M3PlanNode expandBurnRate(List<M3ASTNode> pipelineChildren, int lhsEndIndex, FunctionNode functionNode) {
-        validateChildCount(functionNode, 3);
-        String interval = extractIntervalParameter(functionNode, 1);
-        double slo = extractSloParameter(functionNode, 2);
-
-        M3PlanNode lhs = handlePipelineChildren(pipelineChildren.subList(0, lhsEndIndex));
-        M3PlanNode rhs = handlePipelineOrGroupNode(functionNode.getChildren().getFirst());
-        return buildBurnRateChain(lhs, rhs, interval, slo);
-    }
-
-    // Expands multiBurnRate(total) interval1 interval2 slo into:
-    // min(burnRate(total, interval1, slo), burnRate(total, interval2, slo))
-    // Equivalent M3QL: fetch errors | multiBurnRate(fetch total) interval1 interval2 slo
-    private M3PlanNode expandMultiBurnRate(List<M3ASTNode> pipelineChildren, int lhsEndIndex, FunctionNode functionNode) {
-        validateChildCount(functionNode, 4);
-        String interval1 = extractIntervalParameter(functionNode, 1);
-        String interval2 = extractIntervalParameter(functionNode, 2);
-        double slo = extractSloParameter(functionNode, 3);
-
-        M3ASTNode rhsAst = functionNode.getChildren().getFirst();
-        M3PlanNode rhs1 = handlePipelineChildren(List.of(rhsAst));
-        M3PlanNode rhs2 = handlePipelineChildren(List.of(rhsAst));
-
-        List<M3ASTNode> lhsSlice = pipelineChildren.subList(0, lhsEndIndex);
-        M3PlanNode lhs1 = handlePipelineChildren(lhsSlice);
-        M3PlanNode lhs2 = handlePipelineChildren(lhsSlice);
-
-        M3PlanNode burnRate1 = buildBurnRateChain(lhs1, rhs1, interval1, slo);
-        M3PlanNode burnRate2 = buildBurnRateChain(lhs2, rhs2, interval2, slo);
-
-        UnionPlanNode union = new UnionPlanNode(M3PlannerContext.generateId());
-        union.addChild(burnRate1);
-        union.addChild(burnRate2);
-
-        AggregationPlanNode min = new AggregationPlanNode(M3PlannerContext.generateId(), AggregationType.MIN, List.of());
-        min.addChild(union);
-        return min;
-    }
-
-    // Builds: lhs | moving(interval, sum) | asPercent(rhs | moving(interval, sum)) | scale(1/(100-slo)) | transformNull(0)
-    private M3PlanNode buildBurnRateChain(M3PlanNode lhs, M3PlanNode rhs, String interval, double slo) {
-        double scaleFactor = 1.0 / (100.0 - slo);
-
-        MovingPlanNode movingLeft = new MovingPlanNode(M3PlannerContext.generateId(), interval, WindowAggregationType.SUM);
-        movingLeft.addChild(lhs);
-
-        MovingPlanNode movingRight = new MovingPlanNode(M3PlannerContext.generateId(), interval, WindowAggregationType.SUM);
-        movingRight.addChild(rhs);
-
-        AsPercentPlanNode asPercent = new AsPercentPlanNode(M3PlannerContext.generateId(), List.of());
-        asPercent.addChild(movingLeft);
-        asPercent.addChild(movingRight);
-
-        ScalePlanNode scale = new ScalePlanNode(M3PlannerContext.generateId(), scaleFactor);
-        scale.addChild(asPercent);
-
-        TransformNullPlanNode transformNull = new TransformNullPlanNode(M3PlannerContext.generateId(), 0.0);
-        transformNull.addChild(scale);
-
-        return transformNull;
     }
 
     private BinaryPlanNode createBinaryPlanNode(FunctionNode functionNode) {
@@ -456,41 +384,6 @@ public class M3ASTConverter {
             }
         }
         return false;
-    }
-
-    private void validateChildCount(FunctionNode functionNode, int expectedCount) {
-        int actual = functionNode.getChildren().size();
-        if (actual != expectedCount) {
-            throw new IllegalArgumentException(
-                functionNode.getFunctionName() + " expects exactly " + expectedCount + " arguments, got " + actual
-            );
-        }
-    }
-
-    private String extractIntervalParameter(FunctionNode functionNode, int index) {
-        M3ASTNode child = functionNode.getChildren().get(index);
-        if (!(child instanceof ValueNode valueNode)) {
-            throw new IllegalArgumentException("Argument 'interval' of " + functionNode.getFunctionName() + " must be a value");
-        }
-        String interval = Utils.stripDoubleQuotes(valueNode.getValue());
-        M3Duration.valueOf(interval);
-        return interval;
-    }
-
-    private double extractSloParameter(FunctionNode functionNode, int index) {
-        M3ASTNode child = functionNode.getChildren().get(index);
-        if (!(child instanceof ValueNode valueNode)) {
-            throw new IllegalArgumentException("Argument 'slo' of " + functionNode.getFunctionName() + " must be a value");
-        }
-        String raw = Utils.stripDoubleQuotes(valueNode.getValue());
-        double slo;
-        try {
-            slo = Double.parseDouble(raw);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("SLO must be a numeric value, got: " + raw, e);
-        }
-        Utils.validateSlo(slo);
-        return slo;
     }
 
     // Handles a regular function node by creating the corresponding plan node and chaining appropriately
