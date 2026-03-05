@@ -3,4 +3,5 @@ AGG(SUM, groupBy=[])
     UNION
       MOCK_FETCH(values=[-10.0, 20.0, 30.0], tags={name=a, env=prod})
       MOCK_FETCH_LINE(value=-5.0, tags={name=b, env=dev})
+      MOCK_FETCH_LINEAR(start=-2.0, stop=10.0, stepSize=4.0, tags={name=c, env=dev})
       MOCK_FETCH_PERIODIC(periodicFunction=sine, min=0.0, max=10.0, period=4.0, tags={name=c, env=test})
