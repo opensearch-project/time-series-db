@@ -7,13 +7,7 @@ test_setup:
   description: "Integration tests for burnRate, burnRateMultiplier, and multiBurnRate (aligned with Go burn_rate tests)."
 
   index_configs:
-    - name: "burn_rate_10"
-      shards: 1
-      replicas: 0
-    - name: "burn_rate_15"
-      shards: 1
-      replicas: 0
-    - name: "burn_rate_20"
+    - name: "burn_rate"
       shards: 1
       replicas: 0
 
@@ -24,171 +18,73 @@ test_case:
     tolerance: 0.000001
 
   input_data_list:
-    - index_name: "burn_rate_10"
-      input_data_type: FIXED_INTERVAL
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      regular_metrics:
-        - labels: "name:errors_5s_999"
-          values: [1,2,3,4,5,6,7,8,9,10]
-        - labels: "name:total_5s_999"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_5s_99"
-          values: [1,2,3,4,5,6,7,8,9,10]
-        - labels: "name:total_5s_99"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_zeros"
-          values: [0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:total_zeros_u"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_short_zero"
-          values: [1,2,3,4,0,6,7,8,9,10]
-        - labels: "name:total_short_zero"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_long_zero"
-          values: [0,0,0,0,0,0,7,8,9,10]
-        - labels: "name:total_long_zero"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_end_zero"
-          values: [1,2,3,4,0,0,0,0,0,0]
-        - labels: "name:total_end_zero"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_all_zero"
-          values: [0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:total_all_zero"
-          values: [0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:errors_short_all"
-          values: [1,2,3,4,0,6,7,8,9,10]
-        - labels: "name:total_short_all"
-          values: [1000,1000,1000,1000,0,1000,1000,1000,1000,1000]
-        - labels: "name:errors_long_all"
-          values: [0,0,0,0,0,0,7,8,9,10]
-        - labels: "name:total_long_all"
-          values: [0,0,0,0,0,0,1000,1000,1000,1000]
-        - labels: "name:errors_end_all"
-          values: [1,2,3,4,0,0,0,0,0,0]
-        - labels: "name:total_end_all"
-          values: [1000,1000,1000,1000,0,0,0,0,0,0]
-        - labels: "name:errors_nan_short"
-          values: [1,2,3,4,null,6,7,8,9,10]
-        - labels: "name:total_nan_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_nan_long"
-          values: [null,null,null,null,null,null,7,8,9,10]
-        - labels: "name:total_nan_long"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_nan_end"
-          values: [1,2,3,4,null,null,null,null,null,null]
-        - labels: "name:total_nan_end"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_nan_short_all"
-          values: [1,2,3,4,null,6,7,8,9,10]
-        - labels: "name:total_nan_short_all"
-          values: [1000,1000,1000,1000,null,1000,1000,1000,1000,1000]
-        - labels: "name:errors_nan_long_all"
-          values: [null,null,null,null,null,null,7,8,9,10]
-        - labels: "name:total_nan_long_all"
-          values: [null,null,null,null,null,null,1000,1000,1000,1000]
-        - labels: "name:errors_nan_end_all"
-          values: [1,2,3,4,null,null,null,null,null,null]
-        - labels: "name:total_nan_end_all"
-          values: [1000,1000,1000,1000,null,null,null,null,null,null]
-        - labels: "name:error_rate"
-          values: [0.001,0.01,0.1,0.001,0.001,0.001,0.001,0.001,0.001,0.001]
-        - labels: "name:errors_const"
-          values: [4,4,4,4,4,4,4,4,4,4]
-        - labels: "name:total_const"
-          values: [16,16,16,16,16,16,16,16,16,16]
-        - labels: "name:errors_zero"
-          values: [0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:total_zero"
-          values: [0,0,0,0,0,0,0,0,0,0]
-
-    - index_name: "burn_rate_15"
-      input_data_type: FIXED_INTERVAL
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:15:00Z"
-        step: "1m"
-      regular_metrics:
-        - labels: "name:errors_10s_999"
-          values: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
-        - labels: "name:total_10s_999"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_zeros"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:total_zeros_u"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_all_zero"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:total_all_zero"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-        - labels: "name:errors_multi_short_zero"
-          values: [1,2,3,4,0,0,7,8,9,10,11,12,13,14,15]
-        - labels: "name:total_multi_short_zero"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_long_zero_short"
-          values: [1,2,3,4,5,6,7,0,0,0,0,0,0,0,0]
-        - labels: "name:total_multi_long_zero_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_long_zero"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,13,14,15]
-        - labels: "name:total_multi_long_zero"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_short_all"
-          values: [1,2,3,4,0,0,7,8,9,10,11,12,13,14,15]
-        - labels: "name:total_multi_short_all"
-          values: [1000,1000,1000,1000,0,0,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_long_all_short"
-          values: [1,2,3,4,5,6,7,0,0,0,0,0,0,0,0]
-        - labels: "name:total_multi_long_all_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,0,0,0,0,0,0,0,0]
-        - labels: "name:errors_multi_long_all"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,13,14,15]
-        - labels: "name:total_multi_long_all"
-          values: [0,0,0,0,0,0,0,0,0,0,0,0,1000,1000,1000]
-        - labels: "name:errors_multi_nan_short"
-          values: [1,2,3,4,null,null,7,8,9,10,11,12,13,14,15]
-        - labels: "name:total_multi_nan_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_nan_long_short"
-          values: [1,2,3,4,5,6,7,null,null,null,null,null,null,null,null]
-        - labels: "name:total_multi_nan_long_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_nan_long"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,13,14,15]
-        - labels: "name:total_multi_nan_long"
-          values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_nan_short_all"
-          values: [1,2,3,4,null,null,7,8,9,10,11,12,13,14,15]
-        - labels: "name:total_multi_nan_short_all"
-          values: [1000,1000,1000,1000,null,null,1000,1000,1000,1000,1000,1000,1000,1000,1000]
-        - labels: "name:errors_multi_nan_long_all_short"
-          values: [1,2,3,4,5,6,7,null,null,null,null,null,null,null,null]
-        - labels: "name:total_multi_nan_long_all_short"
-          values: [1000,1000,1000,1000,1000,1000,1000,null,null,null,null,null,null,null,null]
-        - labels: "name:errors_multi_nan_long_all"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,13,14,15]
-        - labels: "name:total_multi_nan_long_all"
-          values: [null,null,null,null,null,null,null,null,null,null,null,null,1000,1000,1000]
-        - labels: "name:errors_const"
-          values: [4,4,4,4,4,4,4,4,4,4,4,4,4,4,4]
-        - labels: "name:total_const"
-          values: [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16]
-
-    - index_name: "burn_rate_20"
+    - index_name: "burn_rate"
       input_data_type: FIXED_INTERVAL
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
         max_timestamp: "2025-01-01T00:20:00Z"
         step: "1m"
       regular_metrics:
-        - labels: "name:errors_multi_15_5"
+        - labels: "name:errors"
           values: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-        - labels: "name:total_multi_15_5"
+        - labels: "name:total"
           values: [1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000]
+        - labels: "name:errors_zeros"
+          values: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_zeros"
+          values: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_const"
+          values: [4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4]
+        - labels: "name:total_const"
+          values: [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16]
+        - labels: "name:error_rate"
+          values: [0.001,0.01,0.1,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_short_zero"
+          values: [1,2,3,4,0,6,7,8,9,10,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_long_zero"
+          values: [0,0,0,0,0,0,7,8,9,10,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_end_zero"
+          values: [1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_nan_short"
+          values: [1,2,3,4,null,6,7,8,9,10,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_nan_long"
+          values: [null,null,null,null,null,null,7,8,9,10,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_nan_end"
+          values: [1,2,3,4,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+        - labels: "name:total_short_all"
+          values: [1000,1000,1000,1000,0,1000,1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_long_all"
+          values: [0,0,0,0,0,0,1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_end_all"
+          values: [1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_nan_long_all"
+          values: [null,null,null,null,null,null,1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_nan_end_all"
+          values: [1000,1000,1000,1000,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+        - labels: "name:errors_multi_short_zero"
+          values: [1,2,3,4,0,0,7,8,9,10,11,12,13,14,15,0,0,0,0,0]
+        - labels: "name:errors_multi_long_zero_short"
+          values: [1,2,3,4,5,6,7,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:errors_multi_long_zero"
+          values: [0,0,0,0,0,0,0,0,0,0,0,0,13,14,15,0,0,0,0,0]
+        - labels: "name:errors_multi_nan_short"
+          values: [1,2,3,4,null,null,7,8,9,10,11,12,13,14,15,0,0,0,0,0]
+        - labels: "name:errors_multi_nan_long_short"
+          values: [1,2,3,4,5,6,7,null,null,null,null,null,null,null,null,null,null,null,null,null]
+        - labels: "name:errors_multi_nan_long"
+          values: [null,null,null,null,null,null,null,null,null,null,null,null,13,14,15,0,0,0,0,0]
+        - labels: "name:total_multi_short_all"
+          values: [1000,1000,1000,1000,0,0,1000,1000,1000,1000,1000,1000,1000,1000,1000,0,0,0,0,0]
+        - labels: "name:total_multi_long_all_short"
+          values: [1000,1000,1000,1000,1000,1000,1000,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        - labels: "name:total_multi_long_all"
+          values: [0,0,0,0,0,0,0,0,0,0,0,0,1000,1000,1000,0,0,0,0,0]
+        - labels: "name:total_multi_nan_short_all"
+          values: [1000,1000,1000,1000,null,null,1000,1000,1000,1000,1000,1000,1000,1000,1000,0,0,0,0,0]
+        - labels: "name:total_multi_nan_long_all_short"
+          values: [1000,1000,1000,1000,1000,1000,1000,null,null,null,null,null,null,null,null,null,null,null,null,null]
+        - labels: "name:total_multi_nan_long_all"
+          values: [null,null,null,null,null,null,null,null,null,null,null,null,1000,1000,1000,0,0,0,0,0]
 
   queries:
     # -----------------------------------------------------------------------
@@ -197,7 +93,7 @@ test_case:
 
     - name: "empty_series"
       type: "m3ql"
-      indices: "burn_rate_10"
+      indices: "burn_rate"
       query: "total = fetch name:total_empty; fetch name:errors_empty | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
@@ -209,8 +105,8 @@ test_case:
 
     - name: "burnRate_5s_99.9"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_5s_999; fetch name:errors_5s_999 | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -218,13 +114,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_5s_999", type: "ratios"}
+          - metric: {name: "errors", type: "ratios"}
             values: [3.0, 4.0, 5.0, 6.0, 7.0]
 
     - name: "burnRate_5s_99"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_5s_99; fetch name:errors_5s_99 | burnRate(total) 5m 99"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | burnRate(total) 5m 99"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -232,13 +128,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_5s_99", type: "ratios"}
+          - metric: {name: "errors", type: "ratios"}
             values: [0.3, 0.4, 0.5, 0.6, 0.7]
 
     - name: "asBurnRate_alias"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_5s_999; fetch name:errors_5s_999 | asBurnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | asBurnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -246,13 +142,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_5s_999", type: "ratios"}
+          - metric: {name: "errors", type: "ratios"}
             values: [3.0, 4.0, 5.0, 6.0, 7.0]
 
     - name: "burnRate_10s_99.9"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_10s_999; fetch name:errors_10s_999 | burnRate(total) 10m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | burnRate(total) 10m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -260,13 +156,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_10s_999", type: "ratios"}
+          - metric: {name: "errors", type: "ratios"}
             values: [5.5, 6.5, 7.5, 8.5, 9.5]
 
     - name: "burnRate_5s_99.9_all_zeros_unexpected"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_zeros_u; fetch name:errors_zeros | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_zeros | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -279,8 +175,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_zeros_shorter_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_short_zero; fetch name:errors_short_zero | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_short_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -293,8 +189,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_zeros_longer_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_long_zero; fetch name:errors_long_zero | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_long_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -307,8 +203,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_zeros_longer_at_end"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_end_zero; fetch name:errors_end_zero | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_end_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -321,8 +217,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_all_zeros_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_all_zero; fetch name:errors_all_zero | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_zeros; fetch name:errors_zeros | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -330,13 +226,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_all_zero", type: "ratios"}
+          - metric: {name: "errors_zeros", type: "ratios"}
             values: [0.0, 0.0, 0.0, 0.0, 0.0]
 
     - name: "burnRate_5s_99.9_zeros_shorter_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_short_all; fetch name:errors_short_all | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_short_all; fetch name:errors_short_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -344,13 +240,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_short_all", type: "ratios"}
+          - metric: {name: "errors_short_zero", type: "ratios"}
             values: [2.5, 3.75, 5.0, 6.25, 7.5]
 
     - name: "burnRate_5s_99.9_zeros_longer_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_long_all; fetch name:errors_long_all | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_long_all; fetch name:errors_long_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -358,13 +254,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_long_all", type: "ratios"}
+          - metric: {name: "errors_long_zero", type: "ratios"}
             values: [0.0, 0.0, 7.0, 7.5, 8.0]
 
     - name: "burnRate_5s_99.9_zeros_longer_at_end_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_end_all; fetch name:errors_end_all | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_end_all; fetch name:errors_end_zero | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -372,13 +268,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_end_all", type: "ratios"}
+          - metric: {name: "errors_end_zero", type: "ratios"}
             values: [2.5, 3.0, 3.5, 4.0, 0.0]
 
     - name: "burnRate_5s_99.9_NaNs_shorter_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_nan_short; fetch name:errors_nan_short | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_nan_short | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -391,8 +287,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_NaNs_longer_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_nan_long; fetch name:errors_nan_long | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_nan_long | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -405,8 +301,8 @@ test_case:
 
     - name: "burnRate_5s_99.9_NaNs_longer_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_nan_long_all; fetch name:errors_nan_long_all | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_nan_long_all; fetch name:errors_nan_long | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -414,13 +310,13 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_nan_long_all", type: "ratios"}
+          - metric: {name: "errors_nan_long", type: "ratios"}
             values: [0.0, 0.0, 7.0, 7.5, 8.0]
 
     - name: "burnRate_5s_99.9_NaNs_longer_at_end_all_series"
       type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_nan_end_all; fetch name:errors_nan_end_all | burnRate(total) 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_nan_end_all; fetch name:errors_nan_end | burnRate(total) 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:05:00Z"
         max_timestamp: "2025-01-01T00:10:00Z"
@@ -428,7 +324,7 @@ test_case:
       expected:
         status: "success"
         data:
-          - metric: {name: "errors_nan_end_all", type: "ratios"}
+          - metric: {name: "errors_nan_end", type: "ratios"}
             values: [2.5, 3.0, 3.5, 4.0, 0.0]
 
     # -----------------------------------------------------------------------
@@ -436,7 +332,7 @@ test_case:
     # -----------------------------------------------------------------------
     - name: "burnRateMultiplier_99.9"
       type: "m3ql"
-      indices: "burn_rate_10"
+      indices: "burn_rate"
       query: "fetch name:error_rate | burnRateMultiplier 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
@@ -450,7 +346,7 @@ test_case:
 
     - name: "burnRateMultiplier_90"
       type: "m3ql"
-      indices: "burn_rate_10"
+      indices: "burn_rate"
       query: "fetch name:error_rate | burnRateMultiplier 90"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
@@ -464,7 +360,7 @@ test_case:
 
     - name: "burnRateMultiplier_99.5"
       type: "m3ql"
-      indices: "burn_rate_10"
+      indices: "burn_rate"
       query: "fetch name:error_rate | burnRateMultiplier 99.5"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
@@ -481,7 +377,7 @@ test_case:
     # -----------------------------------------------------------------------
     - name: "multiBurnRate_empty_series"
       type: "m3ql"
-      indices: "burn_rate_15"
+      indices: "burn_rate"
       query: "total = fetch name:total_empty; fetch name:errors_empty | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
@@ -493,8 +389,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_10s_999; fetch name:errors_10s_999 | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -507,8 +403,8 @@ test_case:
 
     - name: "multiBurnRate_5s_10s_99.9_commutativity"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_10s_999; fetch name:errors_10s_999 | multiBurnRate(total) 5m 10m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | multiBurnRate(total) 5m 10m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -521,8 +417,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_10s_999; fetch name:errors_10s_999 | multiBurnRate(total) 10m 5m 99"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | multiBurnRate(total) 10m 5m 99"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -535,8 +431,8 @@ test_case:
 
     - name: "multiBurnRate_15s_5s_99.9"
       type: "m3ql"
-      indices: "burn_rate_20"
-      query: "total = fetch name:total_multi_15_5; fetch name:errors_multi_15_5 | multiBurnRate(total) 15m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | multiBurnRate(total) 15m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:15:00Z"
         max_timestamp: "2025-01-01T00:20:00Z"
@@ -549,8 +445,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_all_zeros_unexpected"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_zeros_u; fetch name:errors_zeros | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_zeros | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -563,8 +459,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_shorter_than_reset"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_short_zero; fetch name:errors_multi_short_zero | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_short_zero | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -577,8 +473,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_longer_than_reset_shorter_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_long_zero_short; fetch name:errors_multi_long_zero_short | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_long_zero_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -591,8 +487,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_longer_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_long_zero; fetch name:errors_multi_long_zero | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_long_zero | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -605,8 +501,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_all_zeros_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_all_zero; fetch name:errors_all_zero | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_zeros; fetch name:errors_zeros | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -619,8 +515,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_shorter_than_reset_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_short_all; fetch name:errors_multi_short_all | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_short_all; fetch name:errors_multi_short_zero | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -633,8 +529,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_longer_than_reset_shorter_than_lookback_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_long_all_short; fetch name:errors_multi_long_all_short | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_long_all_short; fetch name:errors_multi_long_zero_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -647,8 +543,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_zeros_longer_than_lookback_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_long_all; fetch name:errors_multi_long_all | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_long_all; fetch name:errors_multi_long_zero | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -661,8 +557,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_shorter_than_reset"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_short; fetch name:errors_multi_nan_short | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_nan_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -675,8 +571,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_longer_than_reset_shorter_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_long_short; fetch name:errors_multi_nan_long_short | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_nan_long_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -689,8 +585,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_longer_than_lookback"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_long; fetch name:errors_multi_nan_long | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors_multi_nan_long | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -703,8 +599,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_shorter_than_reset_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_short_all; fetch name:errors_multi_nan_short_all | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_nan_short_all; fetch name:errors_multi_nan_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -717,8 +613,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_longer_than_reset_shorter_than_lookback_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_long_all_short; fetch name:errors_multi_nan_long_all_short | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_nan_long_all_short; fetch name:errors_multi_nan_long_short | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -731,8 +627,8 @@ test_case:
 
     - name: "multiBurnRate_10s_5s_99.9_NaNs_longer_than_lookback_all_series"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_multi_nan_long_all; fetch name:errors_multi_nan_long_all | multiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total_multi_nan_long_all; fetch name:errors_multi_nan_long | multiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -745,8 +641,8 @@ test_case:
 
     - name: "asMultiBurnRate_alias"
       type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_10s_999; fetch name:errors_10s_999 | asMultiBurnRate(total) 10m 5m 99.9"
+      indices: "burn_rate"
+      query: "total = fetch name:total; fetch name:errors | asMultiBurnRate(total) 10m 5m 99.9"
       time_config:
         min_timestamp: "2025-01-01T00:10:00Z"
         max_timestamp: "2025-01-01T00:15:00Z"
@@ -756,126 +652,3 @@ test_case:
         data:
           - metric: {}
             values: [5.5, 6.5, 7.5, 8.5, 9.5]
-
-    # -----------------------------------------------------------------------
-    # Error handling — SLO validation
-    # -----------------------------------------------------------------------
-    - name: "burnRate_rejects_slo_zero"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_const; fetch name:errors_const | burnRate(total) 5m 0"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 0.0\"}"
-
-    - name: "burnRate_rejects_slo_100"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_const; fetch name:errors_const | burnRate(total) 5m 100"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 100.0\"}"
-
-    - name: "burnRate_rejects_slo_above_100"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "total = fetch name:total_const; fetch name:errors_const | burnRate(total) 5m 150"
-      time_config:
-        min_timestamp: "2025-01-01T00:05:00Z"
-        max_timestamp: "2025-01-01T00:10:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 150.0\"}"
-
-    - name: "burnRateMultiplier_rejects_slo_zero"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "fetch name:error_rate | burnRateMultiplier 0"
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:01:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 0.0\"}"
-
-    - name: "burnRateMultiplier_rejects_slo_100"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "fetch name:error_rate | burnRateMultiplier 100"
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:01:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 100.0\"}"
-
-    - name: "burnRateMultiplier_rejects_slo_above_100"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "fetch name:error_rate | burnRateMultiplier 150"
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:01:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 150.0\"}"
-
-    - name: "burnRateMultiplier_rejects_two_arguments"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "fetch name:error_rate | burnRateMultiplier 99.9 90"
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:01:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"burnRateMultiplier expects exactly one argument\"}"
-
-    - name: "burnRateMultiplier_rejects_non_numeric_slo"
-      type: "m3ql"
-      indices: "burn_rate_10"
-      query: "fetch name:error_rate | burnRateMultiplier abc"
-      time_config:
-        min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:01:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be a numeric value, got: abc\"}"
-
-    - name: "multiBurnRate_rejects_slo_zero"
-      type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_const; fetch name:errors_const | multiBurnRate(total) 10m 5m 0"
-      time_config:
-        min_timestamp: "2025-01-01T00:10:00Z"
-        max_timestamp: "2025-01-01T00:15:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 0.0\"}"
-
-    - name: "multiBurnRate_rejects_slo_100"
-      type: "m3ql"
-      indices: "burn_rate_15"
-      query: "total = fetch name:total_const; fetch name:errors_const | multiBurnRate(total) 10m 5m 100"
-      time_config:
-        min_timestamp: "2025-01-01T00:10:00Z"
-        max_timestamp: "2025-01-01T00:15:00Z"
-        step: "1m"
-      expected:
-        status: "failure"
-        error_message: "Query execution failed: status=400, error={\"error\":\"SLO must be between 0 and 100 (exclusive), got: 100.0\"}"

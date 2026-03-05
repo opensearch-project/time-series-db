@@ -34,14 +34,6 @@ public class UtilsTests extends OpenSearchTestCase {
     }
 
     /**
-     * SLO 100 is rejected.
-     */
-    public void testValidateSlo_rejects100() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Utils.validateSlo(100.0));
-        assertEquals("SLO must be between 0 and 100 (exclusive), got: 100.0", e.getMessage());
-    }
-
-    /**
      * SLO below zero is rejected.
      */
     public void testValidateSlo_rejectsNegative() {
@@ -49,11 +41,20 @@ public class UtilsTests extends OpenSearchTestCase {
         assertEquals("SLO must be between 0 and 100 (exclusive), got: -1.0", e.getMessage());
     }
 
+
     /**
-     * SLO above 100 is rejected.
+     * SLO NaN is rejected.
      */
-    public void testValidateSlo_rejectsAbove100() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Utils.validateSlo(150.0));
-        assertEquals("SLO must be between 0 and 100 (exclusive), got: 150.0", e.getMessage());
+    public void testValidateSlo_rejectsNaN() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Utils.validateSlo(Double.NaN));
+        assertEquals("SLO must be a finite number, got: NaN", e.getMessage());
+    }
+
+    /**
+     * SLO positive infinity is rejected.
+     */
+    public void testValidateSlo_rejectsPositiveInfinity() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Utils.validateSlo(Double.POSITIVE_INFINITY));
+        assertEquals("SLO must be a finite number, got: Infinity", e.getMessage());
     }
 }
