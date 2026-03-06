@@ -35,6 +35,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.M3PlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchLinePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPeriodicPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MovingPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.NonNegativeDerivativePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.OffsetPlanNode;
@@ -108,6 +109,8 @@ public class M3PlanNodeFactory {
                 return MockFetchPlanNode.of(functionNode);
             case Constants.Functions.MOCK_FETCH_LINE:
                 return MockFetchLinePlanNode.of(functionNode);
+            case Constants.Functions.MOCK_FETCH_PERIODIC:
+                return MockFetchPeriodicPlanNode.of(functionNode);
             case Constants.Functions.HEAD:
                 return HeadPlanNode.of(functionNode);
             case Constants.Functions.TAIL:

@@ -60,6 +60,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ValueFilterPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.WherePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchLinePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MockFetchPeriodicPlanNode;
 import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
@@ -1458,6 +1459,50 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
         assertNotNull(result);
         assertNotNull(result.getFullQuery());
         // The coordinator should have both MockFetchLineStage and ScaleStage
+    }
+
+    /**
+     * Test MockFetchPeriodicPlanNode visitor creates MockFetchPeriodicStage.
+     */
+    public void testMockFetchPeriodicPlanNode() {
+        MockFetchPeriodicPlanNode planNode = new MockFetchPeriodicPlanNode(
+            1,
+            "sine",
+            0,
+            10,
+            4,
+            Map.of("name", "test_metric", "env", "prod")
+        );
+
+        SourceBuilderVisitor.ComponentHolder result = visitor.visit(planNode);
+        assertNotNull(result);
+        assertNotNull(result.getFullQuery());
+    }
+
+    /**
+     * Test MockFetchPeriodicPlanNode with empty tags.
+     */
+    public void testMockFetchPeriodicPlanNodeWithEmptyTags() {
+        MockFetchPeriodicPlanNode planNode = new MockFetchPeriodicPlanNode(1, "cosine", -5, 5, 8, Map.of());
+
+        SourceBuilderVisitor.ComponentHolder result = visitor.visit(planNode);
+        assertNotNull(result);
+        assertNotNull(result.getFullQuery());
+    }
+
+    /**
+     * Test MockFetchPeriodicPlanNode with triangle wave and scale stage.
+     */
+    public void testMockFetchPeriodicPlanNodeWithScaleStage() {
+        // Create a plan with MockFetchPeriodic wrapped in a Scale node
+        MockFetchPeriodicPlanNode mockFetchPeriodic = new MockFetchPeriodicPlanNode(2, "triangle", 1, 8, 6, Map.of("name", "wave"));
+        ScalePlanNode scalePlan = new ScalePlanNode(1, 2.0);
+        scalePlan.addChild(mockFetchPeriodic);
+
+        SourceBuilderVisitor.ComponentHolder result = visitor.visit(scalePlan);
+        assertNotNull(result);
+        assertNotNull(result.getFullQuery());
+        // The coordinator should have both MockFetchPeriodicStage and ScaleStage
     }
 
     // ========== Metrics Tests ==========

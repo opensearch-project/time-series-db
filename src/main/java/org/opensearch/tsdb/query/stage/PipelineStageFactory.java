@@ -40,6 +40,7 @@ import org.opensearch.tsdb.lang.m3.stage.MaxStage;
 import org.opensearch.tsdb.lang.m3.stage.MinStage;
 import org.opensearch.tsdb.lang.m3.stage.MockFetchStage;
 import org.opensearch.tsdb.lang.m3.stage.MockFetchLineStage;
+import org.opensearch.tsdb.lang.m3.stage.MockFetchPeriodicStage;
 import org.opensearch.tsdb.lang.m3.stage.MovingStage;
 import org.opensearch.tsdb.lang.m3.stage.MultiplyStage;
 import org.opensearch.tsdb.lang.m3.stage.NonNegativeDerivativeStage;
@@ -155,6 +156,7 @@ public class PipelineStageFactory {
             registerStage(MinStage.class);
             registerStage(MockFetchStage.class);
             registerStage(MockFetchLineStage.class);
+            registerStage(MockFetchPeriodicStage.class);
             registerStage(MovingStage.class);
             registerStage(MultiplyStage.class);
             registerStage(NonNegativeDerivativeStage.class);
