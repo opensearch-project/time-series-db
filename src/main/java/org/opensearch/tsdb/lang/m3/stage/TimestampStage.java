@@ -13,7 +13,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
-import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
@@ -60,12 +59,6 @@ public class TimestampStage implements UnaryPipelineStage {
     /**
      * Replaces each sample's value with the start time of that step in seconds (Unix time).
      *
-     * <p>Uses the series <strong>step grid</strong> ({@code minTimestamp}, {@code step}), not the
-     * actual timestamp of each sample. For step index {@code j}, the emitted value is
-     * {@code (minTimestamp + i * step) / 1000.0} in seconds. Output has one sample per input
-     * sample; the timestamp of each output sample is the same step start (in ms), and the value
-     * is that time in seconds.
-     *
      */
     @Override
     public List<TimeSeries> process(List<TimeSeries> input) {
@@ -77,18 +70,24 @@ public class TimestampStage implements UnaryPipelineStage {
         }
         List<TimeSeries> result = new ArrayList<>(input.size());
         for (TimeSeries series : input) {
-            SampleList samples = series.getSamples();
-            long minTimestamp = series.getMinTimestamp();
-            long step = series.getStep();
-            List<Sample> mappedSamples = new ArrayList<>(samples.size());
-            for (int i = 0; i < samples.size(); i++) {
-                long stepStartMs = minTimestamp + (long) i * step;
-                double valueSeconds = stepStartMs / MS_PER_SECOND;
-                mappedSamples.add(new FloatSample(stepStartMs, valueSeconds));
+            // Skip grid computation for series with no data.
+            if (series.getSamples().isEmpty()) {
+                result.add(series);
+                continue;
             }
+            // Compute the step grid.
+            long minTimestamp = series.getMinTimestamp();
+            long maxTimestamp = series.getMaxTimestamp();
+            long step = series.getStep();
+            List<Sample> resultSamples = new ArrayList<>();
+            for (long stepStartMs = minTimestamp; stepStartMs <= maxTimestamp; stepStartMs += step) {
+                double valueSeconds = stepStartMs / MS_PER_SECOND;
+                resultSamples.add(new FloatSample(stepStartMs, valueSeconds));
+            }
+            // Create a new time series with the generated timestamp samples.
             result.add(
                 new TimeSeries(
-                    mappedSamples,
+                    resultSamples,
                     series.getLabels(),
                     series.getMinTimestamp(),
                     series.getMaxTimestamp(),
@@ -98,6 +97,16 @@ public class TimestampStage implements UnaryPipelineStage {
             );
         }
         return result;
+    }
+
+    @Override
+    public boolean supportConcurrentSegmentSearch() {
+        return true;
+    }
+
+    @Override
+    public boolean isCoordinatorOnly() {
+        return false;
     }
 
     @Override

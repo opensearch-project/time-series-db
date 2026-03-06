@@ -36,6 +36,8 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TailPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.HistogramPercentilePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IntegralPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.IsNonNullPlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.NonNegativeDerivativePlanNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.TimestampPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.KeepLastValuePlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.LogarithmPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.MapKeyPlanNode;
@@ -699,6 +701,56 @@ public class SourceBuilderVisitorTests extends OpenSearchTestCase {
 
         // Should not throw an exception
         assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test NonNegativeDerivativePlanNode with correct number of children (1).
+     */
+    public void testNonNegativeDerivativePlanNodeWithOneChild() {
+        NonNegativeDerivativePlanNode planNode = new NonNegativeDerivativePlanNode(1, Double.NaN);
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test NonNegativeDerivativePlanNode with maxValue and correct number of children (1).
+     */
+    public void testNonNegativeDerivativePlanNodeWithMaxValue() {
+        NonNegativeDerivativePlanNode planNode = new NonNegativeDerivativePlanNode(1, 100.0);
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test NonNegativeDerivativePlanNode with incorrect number of children (0).
+     */
+    public void testNonNegativeDerivativePlanNodeWithNoChildren() {
+        NonNegativeDerivativePlanNode planNode = new NonNegativeDerivativePlanNode(1, Double.NaN);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("NonNegativeDerivativePlanNode must have exactly one child", exception.getMessage());
+    }
+
+    /**
+     * Test TimestampPlanNode with correct number of children (1).
+     */
+    public void testTimestampPlanNodeWithOneChild() {
+        TimestampPlanNode planNode = new TimestampPlanNode(1);
+        planNode.addChild(createMockFetchNode(2));
+
+        assertNotNull(visitor.visit(planNode));
+    }
+
+    /**
+     * Test TimestampPlanNode with incorrect number of children (0).
+     */
+    public void testTimestampPlanNodeWithNoChildren() {
+        TimestampPlanNode planNode = new TimestampPlanNode(1);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> visitor.visit(planNode));
+        assertEquals("TimestampPlanNode must have exactly one child", exception.getMessage());
     }
 
     /**

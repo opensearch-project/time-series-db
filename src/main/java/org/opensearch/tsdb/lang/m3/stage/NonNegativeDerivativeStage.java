@@ -12,14 +12,9 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tsdb.core.model.FloatSampleList;
-import org.opensearch.tsdb.core.model.SampleList;
-import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.stage.UnaryPipelineStage;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -34,28 +29,27 @@ import java.util.Objects;
  *        fetch a | nonNegativeDerivative maxValue
  */
 @PipelineStageAnnotation(name = "non_negative_derivative")
-public class NonNegativeDerivativeStage implements UnaryPipelineStage {
+public class NonNegativeDerivativeStage extends AbstractDerivativeStage {
 
     /** The name identifier for this pipeline stage type. */
     public static final String NAME = "non_negative_derivative";
 
-    /** field name of max value when constructing from args */
     private static final String ARG_MAX_VALUE = "max_value";
 
     /** Optional max value for counter wrap detection; NaN means not set. */
     private final double maxValue;
 
     /**
-     * Constructor with optional max value for counter wrap.
+     * Constructor for NonNegativeDerivativeStage with an optional max value for counter wrap detection.
      *
-     * @param maxValue optional max value (use {@link Double#NaN} when not set)
+     * @param maxValue the max counter value; NaN if not set
      */
     public NonNegativeDerivativeStage(double maxValue) {
         this.maxValue = maxValue;
     }
 
     /**
-     * Constructor with no max value (downward trends produce NaN).
+     * Constructor for NonNegativeDerivativeStage with no max value.
      */
     public NonNegativeDerivativeStage() {
         this(Double.NaN);
@@ -70,69 +64,22 @@ public class NonNegativeDerivativeStage implements UnaryPipelineStage {
     }
 
     @Override
-    public List<TimeSeries> process(List<TimeSeries> input) {
-        if (input == null) {
-            throw new NullPointerException(getName() + " stage received null input");
-        }
-        if (input.isEmpty()) {
-            return input;
-        }
-
-        List<TimeSeries> result = new ArrayList<>(input.size());
-
-        for (TimeSeries ts : input) {
-            SampleList samples = ts.getSamples();
-            if (samples.isEmpty()) {
-                result.add(ts);
-                continue;
+    protected void computeDerivative(double prevValue, double currentValue, long currTimestamp, FloatSampleList.Builder builder) {
+        double derivativeValue;
+        if (Double.isNaN(prevValue) || Double.isNaN(currentValue)) {
+            derivativeValue = Double.NaN;
+        } else {
+            // Calculate the difference between the current and previous values
+            double diff = currentValue - prevValue;
+            if (diff >= 0) {
+                derivativeValue = diff;
+            } else if (hasMaxValue() && maxValue >= currentValue) {
+                derivativeValue = (maxValue - prevValue) + currentValue + 1.0;
+            } else {
+                derivativeValue = Double.NaN;
             }
-
-            FloatSampleList.Builder resultBuilder = new FloatSampleList.Builder(samples.size());
-            long step = ts.getStep();
-
-            for (int i = 1; i < samples.size(); i++) {
-                long prevTimestamp = samples.getTimestamp(i - 1);
-                long currTimestamp = samples.getTimestamp(i);
-                // The unfold stage aligns timestamps to step boundaries. If previous timestamp + step != current timestamp,
-                // this indicates a null data point in the input.
-                // This ensures that derivative only emits non-null values when there are 2 consecutive samples with no gap.
-                if (prevTimestamp + step != currTimestamp) {
-                    continue;
-                }
-
-                double prevValue = samples.getValue(i - 1);
-                double currentValue = samples.getValue(i);
-
-                double derivativeValue;
-                if (Double.isNaN(prevValue) || Double.isNaN(currentValue)) {
-                    derivativeValue = Double.NaN;
-                } else {
-                    double diff = currentValue - prevValue;
-                    if (diff >= 0) {
-                        derivativeValue = diff;
-                    } else if (hasMaxValue() && maxValue >= currentValue) {
-                        // Counter wrap: (maxValue - prevValue) + currentValue + 1.0
-                        derivativeValue = (maxValue - prevValue) + currentValue + 1.0;
-                    } else {
-                        derivativeValue = Double.NaN;
-                    }
-                }
-                resultBuilder.add(currTimestamp, derivativeValue);
-            }
-
-            result.add(
-                new TimeSeries(
-                    resultBuilder.build(),
-                    ts.getLabels(),
-                    ts.getMinTimestamp(),
-                    ts.getMaxTimestamp(),
-                    ts.getStep(),
-                    ts.getAlias()
-                )
-            );
         }
-
-        return result;
+        builder.add(currTimestamp, derivativeValue);
     }
 
     @Override
@@ -156,7 +103,7 @@ public class NonNegativeDerivativeStage implements UnaryPipelineStage {
      * Create a NonNegativeDerivativeStage instance from the input stream for deserialization.
      *
      * @param in the stream input to read from
-     * @return a new NonNegativeDerivativeStage instance (maxValue is read from stream; use Double.NaN for "not set")
+     * @return a new NonNegativeDerivativeStage instance
      * @throws IOException if an I/O error occurs during deserialization
      */
     public static NonNegativeDerivativeStage readFrom(StreamInput in) throws IOException {
@@ -165,11 +112,10 @@ public class NonNegativeDerivativeStage implements UnaryPipelineStage {
     }
 
     /**
-     * Create a NonNegativeDerivativeStage from an arguments map.
+     * Create a NonNegativeDerivativeStage from arguments map.
      *
      * @param args Map of argument names to values
      * @return NonNegativeDerivativeStage instance
-     * @throws IllegalArgumentException if args is null
      */
     public static NonNegativeDerivativeStage fromArgs(Map<String, Object> args) {
         if (args == null) {
@@ -198,10 +144,5 @@ public class NonNegativeDerivativeStage implements UnaryPipelineStage {
     @Override
     public int hashCode() {
         return Objects.hash(NAME, maxValue);
-    }
-
-    @Override
-    public long estimateMemoryOverhead(List<TimeSeries> input) {
-        return UnaryPipelineStage.estimateSampleReuseOverhead(input);
     }
 }

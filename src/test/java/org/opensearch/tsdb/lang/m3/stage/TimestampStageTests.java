@@ -120,6 +120,16 @@ public class TimestampStageTests extends AbstractWireSerializingTestCase<Timesta
         assertEquals("timestamp", stage.getName());
     }
 
+    public void testSupportConcurrentSegmentSearch() {
+        TimestampStage stage = new TimestampStage();
+        assertTrue(stage.supportConcurrentSegmentSearch());
+    }
+
+    public void testIsCoordinatorOnly() {
+        TimestampStage stage = new TimestampStage();
+        assertFalse(stage.isCoordinatorOnly());
+    }
+
     public void testFromArgs() {
         TimestampStage stage = TimestampStage.fromArgs(Map.of());
         assertNotNull(stage);
