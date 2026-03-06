@@ -28,7 +28,7 @@ import java.util.Objects;
  * Usage: fetch a | nonNegativeDerivative
  *        fetch a | nonNegativeDerivative maxValue
  */
-@PipelineStageAnnotation(name = "non_negative_derivative")
+@PipelineStageAnnotation(name = NonNegativeDerivativeStage.NAME)
 public class NonNegativeDerivativeStage extends AbstractDerivativeStage {
 
     /** The name identifier for this pipeline stage type. */

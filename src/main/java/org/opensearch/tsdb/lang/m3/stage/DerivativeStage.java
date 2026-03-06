@@ -27,7 +27,7 @@ import java.util.Map;
  *
  * Usage: fetch a | derivative
  */
-@PipelineStageAnnotation(name = "derivative")
+@PipelineStageAnnotation(name = DerivativeStage.NAME)
 public class DerivativeStage extends AbstractDerivativeStage {
     /** The name identifier for this pipeline stage type. */
     public static final String NAME = "derivative";

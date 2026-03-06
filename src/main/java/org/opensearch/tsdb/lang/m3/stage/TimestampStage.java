@@ -30,7 +30,7 @@ import java.util.Map;
  *
  * <p>Usage: fetch a | timestamp
  */
-@PipelineStageAnnotation(name = "timestamp")
+@PipelineStageAnnotation(name = TimestampStage.NAME)
 public class TimestampStage implements UnaryPipelineStage {
 
     /** The name identifier for this pipeline stage type. */
