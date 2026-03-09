@@ -105,12 +105,11 @@ public class NonNegativeDerivativeStageTests extends OpenSearchTestCase {
 
         assertEquals(1, result.size());
         List<Sample> out = result.get(0).getSamples().toList();
-        assertEquals(2, out.size());
-        assertTrue(Double.isNaN(out.get(0).getValue()));
-        assertEquals(3.0, out.get(1).getValue(), 0.001);
+        assertEquals(1, out.size());
+        assertEquals(3.0, out.get(0).getValue(), 0.001);
     }
 
-    /** Current value NaN: derivative is NaN. */
+    /** Current value NaN: sample is skipped. */
     public void testProcessNaNCurrentValue() {
         NonNegativeDerivativeStage stage = new NonNegativeDerivativeStage();
         ByteLabels labels = ByteLabels.fromStrings("name", "x");
@@ -119,9 +118,7 @@ public class NonNegativeDerivativeStageTests extends OpenSearchTestCase {
         List<TimeSeries> result = stage.process(List.of(series));
         assertEquals(1, result.size());
         List<Sample> out = result.get(0).getSamples().toList();
-        assertEquals(2, out.size());
-        assertTrue(Double.isNaN(out.get(0).getValue()));
-        assertTrue(Double.isNaN(out.get(1).getValue()));
+        assertEquals(0, out.size());
     }
 
     public void testFromArgsNoMaxValue() {
@@ -161,7 +158,7 @@ public class NonNegativeDerivativeStageTests extends OpenSearchTestCase {
         assertEquals("alias", result.get(0).getAlias());
     }
 
-    /** Negative diff with maxValue set but maxValue < currentValue: emit NaN (no valid wrap). */
+    /** Negative diff with maxValue set but maxValue < currentValue: sample is skipped. */
     public void testProcessNegativeDiffMaxValueBelowCurrent() {
         NonNegativeDerivativeStage stage = new NonNegativeDerivativeStage(10.0);
         ByteLabels labels = ByteLabels.fromStrings("name", "c");
@@ -169,8 +166,7 @@ public class NonNegativeDerivativeStageTests extends OpenSearchTestCase {
         TimeSeries series = new TimeSeries(samples, labels, 1000L, 2000L, 1000L, null);
         List<TimeSeries> result = stage.process(List.of(series));
         assertEquals(1, result.size());
-        assertEquals(1, result.get(0).getSamples().size());
-        assertTrue(Double.isNaN(result.get(0).getSamples().getValue(0)));
+        assertEquals(0, result.get(0).getSamples().size());
     }
 
     /** fromArgs with string value uses Double.parseDouble. */

@@ -18,10 +18,6 @@ import java.util.List;
 /**
  * Abstract base class for derivative-style pipeline stages.
  *
- * <p>Handles the shared iteration logic: null/empty checks, consecutive-timestamp
- * validation, and {@link TimeSeries} construction. Subclasses only define how each
- * pair of consecutive values is turned into a derivative value via
- * {@link #computeDerivative(double, double, long, FloatSampleList.Builder)}.
  */
 public abstract class AbstractDerivativeStage implements UnaryPipelineStage {
 

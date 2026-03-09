@@ -65,21 +65,17 @@ public class NonNegativeDerivativeStage extends AbstractDerivativeStage {
 
     @Override
     protected void computeDerivative(double prevValue, double currentValue, long currTimestamp, FloatSampleList.Builder builder) {
-        double derivativeValue;
-        if (Double.isNaN(prevValue) || Double.isNaN(currentValue)) {
-            derivativeValue = Double.NaN;
-        } else {
-            // Calculate the difference between the current and previous values
+        // Note: Compute derivative for two cases (aligned with M3 behavior):
+        // 1) diff >= 0: normal monotonic increase
+        // 2) diff < 0 and maxValue >= currentValue: apply rollover
+        if (!Double.isNaN(prevValue) && !Double.isNaN(currentValue)) {
             double diff = currentValue - prevValue;
             if (diff >= 0) {
-                derivativeValue = diff;
+                builder.add(currTimestamp, diff);
             } else if (hasMaxValue() && maxValue >= currentValue) {
-                derivativeValue = (maxValue - prevValue) + currentValue + 1.0;
-            } else {
-                derivativeValue = Double.NaN;
+                builder.add(currTimestamp, (maxValue - prevValue) + currentValue + 1.0);
             }
         }
-        builder.add(currTimestamp, derivativeValue);
     }
 
     @Override
