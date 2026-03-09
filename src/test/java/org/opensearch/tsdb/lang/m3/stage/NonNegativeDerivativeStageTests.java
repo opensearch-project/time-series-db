@@ -63,9 +63,8 @@ public class NonNegativeDerivativeStageTests extends OpenSearchTestCase {
 
         assertEquals(1, result.size());
         List<Sample> out = result.get(0).getSamples().toList();
-        assertEquals(2, out.size());
-        assertTrue("First diff (50->30) should be NaN", Double.isNaN(out.get(0).getValue()));
-        assertEquals(10.0, out.get(1).getValue(), 0.001);
+        assertEquals(1, out.size());
+        assertEquals(10.0, out.get(0).getValue(), 0.001);
     }
 
     public void testProcessCounterWrapWithMaxValue() {
