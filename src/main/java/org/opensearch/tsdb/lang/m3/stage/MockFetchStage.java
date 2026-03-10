@@ -41,10 +41,11 @@ public class MockFetchStage extends AbstractMockFetchStage {
      * @param values List of values to generate
      * @param tags Map of tag key-value pairs for the series
      * @param startTime Start timestamp in milliseconds
+     * @param endTime End timestamp in milliseconds
      * @param step Step size in milliseconds
      */
-    public MockFetchStage(List<Double> values, Map<String, String> tags, long startTime, long step) {
-        super(tags, startTime, step);
+    public MockFetchStage(List<Double> values, Map<String, String> tags, long startTime, long endTime, long step) {
+        super(tags, startTime, endTime, step);
         if (values == null || values.isEmpty()) {
             throw new IllegalArgumentException("MockFetch requires at least one value");
         }
@@ -53,6 +54,14 @@ public class MockFetchStage extends AbstractMockFetchStage {
 
     @Override
     protected List<Double> generateValues() {
+        // Calculate maximum samples (inclusive endTime)
+        int maxSamples = (int) ((endTime - startTime) / step) + 1;
+
+        // Limit values to fit within the time range
+        if (values.size() > maxSamples) {
+            return values.subList(0, maxSamples);
+        }
+
         return values;
     }
 
@@ -98,8 +107,9 @@ public class MockFetchStage extends AbstractMockFetchStage {
         @SuppressWarnings("unchecked")
         Map<String, String> tags = (Map<String, String>) commonFields[0];
         long startTime = (long) commonFields[1];
-        long step = (long) commonFields[2];
-        return new MockFetchStage(values, tags, startTime, step);
+        long endTime = (long) commonFields[2];
+        long step = (long) commonFields[3];
+        return new MockFetchStage(values, tags, startTime, endTime, step);
     }
 
     /**
@@ -146,9 +156,10 @@ public class MockFetchStage extends AbstractMockFetchStage {
 
         Map<String, String> tags = parseTagsFromArgs(args, NAME);
         long startTime = parseStartTimeFromArgs(args);
+        long endTime = parseEndTimeFromArgs(args);
         long step = parseStepFromArgs(args);
 
-        return new MockFetchStage(values, tags, startTime, step);
+        return new MockFetchStage(values, tags, startTime, endTime, step);
     }
 
     /**

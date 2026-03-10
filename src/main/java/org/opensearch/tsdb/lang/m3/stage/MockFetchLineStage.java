@@ -33,7 +33,6 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
     public static final String NAME = "mockFetchLine";
 
     private final double value;
-    private final long endTime;
 
     /**
      * Constructor for MockFetchLineStage.
@@ -45,15 +44,14 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
      * @param step Step size in milliseconds
      */
     public MockFetchLineStage(double value, Map<String, String> tags, long startTime, long endTime, long step) {
-        super(tags, startTime, step);
+        super(tags, startTime, endTime, step);
         this.value = value;
-        this.endTime = endTime;
     }
 
     @Override
     protected List<Double> generateValues() {
-        // Calculate number of data points based on time range
-        int numPoints = (int) ((endTime - startTime) / step);
+        // Calculate number of data points based on time range (inclusive endTime)
+        int numPoints = (int) ((endTime - startTime) / step) + 1;
         List<Double> values = new ArrayList<>(numPoints);
         for (int i = 0; i < numPoints; i++) {
             values.add(value);
@@ -74,14 +72,12 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
     @Override
     public void toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.field("value", value);
-        builder.field("endTime", endTime);
         writeCommonFieldsToXContent(builder);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeDouble(value);
-        out.writeLong(endTime);
         writeCommonFields(out);
     }
 
@@ -94,12 +90,12 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
      */
     public static MockFetchLineStage readFrom(StreamInput in) throws IOException {
         double value = in.readDouble();
-        long endTime = in.readLong();
         Object[] commonFields = readCommonFields(in);
         @SuppressWarnings("unchecked")
         Map<String, String> tags = (Map<String, String>) commonFields[0];
         long startTime = (long) commonFields[1];
-        long step = (long) commonFields[2];
+        long endTime = (long) commonFields[2];
+        long step = (long) commonFields[3];
         return new MockFetchLineStage(value, tags, startTime, endTime, step);
     }
 
@@ -133,10 +129,9 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
             throw new IllegalArgumentException("Invalid value for MockFetchLine 'value' argument: " + args.get("value"), e);
         }
 
-        long endTime = ((Number) args.get("endTime")).longValue();
-
         Map<String, String> tags = parseTagsFromArgs(args, NAME);
         long startTime = parseStartTimeFromArgs(args);
+        long endTime = parseEndTimeFromArgs(args);
         long step = parseStepFromArgs(args);
 
         return new MockFetchLineStage(value, tags, startTime, endTime, step);
@@ -150,24 +145,16 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
         return value;
     }
 
-    /**
-     * Returns the end time for testing purposes.
-     * @return end time in milliseconds
-     */
-    public long getEndTime() {
-        return endTime;
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (!super.equals(obj)) return false;
         MockFetchLineStage that = (MockFetchLineStage) obj;
-        return Double.compare(that.value, value) == 0 && endTime == that.endTime;
+        return Double.compare(that.value, value) == 0;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), value, endTime);
+        return Objects.hash(super.hashCode(), value);
     }
 }

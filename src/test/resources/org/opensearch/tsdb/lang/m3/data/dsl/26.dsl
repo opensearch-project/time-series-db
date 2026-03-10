@@ -55,6 +55,7 @@
               "env" : "prod"
             },
             "startTime" : 1000000000,
+            "endTime" : 1001000000,
             "step" : 100000
           }
         ],
@@ -71,12 +72,12 @@
           {
             "type" : "mockFetchLine",
             "value" : -5.0,
-            "endTime" : 1001000000,
             "tags" : {
               "name" : "b",
               "env" : "dev"
             },
             "startTime" : 1000000000,
+            "endTime" : 1001000000,
             "step" : 100000
           }
         ],

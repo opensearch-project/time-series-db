@@ -421,7 +421,13 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
     @Override
     public ComponentHolder visit(MockFetchPlanNode planNode) {
         // Create MockFetchStage - generates synthetic data on coordinator
-        MockFetchStage mockFetchStage = new MockFetchStage(planNode.getValues(), planNode.getTags(), params.startTime(), params.step());
+        MockFetchStage mockFetchStage = new MockFetchStage(
+            planNode.getValues(),
+            planNode.getTags(),
+            params.startTime(),
+            params.endTime(),
+            params.step()
+        );
 
         // Build coordinator stages: MockFetchStage followed by all accumulated pipeline stages
         List<PipelineStage> coordinatorStages = new ArrayList<>();

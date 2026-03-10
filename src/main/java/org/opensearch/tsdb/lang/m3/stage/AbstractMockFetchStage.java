@@ -31,6 +31,7 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     protected final Map<String, String> tags;
     protected final long startTime;
     protected final long step;
+    protected final long endTime;
 
     /**
      * Constructor for AbstractMockFetchStage.
@@ -39,9 +40,10 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
      * @param startTime Start timestamp in milliseconds
      * @param step Step size in milliseconds
      */
-    protected AbstractMockFetchStage(Map<String, String> tags, long startTime, long step) {
+    protected AbstractMockFetchStage(Map<String, String> tags, long startTime, long endTime, long step) {
         this.tags = tags != null ? new HashMap<>(tags) : new HashMap<>();
         this.startTime = startTime;
+        this.endTime = endTime;
         this.step = step;
 
         // Add default tag if no tags provided
@@ -94,7 +96,6 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
             }
         }
 
-        long endTime = startTime + ((values.size() - 1) * step);
         Labels labels = ByteLabels.fromMap(tags);
         SampleList samples = builder.build();
 
@@ -104,7 +105,7 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     }
 
     /**
-     * Write common fields (tags, startTime, step) to output stream.
+     * Write common fields (tags, startTime, endTime, step) to output stream.
      * Subclasses should call this after writing their specific fields.
      *
      * @param out the output stream
@@ -113,26 +114,28 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     protected void writeCommonFields(StreamOutput out) throws IOException {
         out.writeMap(tags, StreamOutput::writeString, StreamOutput::writeString);
         out.writeVLong(startTime);
+        out.writeVLong(endTime);
         out.writeVLong(step);
     }
 
     /**
-     * Read common fields (tags, startTime, step) from input stream.
+     * Read common fields (tags, startTime, endTime, step) from input stream.
      * Subclasses should call this after reading their specific fields.
      *
      * @param in the input stream
-     * @return array containing [tags, startTime, step]
+     * @return array containing [tags, startTime, endTime, step]
      * @throws IOException if an I/O error occurs
      */
     protected static Object[] readCommonFields(StreamInput in) throws IOException {
         Map<String, String> tags = in.readMap(StreamInput::readString, StreamInput::readString);
         long startTime = in.readVLong();
+        long endTime = in.readVLong();
         long step = in.readVLong();
-        return new Object[] { tags, startTime, step };
+        return new Object[] { tags, startTime, endTime, step };
     }
 
     /**
-     * Write common fields (tags, startTime, step) to XContent.
+     * Write common fields (tags, startTime, endTime, step) to XContent.
      * Subclasses should call this after writing their specific fields.
      *
      * @param builder The XContentBuilder to write to
@@ -141,6 +144,7 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     protected void writeCommonFieldsToXContent(XContentBuilder builder) throws IOException {
         builder.field("tags", tags);
         builder.field("startTime", startTime);
+        builder.field("endTime", endTime);
         builder.field("step", step);
     }
 
@@ -180,6 +184,19 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     }
 
     /**
+    * Parse endTime from arguments map.
+    *
+    * @param args Map of argument names to values
+    * @return endTime value, or 0 if not provided
+    */
+    protected static long parseEndTimeFromArgs(Map<String, Object> args) {
+        if (args.containsKey("endTime") && args.get("endTime") instanceof Number num) {
+            return num.longValue();
+        }
+        return 0L;
+    }
+
+    /**
      * Parse step from arguments map.
      *
      * @param args Map of argument names to values
@@ -209,6 +226,14 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     }
 
     /**
+     * Returns the endTime for testing purposes.
+     * @return end time in milliseconds
+     */
+    public long getEndTime() {
+        return endTime;
+    }
+
+    /**
      * Returns the step for testing purposes.
      * @return step size in milliseconds
      */
@@ -226,11 +251,11 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         AbstractMockFetchStage that = (AbstractMockFetchStage) obj;
-        return startTime == that.startTime && step == that.step && Objects.equals(tags, that.tags);
+        return startTime == that.startTime && endTime == that.endTime && step == that.step && Objects.equals(tags, that.tags);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(tags, startTime, step);
+        return Objects.hash(tags, startTime, endTime, step);
     }
 }

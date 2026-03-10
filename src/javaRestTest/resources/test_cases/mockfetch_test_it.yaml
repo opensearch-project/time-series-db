@@ -265,7 +265,7 @@ test_case:
       query: "mockFetchLine 10"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:05:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -279,7 +279,7 @@ test_case:
       query: "mockFetchLine 42.5 name:constant_line region:us-east"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -293,7 +293,7 @@ test_case:
       query: "mockFetchLine -5.5 name:negative_line"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -307,7 +307,7 @@ test_case:
       query: "mockFetchLine 5 name:base | scale 3"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -321,7 +321,7 @@ test_case:
       query: "mockFetchLine 10 name:line1 | mockFetchLine 20 name:line2"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:02:00Z"
         step: "1m"
       expected:
         status: "success"

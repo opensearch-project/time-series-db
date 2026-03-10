@@ -27,8 +27,9 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
         List<Double> values = randomList(numValues, numValues, () -> randomDouble());
         Map<String, String> tags = randomBoolean() ? Map.of("name", "test") : Map.of("name", "test", "dc", "dca1");
         long startTime = randomLongBetween(0, 10000);
+        long endTime = startTime + randomLongBetween(100, 10000);
         long step = randomLongBetween(1, 100);
-        return new MockFetchStage(values, tags, startTime, step);
+        return new MockFetchStage(values, tags, startTime, endTime, step);
     }
 
     @Override
@@ -42,7 +43,7 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
         List<Double> values = List.of(1.0, 2.0, 3.0);
         Map<String, String> tags = Map.of("name", "test_series", "region", "us-east");
 
-        MockFetchStage stage = new MockFetchStage(values, tags, 1000L, 1L);
+        MockFetchStage stage = new MockFetchStage(values, tags, 1000L, 1002L, 1L);
 
         List<TimeSeries> result = stage.process(null);
 
@@ -57,7 +58,7 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
         assertEquals(2.0f, series.getSamples().getValue(1), 0.001f);
         assertEquals(3.0f, series.getSamples().getValue(2), 0.001f);
 
-        // Check timestamps (startTime + i * step)
+        // Check timestamps (startTime + i * step), inclusive of endTime
         assertEquals(1000L, series.getSamples().getTimestamp(0));
         assertEquals(1001L, series.getSamples().getTimestamp(1));
         assertEquals(1002L, series.getSamples().getTimestamp(2));
@@ -74,7 +75,7 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
 
     public void testMockFetchStageWithSingleValue() {
         List<Double> values = List.of(42.5);
-        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "constant"), 0L, 1L);
+        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "constant"), 0L, 1L, 1L);
 
         List<TimeSeries> result = stage.process(null);
 
@@ -84,12 +85,12 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
         assertEquals(42.5f, series.getSamples().getValue(0), 0.001f);
         assertEquals(0L, series.getSamples().getTimestamp(0));
         assertEquals(0L, series.getMinTimestamp());
-        assertEquals(0L, series.getMaxTimestamp());
+        assertEquals(1L, series.getMaxTimestamp());
     }
 
     public void testMockFetchStageWithLargerStep() {
         List<Double> values = List.of(1.0, 2.0, 3.0, 4.0);
-        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 10L);
+        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 40L, 10L);
 
         List<TimeSeries> result = stage.process(null);
 
@@ -97,16 +98,40 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
         TimeSeries series = result.get(0);
         assertEquals(4, series.getSamples().size());
 
-        // Check timestamps with larger step
         assertEquals(0L, series.getSamples().getTimestamp(0));
         assertEquals(10L, series.getSamples().getTimestamp(1));
         assertEquals(20L, series.getSamples().getTimestamp(2));
         assertEquals(30L, series.getSamples().getTimestamp(3));
     }
 
+    public void testMockFetchStageWithTruncation() {
+        List<Double> values = List.of(1.0, 2.0, 3.0, 4.0, 5.0);
+        // Range [0, 1] with step 1 = 2 points (inclusive endTime)
+        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "truncated"), 0L, 1L, 1L);
+
+        List<TimeSeries> result = stage.process(null);
+
+        assertEquals(1, result.size());
+        TimeSeries series = result.get(0);
+
+        // Should only have 2 samples (truncated from 5)
+        assertEquals(2, series.getSamples().size());
+        assertEquals(1.0f, series.getSamples().getValue(0), 0.001f);
+        assertEquals(2.0f, series.getSamples().getValue(1), 0.001f);
+
+        // Check timestamps
+        assertEquals(0L, series.getSamples().getTimestamp(0));
+        assertEquals(1L, series.getSamples().getTimestamp(1));
+
+        // Check metadata
+        assertEquals(0L, series.getMinTimestamp());
+        assertEquals(1L, series.getMaxTimestamp());
+        assertEquals(1L, series.getStep());
+    }
+
     public void testMockFetchStageProcessWithNonNullInput() {
         List<Double> values = List.of(10.0, 20.0);
-        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 1000L);
+        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 1000L, 1L);
 
         // Input should be ignored
         List<TimeSeries> dummyInput = List.of();
@@ -172,13 +197,13 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
 
     public void testMockFetchStageCreationValidation() {
         // Null values
-        assertThrows(IllegalArgumentException.class, () -> new MockFetchStage(null, Map.of(), 0L, 1L));
+        assertThrows(IllegalArgumentException.class, () -> new MockFetchStage(null, Map.of(), 0L, 100L, 1L));
 
         // Empty values
-        assertThrows(IllegalArgumentException.class, () -> new MockFetchStage(List.of(), Map.of(), 0L, 1L));
+        assertThrows(IllegalArgumentException.class, () -> new MockFetchStage(List.of(), Map.of(), 0L, 100L, 1L));
 
         // Null tags should be handled gracefully with default tag
-        MockFetchStage stage = new MockFetchStage(List.of(1.0, 2.0), null, 0L, 1L);
+        MockFetchStage stage = new MockFetchStage(List.of(1.0, 2.0), null, 0L, 100L, 1L);
         assertNotNull(stage.getTags());
         assertEquals(1, stage.getTags().size());
         assertEquals("mockFetch", stage.getTags().get("name"));
@@ -186,7 +211,7 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
 
     public void testMockFetchStageWithDefaultStartTimeAndStep() {
         List<Double> values = List.of(1.0, 2.0, 3.0);
-        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 1L);
+        MockFetchStage stage = new MockFetchStage(values, Map.of("name", "test"), 0L, 2L, 1L);
 
         List<TimeSeries> result = stage.process(null);
         assertEquals(1, result.size());
@@ -199,12 +224,12 @@ public class MockFetchStageTests extends AbstractWireSerializingTestCase<MockFet
     // ========== Metadata Tests ==========
 
     public void testMockFetchStageGetName() {
-        MockFetchStage stage = new MockFetchStage(List.of(1.0), Map.of(), 0L, 1L);
+        MockFetchStage stage = new MockFetchStage(List.of(1.0), Map.of(), 0L, 0L, 1L);
         assertEquals("mockFetch", stage.getName());
     }
 
     public void testMockFetchStageIsCoordinatorOnly() {
-        MockFetchStage stage = new MockFetchStage(List.of(1.0, 2.0, 3.0), Map.of(), 0L, 1L);
+        MockFetchStage stage = new MockFetchStage(List.of(1.0, 2.0, 3.0), Map.of(), 0L, 2L, 1L);
         assertTrue(stage.isCoordinatorOnly());
     }
 }

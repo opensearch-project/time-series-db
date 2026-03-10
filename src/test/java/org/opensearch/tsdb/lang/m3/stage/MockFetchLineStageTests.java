@@ -51,17 +51,17 @@ public class MockFetchLineStageTests extends AbstractWireSerializingTestCase<Moc
         assertEquals(1, result.size());
 
         TimeSeries series = result.get(0);
-        assertEquals(5, series.getSamples().size());
+        assertEquals(6, series.getSamples().size());
 
         // Check all values are constant
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             assertEquals(10.0f, series.getSamples().getValue(i), 0.001f);
             assertEquals(1000L + i, series.getSamples().getTimestamp(i));
         }
 
         // Check metadata
         assertEquals(1000L, series.getMinTimestamp());
-        assertEquals(1004L, series.getMaxTimestamp());
+        assertEquals(1005L, series.getMaxTimestamp());
         assertEquals(1L, series.getStep());
 
         // Check labels
@@ -76,16 +76,17 @@ public class MockFetchLineStageTests extends AbstractWireSerializingTestCase<Moc
 
         assertEquals(1, result.size());
         TimeSeries series = result.get(0);
-        assertEquals(3, series.getSamples().size());
+        assertEquals(4, series.getSamples().size());
 
         // All values should be -5.5
         assertEquals(-5.5f, series.getSamples().getValue(0), 0.001f);
         assertEquals(-5.5f, series.getSamples().getValue(1), 0.001f);
         assertEquals(-5.5f, series.getSamples().getValue(2), 0.001f);
+        assertEquals(-5.5f, series.getSamples().getValue(3), 0.001f);
     }
 
     public void testMockFetchLineStageWithSingleDataPoint() {
-        MockFetchLineStage stage = new MockFetchLineStage(42.0, Map.of("name", "single"), 0L, 1L, 1L);
+        MockFetchLineStage stage = new MockFetchLineStage(42.0, Map.of("name", "single"), 0L, 0L, 1L);
 
         List<TimeSeries> result = stage.process(null);
 
