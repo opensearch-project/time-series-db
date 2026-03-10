@@ -12,7 +12,6 @@ import org.opensearch.tsdb.lang.m3.common.Constants;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AbsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AggregationPlanNode;
-import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.BurnRateMultiplierPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasByTagsPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.AliasPlanNode;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.nodes.ChangedPlanNode;
@@ -148,7 +147,7 @@ public class M3PlanNodeFactory {
             case Constants.Functions.SCALE:
                 return ScalePlanNode.of(functionNode);
             case Constants.Functions.BURN_RATE_MULTIPLIER:
-                return BurnRateMultiplierPlanNode.of(functionNode);
+                return ScalePlanNode.ofBurnRateMultiplier(functionNode);
             case Constants.Functions.SCALE_TO_SECONDS:
                 return ScaleToSecondsPlanNode.of(functionNode);
             case Constants.Functions.DIVIDE_SCALAR:

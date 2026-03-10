@@ -7,8 +7,10 @@
  */
 package org.opensearch.tsdb.lang.m3.m3ql.plan.nodes;
 
+import org.opensearch.tsdb.lang.m3.common.Constants;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.FunctionNode;
 import org.opensearch.tsdb.lang.m3.m3ql.parser.nodes.ValueNode;
+import org.opensearch.tsdb.lang.m3.m3ql.plan.M3PlannerContext;
 import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 
 /**
@@ -107,6 +109,58 @@ public class ScalePlanNodeTests extends BasePlanNodeTests {
         functionNode.addChildNode(new ValueNode("not_a_number"));
 
         expectThrows(NumberFormatException.class, () -> ScalePlanNode.of(functionNode));
+    }
+
+    private static FunctionNode burnRateMultiplierNode(String sloValue) {
+        FunctionNode fn = new FunctionNode();
+        fn.setFunctionName(Constants.Functions.BURN_RATE_MULTIPLIER);
+        fn.addChildNode(new ValueNode(sloValue));
+        return fn;
+    }
+
+    public void testOfBurnRateMultiplier_validSlo() throws Exception {
+        try (M3PlannerContext context = M3PlannerContext.create()) {
+            ScalePlanNode node = ScalePlanNode.ofBurnRateMultiplier(burnRateMultiplierNode("99.9"));
+            assertEquals(1000.0, node.getScaleFactor(), 1e-6);
+        }
+    }
+
+    public void testOfBurnRateMultiplier_slo90() throws Exception {
+        try (M3PlannerContext context = M3PlannerContext.create()) {
+            ScalePlanNode node = ScalePlanNode.ofBurnRateMultiplier(burnRateMultiplierNode("90"));
+            assertEquals(10.0, node.getScaleFactor(), 1e-6);
+        }
+    }
+
+    public void testOfBurnRateMultiplier_noArgument_throws() {
+        FunctionNode fn = new FunctionNode();
+        fn.setFunctionName(Constants.Functions.BURN_RATE_MULTIPLIER);
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> ScalePlanNode.ofBurnRateMultiplier(fn));
+        assertEquals("burnRateMultiplier expects exactly one argument", e.getMessage());
+    }
+
+    public void testOfBurnRateMultiplier_nonValueNode_throws() {
+        FunctionNode fn = new FunctionNode();
+        fn.setFunctionName(Constants.Functions.BURN_RATE_MULTIPLIER);
+        fn.addChildNode(new FunctionNode());
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> ScalePlanNode.ofBurnRateMultiplier(fn));
+        assertEquals("Argument to burnRateMultiplier should be a value node", e.getMessage());
+    }
+
+    public void testOfBurnRateMultiplier_nonNumericSlo_throws() {
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> ScalePlanNode.ofBurnRateMultiplier(burnRateMultiplierNode("abc"))
+        );
+        assertEquals("SLO must be a numeric value, got: abc", e.getMessage());
+    }
+
+    public void testOfBurnRateMultiplier_slo100_throws() {
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> ScalePlanNode.ofBurnRateMultiplier(burnRateMultiplierNode("100"))
+        );
+        assertEquals("SLO must be between 0 and 100 (exclusive), got: 100.0", e.getMessage());
     }
 
     private static class TestMockVisitor extends M3PlanVisitor<String> {

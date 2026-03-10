@@ -41,7 +41,6 @@ public class UtilsTests extends OpenSearchTestCase {
         assertEquals("SLO must be between 0 and 100 (exclusive), got: -1.0", e.getMessage());
     }
 
-
     /**
      * SLO NaN is rejected.
      */

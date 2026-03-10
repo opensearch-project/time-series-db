@@ -161,7 +161,6 @@ public class M3ASTConverter {
 
     /**
      * Converts a list of AST children into a plan by wrapping them in a synthetic PipelineNode.
-     * Used by burn_rate expansion methods that need to reprocess a subset of the outer pipeline's children.
      */
     private M3PlanNode handlePipelineChildren(List<M3ASTNode> children) {
         PipelineNode syntheticPipeline = new PipelineNode();
