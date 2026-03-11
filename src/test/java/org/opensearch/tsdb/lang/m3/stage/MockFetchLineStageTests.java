@@ -39,7 +39,7 @@ public class MockFetchLineStageTests extends AbstractWireSerializingTestCase<Moc
     public void testMockFetchLineStageBasicExecution() {
         double value = 10.0;
         long startTime = 1000L;
-        long endTime = 1005L;
+        long endTime = 1006L;  // Range [1000, 1006) with step 1 = 6 points (exclusive endTime)
         long step = 1L;
         Map<String, String> tags = Map.of("name", "constant_line", "region", "us-west");
 
@@ -70,7 +70,8 @@ public class MockFetchLineStageTests extends AbstractWireSerializingTestCase<Moc
     }
 
     public void testMockFetchLineStageWithNegativeValue() {
-        MockFetchLineStage stage = new MockFetchLineStage(-5.5, Map.of("name", "negative_line"), 0L, 30L, 10L);
+        // Range [0, 40) with step 10 = 4 points (exclusive endTime)
+        MockFetchLineStage stage = new MockFetchLineStage(-5.5, Map.of("name", "negative_line"), 0L, 40L, 10L);
 
         List<TimeSeries> result = stage.process(null);
 
@@ -86,7 +87,8 @@ public class MockFetchLineStageTests extends AbstractWireSerializingTestCase<Moc
     }
 
     public void testMockFetchLineStageWithSingleDataPoint() {
-        MockFetchLineStage stage = new MockFetchLineStage(42.0, Map.of("name", "single"), 0L, 0L, 1L);
+        // Range [0, 1) with step 1 = 1 point (exclusive endTime)
+        MockFetchLineStage stage = new MockFetchLineStage(42.0, Map.of("name", "single"), 0L, 1L, 1L);
 
         List<TimeSeries> result = stage.process(null);
 

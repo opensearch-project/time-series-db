@@ -46,7 +46,7 @@ test_case:
       query: "mockFetch 1,2,3,4,5"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:05:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -61,7 +61,7 @@ test_case:
       query: "mockFetch 10,20,30 name:test_series"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -75,7 +75,7 @@ test_case:
       query: "mockFetch 10,20,30 name:test_series dc:dca1 env:prod"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -90,7 +90,7 @@ test_case:
       query: "mockFetch 1.5,2.5,3.5,4.5"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -104,7 +104,7 @@ test_case:
       query: "mockFetch -2.5,5.0,12.5,-6.5 name:temperature"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -119,7 +119,7 @@ test_case:
       query: "mockFetch 5,10,15,20 name:base | scale 2"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -133,7 +133,7 @@ test_case:
       query: "mockFetch 100,200,300 name:metric region:us-west | alias MyTestSeries"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -148,7 +148,7 @@ test_case:
       query: "mockFetch 1,2,3,nan,5 name:data | transformNull 0"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -161,7 +161,7 @@ test_case:
       query: "mockFetch 1,NaN,3,nan,5 name:data nan:test NaN:another"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -174,7 +174,7 @@ test_case:
       query: "mockFetch 1,2,3,Nan,5 name:data nan:test NaN:another | transformNull 0"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -189,7 +189,7 @@ test_case:
       query: "mockFetch 1,2,3 name:series1 | mockFetch 4,5,6 name:series2"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -205,7 +205,7 @@ test_case:
       query: "mockFetch 1,2,3 name:series1 | mockFetch 4,5,6 name:series2 | sum"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -220,7 +220,7 @@ test_case:
       query: "mockFetch 1,2,3 | sum"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -235,7 +235,7 @@ test_case:
       query: "mockFetch 1,2,3,4 name:coarse"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:30:00Z"
+        max_timestamp: "2025-01-01T00:40:00Z"
         step: "10m"
       expected:
         status: "success"
@@ -250,7 +250,7 @@ test_case:
       query: "mockFetch 0,1,0,2,0"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:05:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -265,7 +265,7 @@ test_case:
       query: "mockFetchLine 10"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:04:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -279,7 +279,7 @@ test_case:
       query: "mockFetchLine 42.5 name:constant_line region:us-east"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:03:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -293,7 +293,7 @@ test_case:
       query: "mockFetchLine -5.5 name:negative_line"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:02:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -307,7 +307,7 @@ test_case:
       query: "mockFetchLine 5 name:base | scale 3"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:02:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
         step: "1m"
       expected:
         status: "success"
@@ -321,7 +321,7 @@ test_case:
       query: "mockFetchLine 10 name:line1 | mockFetchLine 20 name:line2"
       time_config:
         min_timestamp: "2025-01-01T00:00:00Z"
-        max_timestamp: "2025-01-01T00:02:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
         step: "1m"
       expected:
         status: "success"

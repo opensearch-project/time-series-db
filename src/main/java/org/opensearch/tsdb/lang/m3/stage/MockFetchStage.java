@@ -54,8 +54,8 @@ public class MockFetchStage extends AbstractMockFetchStage {
 
     @Override
     protected List<Double> generateValues() {
-        // Calculate maximum samples (inclusive endTime)
-        int maxSamples = (int) ((endTime - startTime) / step) + 1;
+        // Calculate maximum samples (exclusive endTime)
+        int maxSamples = (int) ((endTime - startTime) / step);
 
         // Limit values to fit within the time range
         if (values.size() > maxSamples) {

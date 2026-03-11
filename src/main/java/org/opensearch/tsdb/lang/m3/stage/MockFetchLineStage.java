@@ -50,8 +50,8 @@ public class MockFetchLineStage extends AbstractMockFetchStage {
 
     @Override
     protected List<Double> generateValues() {
-        // Calculate number of data points based on time range (inclusive endTime)
-        int numPoints = (int) ((endTime - startTime) / step) + 1;
+        // Calculate number of data points based on time range (exclusive endTime)
+        int numPoints = (int) ((endTime - startTime) / step);
         List<Double> values = new ArrayList<>(numPoints);
         for (int i = 0; i < numPoints; i++) {
             values.add(value);

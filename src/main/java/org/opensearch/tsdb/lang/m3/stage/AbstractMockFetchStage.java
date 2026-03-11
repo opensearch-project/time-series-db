@@ -99,7 +99,10 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
         Labels labels = ByteLabels.fromMap(tags);
         SampleList samples = builder.build();
 
-        TimeSeries series = new TimeSeries(samples, labels, startTime, endTime, step, null);
+        // Calculate actual maxTimestamp from generated samples (exclusive endTime)
+        long actualMaxTimestamp = startTime + ((values.size() - 1) * step);
+
+        TimeSeries series = new TimeSeries(samples, labels, startTime, actualMaxTimestamp, step, null);
 
         return List.of(series);
     }
