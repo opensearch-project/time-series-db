@@ -82,7 +82,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<Setting<?>> settings = plugin.getSettings();
 
         assertNotNull("Settings list should not be null", settings);
-        assertThat("Should have 27 settings", settings, hasSize(27));
+        assertThat("Should have 30 settings", settings, hasSize(30));
 
         // Verify TSDB_ENGINE_ENABLED is present
         assertTrue("Should contain TSDB_ENGINE_ENABLED setting", settings.contains(TSDBPlugin.TSDB_ENGINE_ENABLED));
@@ -151,6 +151,18 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         assertTrue(
             "Should contain TSDB_ENGINE_INTERNAL_TIME_SERIES_FORMAT",
             settings.contains(TSDBPlugin.TSDB_ENGINE_INTERNAL_TIME_SERIES_FORMAT)
+        );
+        assertTrue(
+            "Should contain GROUPING_STAGE_PARALLEL_ENABLED setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED)
+        );
+        assertTrue(
+            "Should contain GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD)
+        );
+        assertTrue(
+            "Should contain GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD setting for grouping stages",
+            settings.contains(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD)
         );
     }
 
@@ -395,6 +407,9 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         allSettings.add(TSDBPlugin.TSDB_INGESTION_LAG_COORDINATOR_METRICS_ENABLED);
         allSettings.add(TSDBPlugin.TSDB_INGESTION_LAG_SEARCHABLE_METRICS_ENABLED);
         allSettings.add(TSDBPlugin.TSDB_ENGINE_INTERNAL_TIME_SERIES_FORMAT);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_ENABLED);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SERIES_THRESHOLD);
+        allSettings.add(TSDBPlugin.GROUPING_STAGE_PARALLEL_SAMPLES_THRESHOLD);
 
         ClusterSettings mockClusterSettings = new ClusterSettings(Settings.EMPTY, allSettings);
         when(mockClusterService.getClusterSettings()).thenReturn(mockClusterSettings);

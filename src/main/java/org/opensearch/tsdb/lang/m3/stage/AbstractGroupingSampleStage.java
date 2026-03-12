@@ -7,6 +7,8 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.common.Nullable;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.search.aggregations.InternalAggregation;
@@ -18,12 +20,14 @@ import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
+import org.opensearch.tsdb.query.stage.ParallelProcessingConfig;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.function.LongConsumer;
 
 import org.apache.lucene.util.RamUsageEstimator;
@@ -35,8 +39,26 @@ import org.opensearch.tsdb.query.utils.RamUsageConstants;
  * aggregation functions within each group for each sample.
  *
  * @param <A> The type of class used as aggregation bucket, concrete class typically should specify this type
+ *
+ * <p>This implementation supports both sequential and parallel processing modes:</p>
+ * <ul>
+ *   <li><strong>Sequential:</strong> Used for small datasets (&lt; 1000 series) to avoid thread overhead</li>
+ *   <li><strong>Parallel:</strong> Used for large datasets to leverage multi-core CPUs at coordinator level</li>
+ * </ul>
+ *
+ * <p>Parallel processing uses thread-local aggregation then merges
+ * results, with work executed via {@link java.util.concurrent.ForkJoinPool} common pool.</p>
  */
 public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingStage {
+
+    private static final Logger logger = LogManager.getLogger(AbstractGroupingSampleStage.class);
+
+    /**
+     * Configuration for parallel processing thresholds in grouping stages.
+     * Uses default config since stages don't have access to cluster settings.
+     * Can be overridden via setParallelConfig for testing.
+     */
+    private static volatile ParallelProcessingConfig parallelConfig = ParallelProcessingConfig.defaultConfig();
 
     /**
      * Constructor for aggregation without label grouping.
@@ -59,6 +81,25 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
      */
     protected AbstractGroupingSampleStage(String groupByLabel) {
         super(groupByLabel);
+    }
+
+    /**
+     * Set the parallel processing configuration for grouping stages.
+     * Primarily intended for testing to control parallel vs sequential execution.
+     *
+     * @param config the parallel processing configuration to use
+     */
+    public static void setParallelConfig(ParallelProcessingConfig config) {
+        parallelConfig = config;
+    }
+
+    /**
+     * Get the current parallel processing configuration for grouping stages.
+     *
+     * @return the current configuration
+     */
+    public static ParallelProcessingConfig getParallelConfig() {
+        return parallelConfig;
     }
 
     @Override
@@ -96,14 +137,59 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
      * This method handles the common aggregation logic while delegating
      * operation-specific behavior to abstract methods.
      *
+     * <p>Automatically selects sequential or parallel processing based on dataset size.</p>
+     *
      * @param groupSeries List of time series in the same group
      * @param groupLabels The labels for this group (null if no grouping)
      * @return Single processed time series for this group
      */
     @Override
     protected final TimeSeries processGroup(List<TimeSeries> groupSeries, Labels groupLabels) {
-        // Calculate expected number of unique timestamps based on time range and step
+        if (groupSeries.isEmpty()) {
+            throw new IllegalArgumentException("groupSeries must not be empty");
+        }
         TimeSeries firstSeries = groupSeries.get(0);
+        int seriesCount = groupSeries.size();
+
+        int totalSamples = 0;
+        for (TimeSeries series : groupSeries) {
+            totalSamples += series.getSamples().size();
+        }
+        int avgSamplesPerSeries = totalSamples / seriesCount;
+
+        // Determine if parallel processing should be used
+        boolean useParallel = parallelConfig.shouldUseParallelProcessing(seriesCount, avgSamplesPerSeries);
+
+        if (useParallel) {
+            logger.debug(
+                "Using parallel processing for stage={}, seriesCount={}, avgSamplesPerSeries={}",
+                getName(),
+                seriesCount,
+                avgSamplesPerSeries
+            );
+            return processGroupParallel(groupSeries, groupLabels, firstSeries);
+        } else {
+            logger.debug(
+                "Using sequential processing for stage={}, seriesCount={}, avgSamplesPerSeries={}",
+                getName(),
+                seriesCount,
+                avgSamplesPerSeries
+            );
+            return processGroupSequential(groupSeries, groupLabels, firstSeries);
+        }
+    }
+
+    /**
+     * Process a group of time series sequentially (original implementation).
+     * Used for small datasets where thread overhead is not justified.
+     *
+     * @param groupSeries List of time series in the same group
+     * @param groupLabels The labels for this group (null if no grouping)
+     * @param firstSeries The first time series (for metadata extraction)
+     * @return Single processed time series for this group
+     */
+    private TimeSeries processGroupSequential(List<TimeSeries> groupSeries, Labels groupLabels, TimeSeries firstSeries) {
+        // Calculate expected number of unique timestamps based on time range and step
         long timeRange = firstSeries.getMaxTimestamp() - firstSeries.getMinTimestamp();
         int expectedTimestamps = (int) (timeRange / firstSeries.getStep()) + 1;
 
@@ -117,14 +203,7 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
         Map<Long, A> timestampToAggregated = HashMap.newHashMap(expectedTimestamps);
 
         for (TimeSeries series : groupSeries) {
-            for (Sample sample : series.getSamples()) {
-                // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
-                if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
-                    continue;
-                }
-                long timestamp = sample.getTimestamp();
-                timestampToAggregated.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
-            }
+            aggregateSamplesIntoMap(series.getSamples(), timestampToAggregated);
         }
         // Create sorted samples - pre-allocate since we know the exact size
         SampleList sampleList = mapToSampleList(timestampToAggregated);
@@ -144,6 +223,53 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
         );
     }
 
+    /**
+     * Process a group of time series in parallel using ForkJoinPool.
+     * Used for large datasets to leverage multi-core CPUs.
+     *
+     * <p>Implementation notes:</p>
+     * <ul>
+     *   <li>Each thread aggregates a subset of series into a local map (no lock contention)</li>
+     *   <li>Local maps are then reduced by merging buckets per timestamp via {@link #mergeBuckets}</li>
+     *   <li>Uses parallel streams backed by {@link java.util.concurrent.ForkJoinPool#commonPool()}</li>
+     * </ul>
+     *
+     * @param groupSeries List of time series in the same group
+     * @param groupLabels The labels for this group (null if no grouping)
+     * @param firstSeries The first time series (for metadata extraction)
+     * @return Single processed time series for this group
+     */
+    private TimeSeries processGroupParallel(List<TimeSeries> groupSeries, Labels groupLabels, TimeSeries firstSeries) {
+        long timeRange = firstSeries.getMaxTimestamp() - firstSeries.getMinTimestamp();
+        int expectedTimestamps = (int) (timeRange / firstSeries.getStep()) + 1;
+
+        // Each thread accumulates into a thread-local map via collect (avoids per-key contention
+        // and unnecessary HashMap copying that reduce() would cause)
+        Map<Long, A> timestampToAggregated = groupSeries.parallelStream()
+            .collect(
+                () -> HashMap.newHashMap(expectedTimestamps),
+                (map, series) -> aggregateSamplesIntoMap(series.getSamples(), map),
+                this::combineLocalMaps
+            );
+
+        // Create sorted samples - pre-allocate since we know the exact size
+        List<Sample> aggregatedSamples = new ArrayList<>(timestampToAggregated.size());
+        timestampToAggregated.entrySet()
+            .stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> aggregatedSamples.add(bucketToSample(entry.getKey(), entry.getValue())));
+
+        // Return a single time series with the provided labels
+        return new TimeSeries(
+            aggregatedSamples,
+            groupLabels != null ? groupLabels : ByteLabels.emptyLabels(),
+            firstSeries.getMinTimestamp(),
+            firstSeries.getMaxTimestamp(),
+            firstSeries.getStep(),
+            firstSeries.getAlias()
+        );
+    }
+
     @Override
     protected final InternalAggregation reduceGrouped(
         List<TimeSeriesProvider> aggregations,
@@ -155,8 +281,50 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
         // Track outer HashMap allocation
         circuitBreakerConsumer.accept(RamUsageConstants.HASHMAP_SHALLOW_SIZE);
 
+        // Calculate total series count to determine if parallel processing should be used
+        int totalSeriesCount = 0;
+        int totalSamples = 0;
+        for (TimeSeriesProvider agg : aggregations) {
+            for (TimeSeries ts : agg.getTimeSeries()) {
+                totalSeriesCount++;
+                totalSamples += ts.getSamples().size();
+            }
+        }
+        int avgSamplesPerSeries = (totalSeriesCount == 0) ? 0 : (totalSamples / totalSeriesCount);
+
+        boolean useParallel = parallelConfig.shouldUseParallelProcessing(totalSeriesCount, avgSamplesPerSeries);
+
+        if (useParallel) {
+            logger.debug(
+                "Using parallel reduce for stage={}, totalSeries={}, avgSamples={}",
+                getName(),
+                totalSeriesCount,
+                avgSamplesPerSeries
+            );
+            return reduceGroupedParallel(aggregations, firstAgg, firstTimeSeries, isFinalReduce, circuitBreakerConsumer);
+        } else {
+            logger.debug(
+                "Using sequential reduce for stage={}, totalSeries={}, avgSamples={}",
+                getName(),
+                totalSeriesCount,
+                avgSamplesPerSeries
+            );
+            return reduceGroupedSequential(aggregations, firstAgg, firstTimeSeries, isFinalReduce, circuitBreakerConsumer);
+        }
+    }
+
+    /**
+     * Sequential reduce implementation (original logic).
+     */
+    private InternalAggregation reduceGroupedSequential(
+        List<TimeSeriesProvider> aggregations,
+        TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
+        boolean isFinalReduce,
+        LongConsumer circuitBreakerConsumer
+    ) {
         // Combine samples by group across all aggregations
-        Map<ByteLabels, Map<Long, A>> groupToTimestampSample = new HashMap<>();
+        Map<ByteLabels, Map<Long, A>> groupToTimestampBucket = new HashMap<>();
 
         for (TimeSeriesProvider aggregation : aggregations) {
             for (TimeSeries series : aggregation.getTimeSeries()) {
@@ -164,7 +332,7 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
                 ByteLabels groupLabels = extractGroupLabelsDirect(series);
 
                 // Track new group allocation
-                boolean isNewGroup = !groupToTimestampSample.containsKey(groupLabels);
+                boolean isNewGroup = !groupToTimestampBucket.containsKey(groupLabels);
                 if (isNewGroup) {
                     // Track: HashMap entry + labels + inner HashMap
                     circuitBreakerConsumer.accept(
@@ -172,26 +340,79 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
                     );
                 }
 
-                Map<Long, A> timestampToSample = groupToTimestampSample.computeIfAbsent(groupLabels, k -> new HashMap<>());
+                Map<Long, A> timestampToBucket = groupToTimestampBucket.computeIfAbsent(groupLabels, k -> new HashMap<>());
 
                 // Aggregate samples for this series into the group's timestamp map
-                aggregateSamplesIntoMap(series.getSamples(), timestampToSample, circuitBreakerConsumer);
+                aggregateSamplesIntoMap(series.getSamples(), timestampToBucket, circuitBreakerConsumer);
             }
         }
 
+        return finalizeReduction(groupToTimestampBucket, firstAgg, firstTimeSeries, isFinalReduce, circuitBreakerConsumer);
+    }
+
+    /**
+     * Parallel reduce implementation using thread-local aggregation then merge (same pattern as
+     * {@link #processGroupParallel}). Uses {@code collect()} so each thread accumulates into its own
+     * mutable map, then partial results are combined via {@link #combineGroupMaps}.
+     * Avoids per-key contention by not sharing maps across threads.
+     */
+    private InternalAggregation reduceGroupedParallel(
+        List<TimeSeriesProvider> aggregations,
+        TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
+        boolean isFinalReduce,
+        LongConsumer circuitBreakerConsumer
+    ) {
+        Map<ByteLabels, Map<Long, A>> groupToTimestampBucket = aggregations.parallelStream().collect(HashMap::new, (local, aggregation) -> {
+            for (TimeSeries series : aggregation.getTimeSeries()) {
+                ByteLabels groupLabels = extractGroupLabelsDirect(series);
+                Map<Long, A> timestampToBucket = local.computeIfAbsent(groupLabels, k -> new HashMap<>());
+                aggregateSamplesIntoMap(series.getSamples(), timestampToBucket);
+            }
+        }, this::combineGroupMaps);
+
+        return finalizeReduction(groupToTimestampBucket, firstAgg, firstTimeSeries, isFinalReduce, circuitBreakerConsumer);
+    }
+
+    /**
+     * Combine two group→timestamp maps by merging {@code source} into {@code target} (mutates target).
+     * Used as the combiner in {@code collect()} for parallel reduce.
+     */
+    private void combineGroupMaps(Map<ByteLabels, Map<Long, A>> target, Map<ByteLabels, Map<Long, A>> source) {
+        for (Entry<ByteLabels, Map<Long, A>> e : source.entrySet()) {
+            Map<Long, A> targetTs = target.get(e.getKey());
+            if (targetTs == null) {
+                target.put(e.getKey(), e.getValue());
+            } else {
+                combineLocalMaps(targetTs, e.getValue());
+            }
+        }
+    }
+
+    /**
+     * Finalize the reduction by creating time series from aggregated buckets.
+     * Shared logic for both sequential and parallel paths.
+     */
+    private InternalAggregation finalizeReduction(
+        Map<ByteLabels, Map<Long, A>> groupToTimestampBucket,
+        TimeSeriesProvider firstAgg,
+        TimeSeries firstTimeSeries,
+        boolean isFinalReduce,
+        LongConsumer circuitBreakerConsumer
+    ) {
         // Track result ArrayList allocation
         circuitBreakerConsumer.accept(SampleList.ARRAYLIST_OVERHEAD);
 
         // Create the final aggregated time series for each group
         // Pre-allocate result list since we know exactly how many groups we have
-        List<TimeSeries> resultTimeSeries = new ArrayList<>(groupToTimestampSample.size());
+        List<TimeSeries> resultTimeSeries = new ArrayList<>(groupToTimestampBucket.size());
 
-        for (Map.Entry<ByteLabels, Map<Long, A>> entry : groupToTimestampSample.entrySet()) {
+        for (Map.Entry<ByteLabels, Map<Long, A>> entry : groupToTimestampBucket.entrySet()) {
             ByteLabels groupLabels = entry.getKey();
-            Map<Long, A> timestampToSample = entry.getValue();
+            Map<Long, A> timestampToBucket = entry.getValue();
 
             // Pre-allocate samples list since we know exactly how many timestamps we have
-            SampleList sampleList = mapToSampleList(timestampToSample);
+            SampleList sampleList = mapToSampleList(timestampToBucket);
 
             Labels finalLabels = groupLabels.isEmpty() ? ByteLabels.emptyLabels() : groupLabels;
 
@@ -253,6 +474,30 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
     }
 
     /**
+     * Merge two aggregation buckets for the same timestamp (used when reducing thread-local maps).
+     * Default: treat the second bucket as a single sample and aggregate into the first.
+     * Override in stages where buckets must be combined differently (e.g. percentile sorted lists).
+     *
+     * @param existing current bucket for the timestamp (null if none yet)
+     * @param toMerge bucket from another thread to merge in
+     * @param timestamp the timestamp (for sample conversion when needed)
+     * @return merged bucket
+     */
+    protected A mergeBuckets(@Nullable A existing, A toMerge, long timestamp) {
+        return aggregateSingleSample(existing, bucketToSample(timestamp, toMerge));
+    }
+
+    /**
+     * Combine two thread-local timestamp→bucket maps by merging {@code source} into {@code target} (mutates target).
+     * Used as the combiner in {@code collect()} for parallel stream processing.
+     */
+    private void combineLocalMaps(Map<Long, A> target, Map<Long, A> source) {
+        for (Entry<Long, A> e : source.entrySet()) {
+            target.compute(e.getKey(), (ts, x) -> mergeBuckets(x, e.getValue(), ts));
+        }
+    }
+
+    /**
      * Helper method to aggregate samples into an existing timestamp map.
      */
     private void aggregateSamplesIntoMap(SampleList samples, Map<Long, A> timestampToSample, LongConsumer circuitBreakerConsumer) {
@@ -272,6 +517,20 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
                 // Track HashMap entry overhead for new timestamp (key + value)
                 circuitBreakerConsumer.accept(RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + Long.BYTES + estimateStateSize());
             }
+        }
+    }
+
+    /**
+     * Helper method to aggregate samples into an existing timestamp map (parallel path, no per-entry circuit breaker tracking).
+     */
+    private void aggregateSamplesIntoMap(SampleList samples, Map<Long, A> timestampToSample) {
+        for (Sample sample : samples) {
+            // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
+            if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
+                continue;
+            }
+            long timestamp = sample.getTimestamp();
+            timestampToSample.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
         }
     }
 
