@@ -456,6 +456,10 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
                     params.step()
                 );
 
+                if (params.profile()) {
+                    unfoldPipelineAggregationBuilder.setMetadata(Map.of("_enable_coordinator_profiling", true));
+                }
+
                 // Set the unfold aggregation builder for the FetchPlanNode
                 holder.setUnfoldAggregationBuilder(unfoldPipelineAggregationBuilder);
             }
@@ -522,6 +526,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             params.endTime(),
             params.step()
         );
+        if (params.profile()) {
+            unfoldAgg.setMetadata(Map.of("_enable_coordinator_profiling", true));
+        }
 
         // Wrap unfold in a filter aggregation with MatchNoneQueryBuilder
         FilterAggregationBuilder filterAgg = new FilterAggregationBuilder(String.valueOf(planNode.getId()), new MatchNoneQueryBuilder());
@@ -577,6 +584,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             params.endTime(),
             params.step()
         );
+        if (params.profile()) {
+            unfoldAgg.setMetadata(Map.of("_enable_coordinator_profiling", true));
+        }
 
         // Wrap unfold in a filter aggregation with MatchNoneQueryBuilder
         FilterAggregationBuilder filterAgg = new FilterAggregationBuilder(String.valueOf(planNode.getId()), new MatchNoneQueryBuilder());

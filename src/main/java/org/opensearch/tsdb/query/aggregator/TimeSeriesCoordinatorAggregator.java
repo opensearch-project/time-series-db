@@ -308,16 +308,50 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
             if (stageProfiler != null) {
                 long reduceTimeNanos = System.nanoTime() - reduceStartTime;
                 long totalTimeNanos = stageProfiler.getTotalTime();
+                long[] internalTimings = collectInternalTimings(aggregations);
                 CoordinatorProfileInfo profileInfo = new CoordinatorProfileInfo(
-                        stageProfiler.getResults(),
-                        reduceTimeNanos,
-                        totalTimeNanos
+                    stageProfiler.getResults(),
+                    reduceTimeNanos,
+                    totalTimeNanos,
+                    internalTimings[0],  // internalReduceTimeNanos
+                    internalTimings[1],  // serializeTimeNanos
+                    internalTimings[2]   // deserializeTimeNanos
                 );
                 return new InternalTimeSeriesWithCoordinatorProfile(name(), result, metadata(), null, profileInfo);
             }
 
             return new InternalTimeSeries(name(), result, metadata(), null, mergedStats, mergedDataSource);
         }
+    }
+
+    /**
+     * Traverse the already-reduced reference aggregations and collect the internal timing
+     * values embedded by {@code InternalTimeSeries.reduce()} when profiling is enabled.
+     *
+     * @return {@code long[3]} – {@code [internalReduceNanos, serializeNanos, deserializeNanos]}
+     */
+    private long[] collectInternalTimings(Aggregations aggregations) {
+        long internalReduceTotal = 0;
+        long serTotal = 0;
+        long deserTotal = 0;
+        for (String bucketsPath : references.values()) {
+            String[] pathElements = bucketsPath.split(AggregationConstants.BUCKETS_PATH_SEPARATOR);
+            Aggregation agg = aggregations.get(pathElements[0]);
+            for (int i = 1; i < pathElements.length && agg != null; i++) {
+                if (agg instanceof InternalSingleBucketAggregation single) {
+                    agg = single.getAggregations().get(pathElements[i]);
+                } else {
+                    agg = null;
+                }
+            }
+            if (agg instanceof InternalTimeSeriesWithCoordinatorProfile p && p.getCoordinatorProfileInfo() != null) {
+                CoordinatorProfileInfo partial = p.getCoordinatorProfileInfo();
+                internalReduceTotal += partial.getInternalReduceTimeNanos();
+                serTotal += partial.getSerializeTimeNanos();
+                deserTotal += partial.getDeserializeTimeNanos();
+            }
+        }
+        return new long[] { internalReduceTotal, serTotal, deserTotal };
     }
 
     /**

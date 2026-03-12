@@ -464,9 +464,28 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
         }
     }
 
+    private boolean isProfilingEnabled() {
+        Map<String, Object> meta = metadata();
+        if (meta == null) return false;
+        Object flag = meta.get("_enable_coordinator_profiling");
+        return flag instanceof Boolean && (Boolean) flag;
+    }
+
     @Override
     public InternalAggregation buildEmptyAggregation() {
         Map<String, Object> emptyMetadata = metadata();
+        Map<String, Object> meta = emptyMetadata != null ? emptyMetadata : Map.of();
+        if (isProfilingEnabled()) {
+            return new InternalTimeSeriesWithCoordinatorProfile(
+                name,
+                List.of(),
+                meta,
+                null,
+                AggregationExecStats.EMPTY,
+                AggregationDataSource.EMPTY,
+                null
+            );
+        }
         return new InternalTimeSeries(
             name,
             List.of(),
@@ -517,14 +536,27 @@ public class TimeSeriesUnfoldAggregator extends BucketsAggregator {
 
                 // Use the generic InternalPipeline with the reduce stage
                 Map<String, Object> baseMetadata = metadata();
-                results[i] = new InternalTimeSeries(
-                    name,
-                    timeSeriesList,
-                    baseMetadata != null ? baseMetadata : Map.of(),
-                    reduceStage,  // Pass the reduce stage (null for transformation stages)
-                    execStats,
-                    dataSource
-                );
+                Map<String, Object> meta = baseMetadata != null ? baseMetadata : Map.of();
+                if (isProfilingEnabled()) {
+                    results[i] = new InternalTimeSeriesWithCoordinatorProfile(
+                        name,
+                        timeSeriesList,
+                        meta,
+                        reduceStage,
+                        execStats,
+                        dataSource,
+                        null
+                    );
+                } else {
+                    results[i] = new InternalTimeSeries(
+                        name,
+                        timeSeriesList,
+                        baseMetadata != null ? baseMetadata : Map.of(),
+                        reduceStage,  // Pass the reduce stage (null for transformation stages)
+                        execStats,
+                        dataSource
+                    );
+                }
             }
             return results;
         } finally {
