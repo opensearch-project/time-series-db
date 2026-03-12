@@ -78,7 +78,9 @@ public class ClosedChunkIndex implements Closeable {
     private final SeriesMetadataManager metadataManager;
     private final AtomicLong pendingSampleCount = new AtomicLong(0);
     private final ReentrantReadWriteLock indexWriterLock = new ReentrantReadWriteLock();
+    // readLock is used to indicate the indexWriter is being used
     private final ReleasableLock readLock = new ReleasableLock(indexWriterLock.readLock());
+    // writeLock is used to indicate indexWriter lifecycle changes are in-progress and indexWriter usage must wait
     private final ReleasableLock writeLock = new ReleasableLock(indexWriterLock.writeLock());
     private IndexWriter indexWriter;
 
