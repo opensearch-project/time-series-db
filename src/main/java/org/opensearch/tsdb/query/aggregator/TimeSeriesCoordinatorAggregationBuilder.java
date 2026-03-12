@@ -267,9 +267,21 @@ public class TimeSeriesCoordinatorAggregationBuilder extends AbstractPipelineAgg
 
     @Override
     protected PipelineAggregator createInternal(Map<String, Object> metadata) {
+        Map<String, Object> metadataWithProfile = metadata != null ? new HashMap<>(metadata) : new HashMap<>();
+        if (metadata != null && metadata.containsKey("profile") && (Boolean) metadata.get("profile")) {
+            metadataWithProfile.put("_profiling_enabled", true);
+        }
         // Validate before creating the aggregator
         validateAndThrow();
-        return new TimeSeriesCoordinatorAggregator(name, bucketsPaths, stages, macroDefinitions, references, inputReference, metadata);
+        return new TimeSeriesCoordinatorAggregator(
+            name,
+            bucketsPaths,
+            stages,
+            macroDefinitions,
+            references,
+            inputReference,
+            metadataWithProfile
+        );
     }
 
     @Override

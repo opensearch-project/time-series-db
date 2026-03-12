@@ -16,6 +16,7 @@ import java.util.List;
 public class StageProfiler {
 
     private final List<String> profileResults = new ArrayList<>();
+    private long totalTimeNanos = 0;
 
     /**
      * Record the stats of one stage
@@ -27,6 +28,7 @@ public class StageProfiler {
     public void record(String stageName, long latencyNs, long inputSampleCount, long memoryOverhead) {
         String result = stageName + "(" + inputSampleCount + "): " + latencyNs + " ns, " + memoryOverhead + " bytes";
         profileResults.add(result);
+        totalTimeNanos += latencyNs;
     }
 
     /**
@@ -35,5 +37,13 @@ public class StageProfiler {
      */
     public String getResults() {
         return String.join(";", profileResults);
+    }
+
+    /**
+     * Get the total time across all stages
+     * @return sum of all stage latencies in nanoseconds
+     */
+    public long getTotalTime() {
+        return totalTimeNanos;
     }
 }

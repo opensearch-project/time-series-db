@@ -65,7 +65,9 @@ import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.tsdb.query.search.CachedWildcardQueryBuilder;
 import org.opensearch.tsdb.query.search.TimeRangePruningQueryBuilder;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
+import org.opensearch.tsdb.query.aggregator.InternalTimeSeriesWithCoordinatorProfile;
 import org.opensearch.tsdb.query.aggregator.InternalTSDBStats;
+import org.opensearch.tsdb.query.aggregator.ProfilingTimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesInplaceAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesUnfoldAggregationBuilder;
@@ -107,6 +109,7 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     // Search plugin constants
     private static final String TIME_SERIES_NAMED_WRITEABLE_NAME = "time_series";
     private static final String TSDB_STATS_NAMED_WRITEABLE_NAME = "tsdb_stats";
+    private static final String TSDB_COORDINATOR_PROFILE_WRITEABLE_NAME = "time_series_with_coordinator_profile";
 
     // Store plugin constants
     private static final String TSDB_STORE_FACTORY_NAME = "tsdb_store";
@@ -832,7 +835,13 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
                 TimeSeriesCoordinatorAggregationBuilder.NAME,
                 TimeSeriesCoordinatorAggregationBuilder::new,
                 TimeSeriesCoordinatorAggregationBuilder::parse
-            ).addResultReader(InternalTimeSeries::new)
+            ).addResultReader(InternalTimeSeries::new),
+            // Register ProfilingTimeSeriesCoordinatorAggregation
+            new PipelineAggregationSpec(
+                ProfilingTimeSeriesCoordinatorAggregationBuilder.NAME,
+                ProfilingTimeSeriesCoordinatorAggregationBuilder::new,
+                ProfilingTimeSeriesCoordinatorAggregationBuilder::parse
+            ).addResultReader(InternalTimeSeriesWithCoordinatorProfile::new)
         );
     }
 
@@ -914,7 +923,12 @@ public class TSDBPlugin extends Plugin implements SearchPlugin, EnginePlugin, Ac
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
         return List.of(
             new NamedWriteableRegistry.Entry(InternalAggregation.class, TIME_SERIES_NAMED_WRITEABLE_NAME, InternalTimeSeries::new),
-            new NamedWriteableRegistry.Entry(InternalAggregation.class, TSDB_STATS_NAMED_WRITEABLE_NAME, InternalTSDBStats::new)
+            new NamedWriteableRegistry.Entry(InternalAggregation.class, TSDB_STATS_NAMED_WRITEABLE_NAME, InternalTSDBStats::new),
+            new NamedWriteableRegistry.Entry(
+                InternalAggregation.class,
+                TSDB_COORDINATOR_PROFILE_WRITEABLE_NAME,
+                InternalTimeSeriesWithCoordinatorProfile::new
+            )
         );
     }
 
