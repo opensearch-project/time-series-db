@@ -35,6 +35,7 @@ import org.opensearch.tsdb.core.head.MemSeries;
 import org.opensearch.tsdb.core.index.ReaderManagerWithMetadata;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.retention.Retention;
+import org.opensearch.tsdb.core.utils.KeyedRefCounter;
 import org.opensearch.tsdb.core.utils.Time;
 import org.opensearch.telemetry.metrics.tags.Tags;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
@@ -54,7 +55,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -105,7 +105,7 @@ public class ClosedChunkIndexManager implements Closeable {
     private final Compaction compaction;
     private final Set<ClosedChunkIndex> indexesUndergoingCompaction;
     private final Set<ClosedChunkIndex> pendingClosureIndexes;
-    private final Set<ClosedChunkIndex> snapshottedIndexes = ConcurrentHashMap.newKeySet();
+    private final KeyedRefCounter<ClosedChunkIndex> snapshottedIndexes = new KeyedRefCounter<>();
     private final Scheduler.Cancellable mgmtTaskScheduler;
     private final TimeUnit resolution;
     private final Settings indexSettings;
@@ -540,18 +540,21 @@ public class ClosedChunkIndexManager implements Closeable {
     private void deleteOrphanDirectories() throws IOException {
         log.debug("Starting cleanup of orphan directories");
         List<Path> currentPaths = new ArrayList<>();
+        // Normalize all paths for consistency.
         // prevent indexes pending removal from being deleted to allow proper closing sequence to be executed.
-        Set<Path> livePaths = pendingClosureIndexes.stream().map(ClosedChunkIndex::getPath).collect(Collectors.toSet());
+        Set<Path> livePaths = pendingClosureIndexes.stream()
+            .map(idx -> idx.getPath().toAbsolutePath().normalize())
+            .collect(Collectors.toSet());
 
         lock.lock();
         try (var paths = Files.newDirectoryStream(dir, BLOCK_PREFIX + "*")) {
             for (Path path : paths) {
-                currentPaths.add(path);
+                currentPaths.add(path.toAbsolutePath().normalize());
             }
             // read live indexes
-            closedChunkIndexMap.values().stream().map(ClosedChunkIndex::getPath).forEach(livePaths::add);
+            closedChunkIndexMap.values().stream().map(idx -> idx.getPath().toAbsolutePath().normalize()).forEach(livePaths::add);
             // protect snapshotted indexes from deletion
-            snapshottedIndexes.stream().map(ClosedChunkIndex::getPath).forEach(livePaths::add);
+            snapshottedIndexes.keys().stream().map(idx -> idx.getPath().toAbsolutePath().normalize()).forEach(livePaths::add);
         } finally {
             lock.unlock();
         }
@@ -559,7 +562,7 @@ public class ClosedChunkIndexManager implements Closeable {
         // delete paths
         for (Path path : currentPaths) {
             if (!livePaths.contains(path)) {
-                org.opensearch.tsdb.core.utils.Files.deleteDirectory(path.toAbsolutePath());
+                org.opensearch.tsdb.core.utils.Files.deleteDirectory(path);
                 log.info("Deleted orphan directory: {}", path);
             }
         }
@@ -825,14 +828,14 @@ public class ClosedChunkIndexManager implements Closeable {
                 try {
                     IndexCommit snapshot = index.snapshot();
                     snapshots.add(snapshot);
-                    snapshottedIndexes.add(index);
+                    snapshottedIndexes.acquire(index);
                     releaseActions.add(() -> {
                         try {
                             index.release(snapshot);
                         } catch (IOException e) {
                             log.warn("Failed to release closed chunk index snapshot", e);
                         }
-                        snapshottedIndexes.remove(index);
+                        snapshottedIndexes.release(index);
                     });
                 } catch (IOException | IllegalStateException e) {
                     log.warn("No index commit available for snapshot in closed chunk index", e);

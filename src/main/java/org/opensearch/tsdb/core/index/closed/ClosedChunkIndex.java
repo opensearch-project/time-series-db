@@ -32,6 +32,7 @@ import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ReleasableLock;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
@@ -58,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
@@ -75,6 +77,9 @@ public class ClosedChunkIndex implements Closeable {
     private final LabelStorageType labelStorageType;
     private final SeriesMetadataManager metadataManager;
     private final AtomicLong pendingSampleCount = new AtomicLong(0);
+    private final ReentrantReadWriteLock indexWriterLock = new ReentrantReadWriteLock();
+    private final ReleasableLock readLock = new ReleasableLock(indexWriterLock.readLock());
+    private final ReleasableLock writeLock = new ReleasableLock(indexWriterLock.writeLock());
     private IndexWriter indexWriter;
 
     /**
@@ -124,7 +129,7 @@ public class ClosedChunkIndex implements Closeable {
             iwc.setIndexSort(indexSort);
 
             indexWriter = new IndexWriter(directory, iwc);
-            this.metadataManager = new SeriesMetadataManager(directory, indexWriter, snapshotDeletionPolicy);
+            this.metadataManager = new SeriesMetadataManager(directory, () -> this.indexWriter, snapshotDeletionPolicy);
             directoryReaderManager = new ReaderManager(DirectoryReader.open(indexWriter));
             path = dir;
         } catch (IOException e) {
@@ -174,7 +179,9 @@ public class ClosedChunkIndex implements Closeable {
         // Uses OpenSearch's RangeType.LONG encoding (VarInt format for compact storage)
         doc.add(new BinaryDocValuesField(Constants.IndexSchema.TIMESTAMP_RANGE, TimestampRangeEncoding.encodeRange(minTs, maxTs)));
 
-        indexWriter.addDocument(doc);
+        try (ReleasableLock ignored = readLock.acquire()) {
+            indexWriter.addDocument(doc);
+        }
 
         pendingSampleCount.addAndGet(chunk.numSamples());
 
@@ -210,7 +217,7 @@ public class ClosedChunkIndex implements Closeable {
      * @param maxNumSegments the maximum number of segments to merge down to
      */
     public void forceMerge(int maxNumSegments) {
-        try {
+        try (ReleasableLock ignored = readLock.acquire()) {
             indexWriter.forceMerge(maxNumSegments);
         } catch (Exception e) {
             throw ExceptionsHelper.convertToRuntime(e);
@@ -253,7 +260,7 @@ public class ClosedChunkIndex implements Closeable {
     }
 
     public void commit() {
-        try {
+        try (ReleasableLock ignored = readLock.acquire()) {
             indexWriter.commit();
         } catch (Exception e) {
             throw ExceptionsHelper.convertToRuntime(e);
@@ -266,7 +273,9 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException if anything goes wrong while deleting the files.
      */
     public void deleteUnusedFiles() throws IOException {
-        indexWriter.deleteUnusedFiles();
+        try (ReleasableLock ignored = readLock.acquire()) {
+            indexWriter.deleteUnusedFiles();
+        }
     }
 
     /**
@@ -291,7 +300,7 @@ public class ClosedChunkIndex implements Closeable {
      * @param liveSeries the map of seriesRef to corresponding max mmap timestamps.
      */
     public void commitWithMetadata(Map<Long, Long> liveSeries) {
-        try {
+        try (ReleasableLock ignored = readLock.acquire()) {
             metadataManager.commitWithMetadata(liveSeries, Map.of(COMMIT_DATA_SAMPLE_COUNT_KEY, Long.toString(getTotalSampleCount())));
         } catch (IOException e) {
             throw new RuntimeException("Failed to commit with metadata", e);
@@ -304,7 +313,7 @@ public class ClosedChunkIndex implements Closeable {
      * @param consumer BiConsumer to accept seriesRef(Long) and ts(Long).
      */
     public void applyLiveSeriesMetaData(BiConsumer<Long, Long> consumer) {
-        try {
+        try (ReleasableLock ignored = readLock.acquire()) {
             metadataManager.applyMetadata(consumer);
         } catch (IOException e) {
             throw ExceptionsHelper.convertToRuntime(e);
@@ -318,7 +327,9 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException if snapshot fails
      */
     public IndexCommit snapshot() throws IOException {
-        return metadataManager.snapshot();
+        try (ReleasableLock ignored = readLock.acquire()) {
+            return metadataManager.snapshot();
+        }
     }
 
     /**
@@ -328,7 +339,9 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException if release fails
      */
     public void release(IndexCommit snapshot) throws IOException {
-        metadataManager.release(snapshot);
+        try (ReleasableLock ignored = readLock.acquire()) {
+            metadataManager.release(snapshot);
+        }
     }
 
     /**
@@ -385,15 +398,19 @@ public class ClosedChunkIndex implements Closeable {
      * @throws IOException IOException will be thrown if the indexWriter can not be re-opened.
      */
     public void copyTo(ClosedChunkIndex other) throws IOException {
-        var isWriterOpen = indexWriter.isOpen();
-        try {
-            this.indexWriter.close();
-            other.indexWriter.addIndexes(this.directory);
-        } finally {
-            IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
-            iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
-            if (isWriterOpen) {
-                indexWriter = new IndexWriter(directory, iwc);
+        try (ReleasableLock ignored = writeLock.acquire()) {
+            var isWriterOpen = indexWriter.isOpen();
+            try {
+                this.indexWriter.close();
+                other.indexWriter.addIndexes(this.directory);
+            } finally {
+                // Reopen the writer if it was previously open, so the source index remains usable after copy, even if addIndexes failed.
+                // The write lock is released only after the new writer is in place.
+                IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
+                iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
+                if (isWriterOpen) {
+                    this.indexWriter = new IndexWriter(directory, iwc);
+                }
             }
         }
     }

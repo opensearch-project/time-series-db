@@ -1030,4 +1030,67 @@ public class ClosedChunkIndexManagerTests extends OpenSearchTestCase {
 
         manager.close();
     }
+
+    public void testConcurrentSnapshotHoldersRefcountProtectsFromDeletion() throws IOException {
+        Path tempDir = createTempDir("testConcurrentSnapshotHolders");
+
+        // Retention that immediately expires the CCI (1 ms window, 0 ms frequency) so every
+        // runOptimization() call will attempt to remove and delete it.
+        Clock frozenClock = Clock.fixed(Instant.ofEpochMilli(100_000_000L), ZoneId.of("UTC"));
+        TimeBasedRetention retention = new TimeBasedRetention(1L, 0L, frozenClock);
+
+        ClosedChunkIndexManager manager = new ClosedChunkIndexManager(
+            tempDir,
+            new InMemoryMetadataStore(),
+            retention,
+            new NoopCompaction(),
+            threadPool,
+            new ShardId("index", "uuid", 0),
+            defaultSettings
+        );
+
+        Labels labels = ByteLabels.fromStrings("metric", "cpu");
+        MemSeries series = new MemSeries(0, labels, SeriesEventListener.NOOP);
+        manager.addMemChunk(series, TestUtils.getMemChunk(5, 0, 1500));
+        manager.commitChangedIndexes(List.of(series));
+        assertEquals("Should have 1 index before snapshots", 1, manager.getNumBlocks());
+
+        // Simulate two concurrent holders (example: a long-running snapshot and a peer recovery)
+        ClosedChunkIndexManager.SnapshotResult firstHolder = manager.snapshotAllIndexes();
+        ClosedChunkIndexManager.SnapshotResult secondHolder = manager.snapshotAllIndexes();
+        assertEquals("First holder should capture 1 CCI", 1, firstHolder.indexCommits().size());
+        assertEquals("Second holder should capture 1 CCI", 1, secondHolder.indexCommits().size());
+
+        // Record the CCI directory path for later existence checks.
+        Path cciDirectory = ((org.apache.lucene.store.FSDirectory) firstHolder.indexCommits().get(0).getDirectory()).getDirectory();
+        assertTrue("CCI directory should exist after snapshots taken", Files.exists(cciDirectory));
+
+        // Step 1: First optimization — retention removes CCI from the index map and tries to close
+        // it, but closeIndexes() skips it because both holders are still active.
+        manager.runOptimization();
+        assertEquals("CCI should be removed from the live index map by retention", 0, manager.getNumBlocks());
+        assertTrue("CCI directory must still exist: both holders are still active", Files.exists(cciDirectory));
+
+        // Step 2: Peer recovery (first holder) completes and releases.
+        for (Runnable releaseAction : firstHolder.releaseActions()) {
+            releaseAction.run();
+        }
+
+        // Step 3: The snapshot (second holder) is still active.
+        // With reference counting, the CCI remains in snapshottedIndexes and the directory must remain on disk.
+        manager.runOptimization();
+        assertTrue("CCI directory must still exist: second snapshot holder is still active", Files.exists(cciDirectory));
+
+        // Step 4: The snapshot (second holder) finishes uploading and releases.
+        for (Runnable releaseAction : secondHolder.releaseActions()) {
+            releaseAction.run();
+        }
+
+        // Step 5: Both holders have released, CCI is now fully unprotected.
+        // closeIndexes() and deleteOrphanDirectories() should clean it up.
+        manager.runOptimization();
+        assertFalse("CCI directory must be deleted after all snapshot holders have released", Files.exists(cciDirectory));
+
+        manager.close();
+    }
 }

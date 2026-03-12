@@ -54,7 +54,6 @@ import org.junit.Test;
 import org.opensearch.tsdb.core.mapping.Constants;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -861,7 +860,7 @@ public class TSDBDirectoryReaderTests extends OpenSearchTestCase {
         }
     }
 
-    @Test(expected = UnsupportedEncodingException.class)
+    @Test(expected = UnsupportedOperationException.class)
     public void testDoOpenIfChangedWithIndexCommitThrowsException() throws IOException {
         tsdbDirectoryReader = new TSDBDirectoryReader(
             liveReader,
@@ -872,10 +871,10 @@ public class TSDBDirectoryReaderTests extends OpenSearchTestCase {
             mmappedChunksManager,
             1L
         );
-        tsdbDirectoryReader.doOpenIfChanged(null); // IndexCommit parameter
+        tsdbDirectoryReader.doOpenIfChanged((IndexCommit) null); // IndexCommit parameter
     }
 
-    @Test(expected = UnsupportedEncodingException.class)
+    @Test(expected = UnsupportedOperationException.class)
     public void testDoOpenIfChangedWithIndexWriterThrowsException() throws IOException {
         tsdbDirectoryReader = new TSDBDirectoryReader(
             liveReader,
