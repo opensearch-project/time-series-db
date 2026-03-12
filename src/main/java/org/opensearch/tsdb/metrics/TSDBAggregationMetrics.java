@@ -66,6 +66,15 @@ public class TSDBAggregationMetrics {
     /** Histogram for pipeline stage execution latency */
     public Histogram pipelineStageLatency;
 
+    /** Serialized bytes (XOR) sent over the network when writing InternalTimeSeries. */
+    public Histogram compressedBytesTotal;
+
+    /** Serialized bytes (decoded) sent over the network when writing InternalTimeSeries. */
+    public Histogram decodedBytesTotal;
+
+    /** Counter for number of series sent from data node to coordinator (tagged with compressed: true/false) */
+    public Counter seriesSentTotal;
+
     /**
      * Initialize aggregation metrics. Called by TSDBMetrics.initialize().
      */
@@ -155,6 +164,21 @@ public class TSDBAggregationMetrics {
             TSDBMetricsConstants.AGGREGATION_PIPELINE_STAGE_LATENCY_DESC,
             TSDBMetricsConstants.UNIT_MILLISECONDS
         );
+        compressedBytesTotal = registry.createHistogram(
+            TSDBMetricsConstants.AGGREGATION_COMPRESSED_BYTES_TOTAL,
+            TSDBMetricsConstants.AGGREGATION_COMPRESSED_BYTES_TOTAL_DESC,
+            TSDBMetricsConstants.UNIT_BYTES
+        );
+        decodedBytesTotal = registry.createHistogram(
+            TSDBMetricsConstants.AGGREGATION_DECODED_BYTES_TOTAL,
+            TSDBMetricsConstants.AGGREGATION_DECODED_BYTES_TOTAL_DESC,
+            TSDBMetricsConstants.UNIT_BYTES
+        );
+        seriesSentTotal = registry.createCounter(
+            TSDBMetricsConstants.AGGREGATION_SERIES_SENT_TOTAL,
+            TSDBMetricsConstants.AGGREGATION_SERIES_SENT_TOTAL_DESC,
+            TSDBMetricsConstants.UNIT_COUNT
+        );
     }
 
     /**
@@ -178,5 +202,8 @@ public class TSDBAggregationMetrics {
         circuitBreakerMiB = null;
         circuitBreakerTrips = null;
         pipelineStageLatency = null;
+        compressedBytesTotal = null;
+        decodedBytesTotal = null;
+        seriesSentTotal = null;
     }
 }

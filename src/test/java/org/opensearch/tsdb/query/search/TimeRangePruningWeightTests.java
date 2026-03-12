@@ -60,6 +60,12 @@ public class TimeRangePruningWeightTests extends OpenSearchTestCase {
         }
 
         @Override
+        public List<org.opensearch.tsdb.query.aggregator.CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues)
+            throws IOException {
+            return List.of();
+        }
+
+        @Override
         public Labels labelsForDoc(int docId, TSDBDocValues tsdbDocValues) {
             return null;
         }

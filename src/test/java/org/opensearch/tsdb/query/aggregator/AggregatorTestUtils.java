@@ -157,6 +157,11 @@ public class AggregatorTestUtils {
             }
 
             @Override
+            public List<CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+                return List.of();
+            }
+
+            @Override
             public Labels labelsForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
                 return labels;
             }

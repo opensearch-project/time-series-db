@@ -23,7 +23,9 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
+import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
+import org.opensearch.tsdb.query.aggregator.CompressedChunk;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.model.Labels;
@@ -195,6 +197,76 @@ public class LiveSeriesIndexLeafReaderTests extends OpenSearchTestCase {
 
             assertNotNull("Chunks should not be null", chunks);
             assertTrue("Chunks should be empty for reference 300L", chunks.isEmpty());
+        }
+    }
+
+    public void testRawChunkDataForDoc() throws IOException {
+        createTestDocument(100L, "cpu_usage", "server1", "us-west");
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            LiveSeriesIndexLeafReader leafReader = new LiveSeriesIndexLeafReader(
+                innerReader,
+                memChunkReader,
+                mMappedChunks,
+                LabelStorageType.BINARY
+            );
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            List<CompressedChunk> chunks = leafReader.rawChunkDataForDoc(0, tsdbDocValues);
+
+            assertNotNull(chunks);
+            assertEquals(1, chunks.size());
+            CompressedChunk chunk = chunks.get(0);
+            assertEquals(Encoding.XOR, chunk.getEncoding());
+            assertEquals(1000L, chunk.getMinTimestamp());
+            assertEquals(4000L, chunk.getMaxTimestamp());
+            assertTrue(chunk.getCompressedSize() > 0);
+        }
+    }
+
+    public void testRawChunkDataForDocEmpty() throws IOException {
+        createTestDocument(300L, "empty_metric", "server3", "us-central");
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            LiveSeriesIndexLeafReader leafReader = new LiveSeriesIndexLeafReader(
+                innerReader,
+                memChunkReader,
+                mMappedChunks,
+                LabelStorageType.BINARY
+            );
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            List<CompressedChunk> chunks = leafReader.rawChunkDataForDoc(0, tsdbDocValues);
+
+            assertNotNull(chunks);
+            assertTrue(chunks.isEmpty());
+        }
+    }
+
+    public void testRawChunkDataForDocAdvanceExactFalse() throws IOException {
+        createTestDocument(100L, "cpu_usage", "server1", "us-west");
+        createTestDocument(300L, "empty_metric", "server3", "us-central");
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            LiveSeriesIndexLeafReader leafReader = new LiveSeriesIndexLeafReader(
+                innerReader,
+                memChunkReader,
+                mMappedChunks,
+                LabelStorageType.BINARY
+            );
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            // Doc 1 has ref 300L which has empty chunks
+            List<CompressedChunk> chunks = leafReader.rawChunkDataForDoc(1, tsdbDocValues);
+
+            assertNotNull(chunks);
+            assertTrue(chunks.isEmpty());
         }
     }
 

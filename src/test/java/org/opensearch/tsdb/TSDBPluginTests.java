@@ -395,6 +395,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         allSettings.add(TSDBPlugin.TSDB_INGESTION_LAG_COORDINATOR_METRICS_ENABLED);
         allSettings.add(TSDBPlugin.TSDB_INGESTION_LAG_SEARCHABLE_METRICS_ENABLED);
         allSettings.add(TSDBPlugin.TSDB_ENGINE_INTERNAL_TIME_SERIES_FORMAT);
+        allSettings.add(TSDBPlugin.TSDB_ENGINE_ENABLE_INTERNAL_AGG_CHUNK_COMPRESSION);
 
         ClusterSettings mockClusterSettings = new ClusterSettings(Settings.EMPTY, allSettings);
         when(mockClusterService.getClusterSettings()).thenReturn(mockClusterSettings);

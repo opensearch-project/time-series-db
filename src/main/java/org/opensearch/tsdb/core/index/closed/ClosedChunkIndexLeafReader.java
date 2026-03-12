@@ -28,14 +28,18 @@ import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
+import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.LabelsStorage;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
+import org.opensearch.tsdb.core.utils.TimestampRangeEncoding;
+import org.opensearch.tsdb.query.aggregator.CompressedChunk;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -109,8 +113,51 @@ public class ClosedChunkIndexLeafReader extends TSDBLeafReader {
         }
 
         // Decode the serialized chunk
-        ClosedChunk closedChunk = ClosedChunkIndexIO.getClosedChunkFromSerialized(chunkValues.binaryValue());
+        ClosedChunk closedChunk = ClosedChunkIndexIO.getClosedChunkFromSerialized(chunkBytes);
         return List.of(closedChunk.getChunkIterator());
+    }
+
+    @Override
+    public List<CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+        BinaryDocValues chunkValues = tsdbDocValues.getChunkDocValues();
+        if (!chunkValues.advanceExact(docId)) {
+            throw new IOException("Chunk field 'chunk' not found for document in closed chunk index.");
+        }
+
+        BytesRef serializedChunk = chunkValues.binaryValue();
+        if (serializedChunk == null || serializedChunk.length == 0) {
+            return List.of();
+        }
+
+        if (serializedChunk.length < 2) {
+            throw new IOException("Invalid serialized chunk: too short");
+        }
+
+        int version = serializedChunk.bytes[serializedChunk.offset] & 0xFF;
+        if (version != ClosedChunkIndexIO.VERSION_1) {
+            throw new IOException("Unsupported chunk version: " + version);
+        }
+
+        int encodingOrdinal = serializedChunk.bytes[serializedChunk.offset + 1] & 0xFF;
+        if (encodingOrdinal >= Encoding.values().length) {
+            throw new IOException("Unknown encoding ordinal: " + encodingOrdinal);
+        }
+        Encoding encoding = Encoding.values()[encodingOrdinal];
+
+        byte[] rawChunkBytes = Arrays.copyOfRange(
+            serializedChunk.bytes,
+            serializedChunk.offset + 2,
+            serializedChunk.offset + serializedChunk.length
+        );
+
+        BinaryDocValues timestampRangeValues = inner.getBinaryDocValues(Constants.IndexSchema.TIMESTAMP_RANGE);
+        if (timestampRangeValues == null || !timestampRangeValues.advanceExact(docId)) {
+            throw new IOException("Missing timestamp_range doc value for document " + docId);
+        }
+
+        BytesRef rangeBytes = timestampRangeValues.binaryValue();
+        long[] minMax = TimestampRangeEncoding.getMinMax(rangeBytes);
+        return List.of(new CompressedChunk(rawChunkBytes, encoding, minMax[0], minMax[1]));
     }
 
     @Override

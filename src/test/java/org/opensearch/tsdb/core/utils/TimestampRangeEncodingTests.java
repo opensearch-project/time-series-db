@@ -120,4 +120,16 @@ public class TimestampRangeEncodingTests extends OpenSearchTestCase {
             assertEquals("Byte mismatch at position " + i, encoded1.bytes[encoded1.offset + i], encoded2.bytes[encoded2.offset + i]);
         }
     }
+
+    public void testGetMinMax() throws IOException {
+        long expectedMin = 100L;
+        long expectedMax = 200L;
+
+        BytesRef encoded = TimestampRangeEncoding.encodeRange(expectedMin, expectedMax);
+        long[] minMax = TimestampRangeEncoding.getMinMax(encoded);
+
+        assertEquals(2, minMax.length);
+        assertEquals(expectedMin, minMax[0]);
+        assertEquals(expectedMax, minMax[1]);
+    }
 }

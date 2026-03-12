@@ -153,6 +153,18 @@ public abstract class RestTimeSeriesTestFramework extends OpenSearchRestTestCase
      */
     protected void runBasicTest() throws Exception {
         setupTest();
+        runQueries();
+    }
+
+    /**
+     * Execute and validate all queries from the loaded test case.
+     * Can be called independently from {@link #setupTest()} when post-ingestion
+     * steps (e.g., changing ooo_cutoff, flushing) are needed before querying.
+     *
+     * @throws Exception If query execution or validation fails
+     */
+    protected void runQueries() throws Exception {
+        validateTestInitialization();
         queryExecutor.executeAndValidateQueries(testCase);
     }
 

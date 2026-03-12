@@ -19,7 +19,8 @@ import java.io.IOException;
  * Utility functions for working with closed chunk index data. This class provides helpers for ser/deser of chunks.
  */
 public class ClosedChunkIndexIO {
-    private static final int VERSION_1 = 1; // [byte 1: version][byte 2: encoding][bytes 3-n: chunk data]
+    /** Version 1 of chunk serialization format: [byte 1: version][byte 2: encoding][bytes 3-n: chunk data] */
+    public static final int VERSION_1 = 1;
 
     private static final int VERSION_1_METADATA_SIZE = 2; // version + encoding
 

@@ -26,7 +26,9 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.search.AcceptDocs;
 import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.util.Bits;
+import org.opensearch.tsdb.core.chunk.Chunk;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
+import org.opensearch.tsdb.core.chunk.Encoding;
 import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.head.MemChunk;
 import org.opensearch.tsdb.core.mapping.Constants;
@@ -34,6 +36,7 @@ import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.LabelsStorage;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
+import org.opensearch.tsdb.query.aggregator.CompressedChunk;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -133,6 +136,37 @@ public class LiveSeriesIndexLeafReader extends TSDBLeafReader {
         }
 
         return chunkIterators;
+    }
+
+    @Override
+    public List<CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+        NumericDocValues seriesRefValue = tsdbDocValues.getChunkRefDocValues();
+        if (!seriesRefValue.advanceExact(docId)) {
+            return List.of();
+        }
+
+        long seriesRef = seriesRefValue.longValue();
+        Set<MemChunk> chunksToFilter = mMappedChunks.getOrDefault(seriesRef, Collections.emptySet());
+        List<MemChunk> memChunks = memChunkReader.getChunks(seriesRef);
+
+        if (memChunks == null || memChunks.isEmpty()) {
+            return List.of();
+        }
+
+        List<CompressedChunk> compressedChunks = new ArrayList<>();
+
+        for (MemChunk memChunk : memChunks) {
+            if (!chunksToFilter.contains(memChunk)) {
+                Chunk chunk = memChunk.getCompoundChunk().toChunk();
+                byte[] rawBytes = chunk.bytes();
+                Encoding encoding = chunk.encoding();
+                long minTs = memChunk.getMinTimestamp();
+                long maxTs = memChunk.getMaxTimestamp();
+                compressedChunks.add(new CompressedChunk(rawBytes, encoding, minTs, maxTs));
+            }
+        }
+
+        return compressedChunks;
     }
 
     @Override

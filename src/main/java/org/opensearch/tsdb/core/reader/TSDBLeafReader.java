@@ -12,6 +12,7 @@ import org.apache.lucene.index.LeafReader;
 import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
 import org.opensearch.tsdb.core.model.Labels;
+import org.opensearch.tsdb.query.aggregator.CompressedChunk;
 
 import java.io.IOException;
 import java.util.List;
@@ -77,6 +78,18 @@ public abstract class TSDBLeafReader extends SequentialStoredFieldsLeafReader {
      * @throws IOException if an error occurs while accessing the index
      */
     public abstract List<ChunkIterator> chunksForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException;
+
+    /**
+     * Returns raw compressed chunks for efficient transport to coordinator.
+     * Used in compressed mode when data nodes have no pipeline stages to process,
+     * allowing chunks to be sent without decoding and deferred decompression on coordinator.
+     *
+     * @param docId the document ID to retrieve chunks for
+     * @param tsdbDocValues the TSDBDocValues containing doc values for chunks
+     * @return a list of CompressedChunk objects associated with the document
+     * @throws IOException if an error occurs while accessing the index
+     */
+    public abstract List<CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException;
 
     /**
      * Parse labels from DocValues into a Labels object.

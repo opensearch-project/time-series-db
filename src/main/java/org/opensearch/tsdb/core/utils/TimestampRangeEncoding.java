@@ -45,4 +45,17 @@ public final class TimestampRangeEncoding {
     public static RangeFieldMapper.Range decodeRange(BytesRef bytes) throws IOException {
         return RangeType.LONG.decodeRanges(bytes).getFirst();
     }
+
+    /**
+     * Extracts both min and max timestamps from an encoded range.
+     *
+     * @param bytes the byte array containing the encoded long range
+     * @return array with [min, max] timestamps
+     */
+    public static long[] getMinMax(BytesRef bytes) throws IOException {
+        RangeFieldMapper.Range range = decodeRange(bytes);
+        long min = ((Number) range.getFrom()).longValue();
+        long max = ((Number) range.getTo()).longValue();
+        return new long[] { min, max };
+    }
 }

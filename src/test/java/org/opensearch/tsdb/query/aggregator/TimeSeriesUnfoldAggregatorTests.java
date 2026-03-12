@@ -22,6 +22,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermVectors;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
@@ -31,6 +32,7 @@ import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.aggregations.AggregatorFactories;
 import org.opensearch.search.aggregations.CardinalityUpperBound;
+import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
@@ -38,6 +40,9 @@ import org.opensearch.search.internal.ShardSearchRequest;
 import org.apache.lucene.search.Query;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
+import org.opensearch.tsdb.core.chunk.Encoding;
+import org.opensearch.tsdb.core.chunk.XORChunk;
+import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
@@ -48,6 +53,7 @@ import org.opensearch.telemetry.metrics.MetricsRegistry;
 import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -344,6 +350,166 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
     }
 
     /**
+     * Compressed mode is disabled by default (cluster setting false).
+     */
+    public void testCompressedModeDisabledByDefault() throws IOException {
+        TimeSeriesUnfoldAggregator.initialize(null, Settings.EMPTY);
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(1000L, 5000L, 100L);
+        try {
+            assertFalse(aggregator.isUseCompressedMode());
+        } finally {
+            aggregator.close();
+        }
+    }
+
+    /**
+     * When tsdb_engine.query.enable_internal_agg_chunk_compression is true and stages are empty, compressed mode is enabled.
+     */
+    public void testCompressedModeEnabledWhenSettingTrueAndNoStages() throws IOException {
+        TimeSeriesUnfoldAggregator.initialize(
+            null,
+            Settings.builder().put("tsdb_engine.query.enable_internal_agg_chunk_compression", true).build()
+        );
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(1000L, 5000L, 100L);
+        try {
+            assertTrue(aggregator.isUseCompressedMode());
+            InternalAggregation empty = aggregator.buildEmptyAggregation();
+            assertTrue(empty instanceof InternalTimeSeries);
+            assertEquals(InternalTimeSeries.Encoding.XOR, ((InternalTimeSeries) empty).getEncoding());
+        } finally {
+            aggregator.close();
+        }
+    }
+
+    /**
+     * buildAggregations in compressed mode with non-empty bucket returns XOR-encoded InternalTimeSeries
+     * and recordMetrics runs (TAGS_COMPRESSED_TRUE, TAGS_STATUS_HITS).
+     */
+    public void testBuildAggregationsCompressedModeWithNonEmptyBucket() throws Exception {
+        TimeSeriesUnfoldAggregator.initialize(
+            null,
+            Settings.builder().put("tsdb_engine.query.enable_internal_agg_chunk_compression", true).build()
+        );
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(1000L, 5000L, 100L);
+        try {
+            assertTrue(aggregator.isUseCompressedMode());
+
+            XORChunk xorChunk = new XORChunk();
+            xorChunk.appender().append(2000L, 10.0);
+            CompressedChunk chunk = new CompressedChunk(xorChunk.bytes(), Encoding.XOR, 2000L, 2000L);
+            CompressedTimeSeries series = new CompressedTimeSeries(
+                List.of(chunk),
+                ByteLabels.fromMap(Map.of("k", "v")),
+                2000L,
+                2000L,
+                1000L,
+                null
+            );
+
+            aggregator.setCompressedTimeSeriesByBucketForTesting(Map.of(0L, List.of(series)));
+
+            InternalAggregation[] results = aggregator.buildAggregations(new long[] { 0 });
+
+            assertEquals(1, results.length);
+            assertTrue(results[0] instanceof InternalTimeSeries);
+            InternalTimeSeries internal = (InternalTimeSeries) results[0];
+            assertEquals(InternalTimeSeries.Encoding.XOR, internal.getEncoding());
+            assertEquals(1, internal.getCompressedTimeSeries().size());
+        } finally {
+            aggregator.close();
+        }
+    }
+
+    /**
+     * Exercises collectCompressed path: one doc with chunks creates one new CompressedTimeSeries in the bucket.
+     */
+    public void testCollectCompressedModeNewSeries() throws Exception {
+        TimeSeriesUnfoldAggregator.initialize(
+            null,
+            Settings.builder().put("tsdb_engine.query.enable_internal_agg_chunk_compression", true).build()
+        );
+        long minTs = 1000L;
+        long maxTs = 5000L;
+        long step = 100L;
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTs, maxTs, step);
+        TSDBLeafReaderWithContext readerCtx = null;
+        try {
+            assertTrue(aggregator.isUseCompressedMode());
+            XORChunk xorChunk = new XORChunk();
+            xorChunk.appender().append(2000L, 10.0);
+            CompressedChunk chunk = new CompressedChunk(xorChunk.bytes(), Encoding.XOR, 2000L, 2000L);
+            Labels labels = ByteLabels.fromMap(Map.of("k", "v"));
+            readerCtx = createMockTSDBLeafReaderWithChunks(minTs, maxTs, List.of(List.of(chunk)), List.of(labels));
+            aggregator.preCollection();
+            LeafBucketCollector subCollector = mock(LeafBucketCollector.class);
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, subCollector);
+            assertNotSame(subCollector, collector);
+            collector.collect(0, 0);
+            aggregator.postCollection();
+            InternalAggregation[] results = aggregator.buildAggregations(new long[] { 0 });
+            assertEquals(1, results.length);
+            InternalTimeSeries internal = (InternalTimeSeries) results[0];
+            assertEquals(InternalTimeSeries.Encoding.XOR, internal.getEncoding());
+            assertEquals(1, internal.getCompressedTimeSeries().size());
+            assertEquals(1, internal.getCompressedTimeSeries().get(0).getChunks().size());
+        } finally {
+            if (readerCtx != null) {
+                readerCtx.directoryReader.close();
+                readerCtx.directory.close();
+            }
+            aggregator.close();
+        }
+    }
+
+    /**
+     * Exercises collectCompressed existing-series path: two docs with same labels append chunks via addAll (no copy).
+     */
+    public void testCollectCompressedModeExistingSeriesAppend() throws Exception {
+        TimeSeriesUnfoldAggregator.initialize(
+            null,
+            Settings.builder().put("tsdb_engine.query.enable_internal_agg_chunk_compression", true).build()
+        );
+        long minTs = 1000L;
+        long maxTs = 5000L;
+        long step = 100L;
+        TimeSeriesUnfoldAggregator aggregator = createAggregator(minTs, maxTs, step);
+        TSDBLeafReaderWithContext readerCtx = null;
+        try {
+            assertTrue(aggregator.isUseCompressedMode());
+            XORChunk xor1 = new XORChunk();
+            xor1.appender().append(2000L, 10.0);
+            XORChunk xor2 = new XORChunk();
+            xor2.appender().append(3000L, 20.0);
+            CompressedChunk chunk1 = new CompressedChunk(xor1.bytes(), Encoding.XOR, 2000L, 2000L);
+            CompressedChunk chunk2 = new CompressedChunk(xor2.bytes(), Encoding.XOR, 3000L, 3000L);
+            Labels labels = ByteLabels.fromMap(Map.of("job", "api"));
+            readerCtx = createMockTSDBLeafReaderWithChunks(
+                minTs,
+                maxTs,
+                List.of(List.of(chunk1), List.of(chunk2)),
+                List.of(labels, labels)
+            );
+            aggregator.preCollection();
+            LeafBucketCollector subCollector = mock(LeafBucketCollector.class);
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, subCollector);
+            collector.collect(0, 0);
+            collector.collect(1, 0);
+            aggregator.postCollection();
+            InternalAggregation[] results = aggregator.buildAggregations(new long[] { 0 });
+            assertEquals(1, results.length);
+            InternalTimeSeries internal = (InternalTimeSeries) results[0];
+            assertEquals(1, internal.getCompressedTimeSeries().size());
+            assertEquals(2, internal.getCompressedTimeSeries().get(0).getChunks().size());
+        } finally {
+            if (readerCtx != null) {
+                readerCtx.directoryReader.close();
+                readerCtx.directory.close();
+            }
+            aggregator.close();
+        }
+    }
+
+    /**
      * Tests that recordMetrics correctly records circuit breaker MiB histogram when circuitBreakerBytes > 0.
      */
     public void testRecordMetricsWithCircuitBreakerBytes() throws IOException {
@@ -550,6 +716,12 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
             }
 
             @Override
+            public List<org.opensearch.tsdb.query.aggregator.CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues)
+                throws IOException {
+                return List.of();
+            }
+
+            @Override
             public Labels labelsForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
                 return mock(Labels.class);
             }
@@ -621,6 +793,131 @@ public class TimeSeriesUnfoldAggregatorTests extends OpenSearchTestCase {
         // Get the context from the composite reader
         LeafReaderContext context = compositeReader.leaves().getFirst();
 
+        return new TSDBLeafReaderWithContext(tsdbLeafReader, context, tempReader, directory, indexWriter);
+    }
+
+    /**
+     * Creates a TSDB leaf reader that overlaps the given time range and returns the given chunks and labels per doc.
+     * Used to exercise the compressed collect path (collectCompressed). Index has one document per entry in chunksPerDoc.
+     */
+    private TSDBLeafReaderWithContext createMockTSDBLeafReaderWithChunks(
+        long leafMinTimestamp,
+        long leafMaxTimestamp,
+        List<List<CompressedChunk>> chunksPerDoc,
+        List<Labels> labelsPerDoc
+    ) throws IOException {
+        assert chunksPerDoc.size() == labelsPerDoc.size();
+        Directory directory = new ByteBuffersDirectory();
+        IndexWriter indexWriter = new IndexWriter(directory, new IndexWriterConfig());
+        for (int i = 0; i < chunksPerDoc.size(); i++) {
+            indexWriter.addDocument(new Document());
+        }
+        indexWriter.commit();
+        DirectoryReader tempReader = DirectoryReader.open(indexWriter);
+        LeafReader baseReader = tempReader.leaves().get(0).reader();
+
+        List<List<CompressedChunk>> chunksCopy = new ArrayList<>(chunksPerDoc);
+        List<Labels> labelsCopy = new ArrayList<>(labelsPerDoc);
+
+        TSDBLeafReader tsdbLeafReader = new TSDBLeafReader(baseReader, leafMinTimestamp, leafMaxTimestamp) {
+            @Override
+            public CacheHelper getReaderCacheHelper() {
+                return null;
+            }
+
+            @Override
+            public CacheHelper getCoreCacheHelper() {
+                return null;
+            }
+
+            @Override
+            protected StoredFieldsReader doGetSequentialStoredFieldsReader(StoredFieldsReader reader) {
+                return reader;
+            }
+
+            @Override
+            public TSDBDocValues getTSDBDocValues() throws IOException {
+                return mock(TSDBDocValues.class);
+            }
+
+            @Override
+            public List<ChunkIterator> chunksForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+                return List.of();
+            }
+
+            @Override
+            public List<CompressedChunk> rawChunkDataForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+                if (docId >= chunksCopy.size()) return List.of();
+                return new ArrayList<>(chunksCopy.get(docId));
+            }
+
+            @Override
+            public Labels labelsForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+                if (docId >= labelsCopy.size()) return ByteLabels.emptyLabels();
+                return labelsCopy.get(docId);
+            }
+        };
+
+        CompositeReader compositeReader = new CompositeReader() {
+            @Override
+            protected List<? extends LeafReader> getSequentialSubReaders() {
+                return Collections.singletonList(tsdbLeafReader);
+            }
+
+            @Override
+            public TermVectors termVectors() throws IOException {
+                return tsdbLeafReader.termVectors();
+            }
+
+            @Override
+            public int numDocs() {
+                return tsdbLeafReader.numDocs();
+            }
+
+            @Override
+            public int maxDoc() {
+                return tsdbLeafReader.maxDoc();
+            }
+
+            @Override
+            public StoredFields storedFields() throws IOException {
+                return tsdbLeafReader.storedFields();
+            }
+
+            @Override
+            protected void doClose() throws IOException {}
+
+            @Override
+            public CacheHelper getReaderCacheHelper() {
+                return null;
+            }
+
+            @Override
+            public int docFreq(Term term) throws IOException {
+                return tsdbLeafReader.docFreq(term);
+            }
+
+            @Override
+            public long totalTermFreq(Term term) throws IOException {
+                return tsdbLeafReader.totalTermFreq(term);
+            }
+
+            @Override
+            public long getSumDocFreq(String field) throws IOException {
+                return tsdbLeafReader.getSumDocFreq(field);
+            }
+
+            @Override
+            public int getDocCount(String field) throws IOException {
+                return tsdbLeafReader.getDocCount(field);
+            }
+
+            @Override
+            public long getSumTotalTermFreq(String field) throws IOException {
+                return tsdbLeafReader.getSumTotalTermFreq(field);
+            }
+        };
+        LeafReaderContext context = compositeReader.leaves().getFirst();
         return new TSDBLeafReaderWithContext(tsdbLeafReader, context, tempReader, directory, indexWriter);
     }
 

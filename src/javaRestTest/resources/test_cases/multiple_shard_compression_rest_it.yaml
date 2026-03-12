@@ -1,0 +1,120 @@
+# TSDB REST Integration Test - Multi-Shard Compressed Mode Correctness
+#
+# This test validates compressed mode correctness for multi-index scenarios:
+#
+# 1. MULTI-INDEX COORDINATOR MERGE:
+#    The same series (service:api, region:us-west) exists in both indices.
+#    When queried across both indices, the coordinator must merge data from
+#    multiple shards/indices into a single series. In compressed mode, this
+#    exercises the CompressedData merge path in InternalTimeSeries.reduce().
+#
+# 2. LIVE SERIES vs CLOSED CHUNK INDEX READS:
+#    The Java test class controls this via flush. testMultiShardLiveSeriesParity
+#    skips flush (data stays in LiveSeriesIndex/MemChunks, exercising
+#    LiveSeriesIndexLeafReader.rawChunkDataForDoc()). testMultiShardClosedChunkParity
+#    flushes after ingestion with a reduced ooo_cutoff so older chunks move to
+#    ClosedChunkIndex, exercising ClosedChunkIndexLeafReader.rawChunkDataForDoc().
+#
+# 3. NO PUSHDOWN FOR ALL QUERIES:
+#    Every query uses disable_pushdown: true. When compression is enabled,
+#    this means no stages run on data nodes, so useCompressedMode=true for
+#    ALL queries (both with and without stages). This provides comprehensive
+#    coverage of the compressed transport path.
+#
+# PARITY TESTING STRATEGY:
+# The Java test class (CompressedModeRestIT.java) runs this YAML twice:
+# once WITHOUT compression (baseline) and once WITH compression.
+# Both runs validate against the same expected values, proving that
+# compressed mode produces identical results to the traditional path.
+
+test_setup:
+  name: "Multi-Shard Compressed Mode Correctness Tests"
+  description: "Validates compressed mode for multi-index coordinator merge, live/closed chunk reads, and no-pushdown scenarios"
+
+  index_configs:
+    - name: "multi_shard_comp_test_1"
+      shards: 2
+      replicas: 0
+    - name: "multi_shard_comp_test_2"
+      shards: 2
+      replicas: 0
+
+test_case:
+  name: "Multi-Shard Compressed Mode Correctness Test"
+
+  input_data_list:
+    # Index 1: Data from 00:00 to 00:30 (7 data points)
+    - index_name: "multi_shard_comp_test_1"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:30:00Z"
+        step: "5m"
+      regular_metrics:
+        # Series A: exists in BOTH indices - tests coordinator merge
+        - labels: "name:requests,service:api,region:us-west"
+          values: [10, 20, 30, 40, 50, 60, 70]
+
+    # Index 2: Data from 00:35 to 01:00 (6 data points)
+    - index_name: "multi_shard_comp_test_2"
+      input_data_type: FIXED_INTERVAL
+      time_config:
+        min_timestamp: "2025-01-01T00:35:00Z"
+        max_timestamp: "2025-01-01T01:00:00Z"
+        step: "5m"
+      regular_metrics:
+        # Series A continued: same labels as index 1 - coordinator must merge
+        - labels: "name:requests,service:api,region:us-west"
+          values: [80, 90, 100, 110, 120, 130]
+
+  queries:
+    # Q1: Fetch Series A spanning both indices (basic coordinator merge)
+    - name: "fetch_series_spanning_indices"
+      type: "m3ql"
+      query: "fetch service:api region:us-west name:requests"
+      indices: "multi_shard_comp_test_1,multi_shard_comp_test_2"
+      disable_pushdown: true
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T01:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "requests", service: "api", region: "us-west"}
+            values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+
+    # Q2: Sum aggregation of Series A spanning both indices
+    - name: "sum_spanning_indices"
+      type: "m3ql"
+      query: "fetch service:api region:us-west name:requests | sum"
+      indices: "multi_shard_comp_test_1,multi_shard_comp_test_2"
+      disable_pushdown: true
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T01:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+
+    # Q3: Moving sum spanning both indices - crosses the index boundary.
+    # At t7 (00:35, first in index2), the moving window includes t5+t6
+    # (60+70=130) from index1. This validates that the coordinator correctly
+    # merged data from both indices BEFORE computing the moving sum.
+    - name: "moving_sum_spanning_indices"
+      type: "m3ql"
+      query: "fetch service:api region:us-west name:requests | moving 10m sum"
+      indices: "multi_shard_comp_test_1,multi_shard_comp_test_2"
+      disable_pushdown: true
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T01:00:00Z"
+        step: "5m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "requests", service: "api", region: "us-west"}
+            values: [null, 10, 30, 50, 70, 90, 110, 130, 150, 170, 190, 210]

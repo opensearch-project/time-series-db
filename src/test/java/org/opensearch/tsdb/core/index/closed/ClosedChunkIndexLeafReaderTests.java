@@ -34,8 +34,12 @@ import java.io.IOException;
 import java.util.List;
 
 import org.opensearch.tsdb.core.mapping.Constants;
+import org.opensearch.tsdb.core.utils.TimestampRangeEncoding;
+import org.opensearch.tsdb.query.aggregator.CompressedChunk;
+
 import static org.opensearch.tsdb.core.mapping.Constants.IndexSchema.CHUNK;
 import static org.opensearch.tsdb.core.mapping.Constants.IndexSchema.LABELS;
+import static org.opensearch.tsdb.core.mapping.Constants.IndexSchema.TIMESTAMP_RANGE;
 
 public class ClosedChunkIndexLeafReaderTests extends OpenSearchTestCase {
 
@@ -376,6 +380,140 @@ public class ClosedChunkIndexLeafReaderTests extends OpenSearchTestCase {
             // Note: doClose() is implicitly tested when the reader is closed in tearDown()
             // and through the try-with-resources blocks. Testing it directly here would break the reader.
         }
+    }
+
+    public void testRawChunkDataForDoc() throws IOException {
+        createTestDocumentWithTimestampRange();
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            List<CompressedChunk> chunks = leafReader.rawChunkDataForDoc(0, tsdbDocValues);
+
+            assertNotNull(chunks);
+            assertEquals(1, chunks.size());
+            CompressedChunk chunk = chunks.get(0);
+            assertEquals(Encoding.XOR, chunk.getEncoding());
+            assertEquals(1000L, chunk.getMinTimestamp());
+            assertEquals(3000L, chunk.getMaxTimestamp());
+            assertTrue(chunk.getCompressedSize() > 0);
+        }
+    }
+
+    public void testRawChunkDataForDocAdvanceExactFalse() throws IOException {
+        createTestDocumentWithTimestampRange();
+        createTestDocumentWithTimestampRange();
+        Document docNoChunk = new Document();
+        docNoChunk.add(new BinaryDocValuesField(LABELS, new BytesRef(ByteLabels.fromStrings("__name__", "nochunk").getRawBytes())));
+        indexWriter.addDocument(docNoChunk);
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            // Doc 2 has no CHUNK field; advanceExact(2) returns false — should throw IOException
+            IOException exception = expectThrows(IOException.class, () -> leafReader.rawChunkDataForDoc(2, tsdbDocValues));
+            assertTrue(exception.getMessage().contains("not found for document"));
+        }
+    }
+
+    public void testRawChunkDataForDocEmptyChunk() throws IOException {
+        Document doc = new Document();
+        doc.add(new BinaryDocValuesField(CHUNK, new BytesRef(new byte[0])));
+        ByteLabels labels = ByteLabels.fromStrings("__name__", "empty");
+        doc.add(new BinaryDocValuesField(LABELS, new BytesRef(labels.getRawBytes())));
+        indexWriter.addDocument(doc);
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            List<CompressedChunk> chunks = leafReader.rawChunkDataForDoc(0, tsdbDocValues);
+            assertNotNull(chunks);
+            assertTrue(chunks.isEmpty());
+        }
+    }
+
+    public void testRawChunkDataForDocTooShort() throws IOException {
+        Document doc = new Document();
+        doc.add(new BinaryDocValuesField(CHUNK, new BytesRef(new byte[] { 1 })));
+        ByteLabels labels = ByteLabels.fromStrings("__name__", "x");
+        doc.add(new BinaryDocValuesField(LABELS, new BytesRef(labels.getRawBytes())));
+        indexWriter.addDocument(doc);
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            IOException e = expectThrows(IOException.class, () -> leafReader.rawChunkDataForDoc(0, tsdbDocValues));
+            assertTrue(e.getMessage().contains("too short"));
+        }
+    }
+
+    public void testRawChunkDataForDocUnsupportedVersion() throws IOException {
+        byte[] chunkWithBadVersion = new byte[] { (byte) 99, (byte) 0, 1, 2, 3 };
+        Document doc = new Document();
+        doc.add(new BinaryDocValuesField(CHUNK, new BytesRef(chunkWithBadVersion)));
+        ByteLabels labels = ByteLabels.fromStrings("__name__", "x");
+        doc.add(new BinaryDocValuesField(LABELS, new BytesRef(labels.getRawBytes())));
+        BytesRef rangeBytes = TimestampRangeEncoding.encodeRange(1000L, 2000L);
+        doc.add(new BinaryDocValuesField(TIMESTAMP_RANGE, rangeBytes));
+        indexWriter.addDocument(doc);
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            IOException e = expectThrows(IOException.class, () -> leafReader.rawChunkDataForDoc(0, tsdbDocValues));
+            assertTrue(e.getMessage().contains("Unsupported chunk version"));
+        }
+    }
+
+    public void testRawChunkDataForDocMissingTimestampRange() throws IOException {
+        XORChunk chunk = new XORChunk();
+        chunk.appender().append(1000L, 10.0);
+        BytesRef serializedChunk = ClosedChunkIndexIO.serializeChunk(chunk);
+        Document doc = new Document();
+        doc.add(new BinaryDocValuesField(CHUNK, serializedChunk));
+        ByteLabels labels = ByteLabels.fromStrings("__name__", "x");
+        doc.add(new BinaryDocValuesField(LABELS, new BytesRef(labels.getRawBytes())));
+        indexWriter.addDocument(doc);
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LeafReader innerReader = reader.leaves().get(0).reader();
+            ClosedChunkIndexLeafReader leafReader = new ClosedChunkIndexLeafReader(innerReader, LabelStorageType.BINARY);
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            IOException e = expectThrows(IOException.class, () -> leafReader.rawChunkDataForDoc(0, tsdbDocValues));
+            assertTrue(e.getMessage().contains("timestamp_range") || e.getMessage().contains("Missing"));
+        }
+    }
+
+    private void createTestDocumentWithTimestampRange() throws IOException {
+        MemChunk memChunk = new MemChunk(1, 1000L, 3000L, null, Encoding.XOR);
+        memChunk.append(1000L, 42.0, 1L);
+        memChunk.append(2000L, 43.0, 2L);
+        BytesRef serializedChunk = ClosedChunkIndexIO.serializeChunk(memChunk.getCompoundChunk().toChunk());
+
+        Document doc = new Document();
+        doc.add(new BinaryDocValuesField(CHUNK, serializedChunk));
+        ByteLabels labels = ByteLabels.fromStrings("__name__", "test_metric", "host", "server1");
+        doc.add(new BinaryDocValuesField(LABELS, new BytesRef(labels.getRawBytes())));
+        BytesRef rangeBytes = TimestampRangeEncoding.encodeRange(1000L, 3000L);
+        doc.add(new BinaryDocValuesField(TIMESTAMP_RANGE, rangeBytes));
+        indexWriter.addDocument(doc);
     }
 
     private void createTestDocument() throws IOException {
