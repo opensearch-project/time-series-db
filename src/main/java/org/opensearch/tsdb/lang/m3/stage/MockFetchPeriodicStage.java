@@ -38,7 +38,6 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
     private final double min;
     private final double max;
     private final double period;
-    private final long endTime;
 
     /**
      * Constructor for MockFetchPeriodicStage.
@@ -62,7 +61,7 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         long endTime,
         long step
     ) {
-        super(tags, startTime, step);
+        super(tags, startTime, endTime, step);
 
         if (!SUPPORTED_PERIODIC_FUNCTIONS.contains(periodicFunction)) {
             throw new IllegalArgumentException("Unknown periodic function: " + periodicFunction);
@@ -72,12 +71,11 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         this.min = min;
         this.max = max;
         this.period = period;
-        this.endTime = endTime;
     }
 
     @Override
     protected List<Double> generateValues() {
-        // Calculate number of data points based on time range
+        // Cap number of points by the time window (exclusive endTime)
         int numPoints = (int) ((endTime - startTime) / step);
         List<Double> values = new ArrayList<>(numPoints);
 
@@ -130,7 +128,6 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         builder.field("min", min);
         builder.field("max", max);
         builder.field("period", period);
-        builder.field("endTime", endTime);
         writeCommonFieldsToXContent(builder);
     }
 
@@ -140,7 +137,6 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         out.writeDouble(min);
         out.writeDouble(max);
         out.writeDouble(period);
-        out.writeLong(endTime);
         writeCommonFields(out);
     }
 
@@ -156,12 +152,12 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         double min = in.readDouble();
         double max = in.readDouble();
         double period = in.readDouble();
-        long endTime = in.readLong();
         Object[] commonFields = readCommonFields(in);
         @SuppressWarnings("unchecked")
         Map<String, String> tags = (Map<String, String>) commonFields[0];
         long startTime = (long) commonFields[1];
-        long step = (long) commonFields[2];
+        long endTime = (long) commonFields[2];
+        long step = (long) commonFields[3];
         return new MockFetchPeriodicStage(periodicFunction, min, max, period, tags, startTime, endTime, step);
     }
 
@@ -191,9 +187,9 @@ public class MockFetchPeriodicStage extends AbstractMockFetchStage {
         double max = ((Number) args.get("max")).doubleValue();
         double period = ((Number) args.get("period")).doubleValue();
 
-        long endTime = ((Number) args.get("endTime")).longValue();
         Map<String, String> tags = parseTagsFromArgs(args, NAME);
         long startTime = parseStartTimeFromArgs(args);
+        long endTime = parseEndTimeFromArgs(args);
         long step = parseStepFromArgs(args);
 
         return new MockFetchPeriodicStage(periodicFunction, min, max, period, tags, startTime, endTime, step);
