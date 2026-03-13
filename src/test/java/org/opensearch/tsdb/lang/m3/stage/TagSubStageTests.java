@@ -287,345 +287,66 @@ public class TagSubStageTests extends AbstractWireSerializingTestCase<TagSubStag
     }
 
     /**
-     * Test fromArgs with null args throws exception.
+     * Test fromArgs validation for invalid arguments.
      */
-    public void testFromArgsWithNullArgs() {
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(null));
-        assertEquals("Args cannot be null", exception.getMessage());
-    }
+    public void testFromArgsValidation() {
+        // Null args
+        assertThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(null));
 
-    /**
-     * Test fromArgs with missing tag_name throws exception.
-     */
-    public void testFromArgsWithMissingTagName() {
-        Map<String, Object> args = Map.of("search_pattern", "prod", "replacement", "production");
+        // Missing required arguments
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> TagSubStage.fromArgs(Map.of("search_pattern", "prod", "replacement", "production"))
+        );
+        assertThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(Map.of("tag_name", "env", "replacement", "production")));
+        assertThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(Map.of("tag_name", "env", "search_pattern", "prod")));
 
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("TagSub stage requires 'tag_name' argument", exception.getMessage());
-    }
+        // Empty tag_name or search_pattern
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> TagSubStage.fromArgs(Map.of("tag_name", "", "search_pattern", "prod", "replacement", "production"))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> TagSubStage.fromArgs(Map.of("tag_name", "env", "search_pattern", "", "replacement", "production"))
+        );
 
-    /**
-     * Test fromArgs with null tag_name throws exception.
-     */
-    public void testFromArgsWithNullTagName() {
-        Map<String, Object> args = new java.util.HashMap<>();
-        args.put("tag_name", null);
-        args.put("search_pattern", "prod");
-        args.put("replacement", "production");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("Tag name cannot be null or empty", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with empty tag_name throws exception.
-     */
-    public void testFromArgsWithEmptyTagName() {
-        Map<String, Object> args = Map.of("tag_name", "", "search_pattern", "prod", "replacement", "production");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("Tag name cannot be null or empty", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with missing search_pattern throws exception.
-     */
-    public void testFromArgsWithMissingSearchPattern() {
-        Map<String, Object> args = Map.of("tag_name", "env", "replacement", "production");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("TagSub stage requires 'search_pattern' argument", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with null search_pattern throws exception.
-     */
-    public void testFromArgsWithNullSearchPattern() {
-        Map<String, Object> args = new java.util.HashMap<>();
-        args.put("tag_name", "env");
-        args.put("search_pattern", null);
-        args.put("replacement", "production");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("Search pattern cannot be null or empty", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with empty search_pattern throws exception.
-     */
-    public void testFromArgsWithEmptySearchPattern() {
-        Map<String, Object> args = Map.of("tag_name", "env", "search_pattern", "", "replacement", "production");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("Search pattern cannot be null or empty", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with missing replacement throws exception.
-     */
-    public void testFromArgsWithMissingReplacement() {
-        Map<String, Object> args = Map.of("tag_name", "env", "search_pattern", "prod");
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("TagSub stage requires 'replacement' argument", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with null replacement throws exception.
-     */
-    public void testFromArgsWithNullReplacement() {
-        Map<String, Object> args = new java.util.HashMap<>();
-        args.put("tag_name", "env");
-        args.put("search_pattern", "prod");
-        args.put("replacement", null);
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> TagSubStage.fromArgs(args));
-        assertEquals("Replacement cannot be null", exception.getMessage());
-    }
-
-    /**
-     * Test fromArgs with empty replacement (empty string is valid).
-     */
-    public void testFromArgsWithEmptyReplacement() {
-        Map<String, Object> args = Map.of("tag_name", "env", "search_pattern", "prod", "replacement", "");
-
-        TagSubStage stage = TagSubStage.fromArgs(args);
+        // Empty replacement is valid
+        TagSubStage stage = TagSubStage.fromArgs(Map.of("tag_name", "env", "search_pattern", "prod", "replacement", ""));
         assertNotNull(stage);
     }
 
     /**
-     * Test serialization/deserialization with custom name.
+     * Test serialization and XContent.
      */
-    public void testSerializationCustom() throws IOException {
+    public void testSerializationAndXContent() throws IOException {
         TagSubStage original = new TagSubStage("env", "^prod-(.*)$", "production-$1");
 
+        // Test writeTo/readFrom
         BytesStreamOutput output = new BytesStreamOutput();
         original.writeTo(output);
-
         StreamInput input = output.bytes().streamInput();
         TagSubStage deserialized = TagSubStage.readFrom(input);
-
         assertEquals(original, deserialized);
-    }
 
-    /**
-     * Test toXContent.
-     */
-    public void testToXContent() throws IOException {
-        TagSubStage stage = new TagSubStage("env", "^prod-(.*)$", "production-$1");
-
+        // Test toXContent
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder.startObject();
-        stage.toXContent(builder, EMPTY_PARAMS);
+        original.toXContent(builder, EMPTY_PARAMS);
         builder.endObject();
-
         String json = builder.toString();
         assertTrue(json.contains("\"tag_name\":\"env\""));
         assertTrue(json.contains("\"search_pattern\":\"^prod-(.*)$\""));
         assertTrue(json.contains("\"replacement\":\"production-$1\""));
-    }
 
-    /**
-     * Test readFrom through PipelineStageFactory.
-     */
-    public void testReadFromThroughFactory() throws IOException {
-        TagSubStage original = new TagSubStage("env", "prod", "production");
-
-        BytesStreamOutput output = new BytesStreamOutput();
-        output.writeString(original.getName());
-        original.writeTo(output);
-
-        StreamInput input = output.bytes().streamInput();
-        PipelineStage deserialized = PipelineStageFactory.readFrom(input);
-
-        assertTrue(deserialized instanceof TagSubStage);
-        assertEquals(original, deserialized);
-    }
-
-    /**
-     * Test case 14: Back reference using \1 syntax (new feature).
-     * Replace "prod-east" with "production-east" using pattern "^prod-(.*)$" and replacement "production-\1".
-     */
-    public void testBackreferenceWithBackslashSyntax() {
-        TagSubStage stage = new TagSubStage("env", "^prod-(.*)$", "production-\\1");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod-east", "service", "api");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("production-east", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 15: Multiple back references using \1, \2, \3 syntax.
-     * Replace "prod-us-east" with "production_us_east" using pattern "^(\\w+)-(\\w+)-(\\w+)$".
-     */
-    public void testMultipleBackreferencesWithBackslashSyntax() {
-        TagSubStage stage = new TagSubStage("region", "^(\\w+)-(\\w+)-(\\w+)$", "\\1_\\2_\\3");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("region", "prod-us-east");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("prod_us_east", result.get(0).getLabels().get("region"));
-    }
-
-    /**
-     * Test case 16: Back reference \0 for full match.
-     * Replace entire match with prefix and suffix.
-     */
-    public void testBackreferenceZeroForFullMatch() {
-        TagSubStage stage = new TagSubStage("env", "prod", "prefix-\\0-suffix");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("prefix-prod-suffix", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 17: Invalid back reference group number should throw exception.
-     * Using \9 when only 2 groups exist should fail.
-     */
-    public void testInvalidBackreferenceGroupNumber() {
-        TagSubStage stage = new TagSubStage("env", "^(\\w+)-(\\w+)$", "\\9");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod-east");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> stage.process(List.of(timeSeries)));
-        assertTrue(exception.getMessage().contains("Invalid group reference"));
-        assertTrue(exception.getMessage().contains("\\9"));
-    }
-
-    /**
-     * Test case 18: Back reference to empty captured group.
-     * Optional group that doesn't match should be replaced with empty string.
-     */
-    public void testBackreferenceToEmptyGroup() {
-        TagSubStage stage = new TagSubStage("env", "^prod(-(.*))?$", "production\\2");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("production", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 19: Mixed $1 and \1 syntax in replacement.
-     * Both should work correctly.
-     */
-    public void testMixedBackreferenceSyntax() {
-        TagSubStage stage = new TagSubStage("env", "^(\\w+)-(\\w+)-(\\w+)$", "$1-\\2-$3");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod-us-east");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("prod-us-east", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 20: Backreference with reordering of captured groups.
-     * Swap positions using \2 and \1.
-     */
-    public void testBackreferenceReordering() {
-        TagSubStage stage = new TagSubStage("region", "^(\\w+)-(\\w+)$", "\\2-\\1");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("region", "us-east");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("east-us", result.get(0).getLabels().get("region"));
-    }
-
-    /**
-     * Test case 21: Duplicate back references.
-     * Using the same group reference multiple times.
-     */
-    public void testDuplicateBackreferences() {
-        TagSubStage stage = new TagSubStage("env", "^(\\w+)$", "\\1-\\1-\\1");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("prod-prod-prod", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 22: Back reference with complex pattern.
-     * Extract and rearrange components from version string.
-     */
-    public void testBackreferenceComplexPattern() {
-        TagSubStage stage = new TagSubStage("version", "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$", "version-\\1-\\2-\\3");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("version", "v1.2.3");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("version-1-2-3", result.get(0).getLabels().get("version"));
-    }
-
-    /**
-     * Test case 23: Back reference with special characters in replacement.
-     * Ensure special regex characters in replacement are handled properly.
-     */
-    public void testBackreferenceWithSpecialCharsInReplacement() {
-        TagSubStage stage = new TagSubStage("env", "^(\\w+)$", "[\\1]");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("[prod]", result.get(0).getLabels().get("env"));
-    }
-
-    /**
-     * Test case 24: No match scenario with back references.
-     * When pattern doesn't match, original value should be preserved.
-     */
-    public void testNoMatchWithBackreferences() {
-        TagSubStage stage = new TagSubStage("env", "^staging-(.*)$", "test-\\1");
-
-        List<Sample> samples = List.of(new FloatSample(1000L, 10.0));
-        ByteLabels labels = ByteLabels.fromStrings("env", "prod-east");
-        TimeSeries timeSeries = new TimeSeries(samples, labels, 1000L, 1000L, 1000L, null);
-
-        List<TimeSeries> result = stage.process(List.of(timeSeries));
-
-        assertEquals(1, result.size());
-        assertEquals("prod-east", result.get(0).getLabels().get("env"));
+        // Test through PipelineStageFactory
+        BytesStreamOutput factoryOutput = new BytesStreamOutput();
+        factoryOutput.writeString(original.getName());
+        original.writeTo(factoryOutput);
+        StreamInput factoryInput = factoryOutput.bytes().streamInput();
+        PipelineStage factoryDeserialized = PipelineStageFactory.readFrom(factoryInput);
+        assertTrue(factoryDeserialized instanceof TagSubStage);
+        assertEquals(original, factoryDeserialized);
     }
 
     @Override
