@@ -184,7 +184,8 @@ public class M3ASTConverter {
         String functionName = functionNode.getFunctionName();
         return Constants.Functions.FETCH.equals(functionName)
             || Constants.Functions.MOCK_FETCH.equals(functionName)
-            || Constants.Functions.MOCK_FETCH_LINE.equals(functionName);
+            || Constants.Functions.MOCK_FETCH_LINE.equals(functionName)
+            || Constants.Functions.MOCK_FETCH_PERIODIC.equals(functionName);
     }
 
     // Handles a fetch function node by creating a FetchPlanNode and wrapping it in a ChainBoundaryMarker.

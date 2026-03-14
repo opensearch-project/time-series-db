@@ -330,3 +330,71 @@ test_case:
             values: [10, 10, 10]
           - metric: {name: "line2"}
             values: [20, 20, 20]
+    # MockFetchPeriodic tests
+    - name: "mockFetchPeriodic_simple_sine"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchPeriodic sine 0 10 4"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "mockFetchPeriodic"}
+            values: [5.0, 10.0, 5.0, 0.0]
+
+    - name: "mockFetchPeriodic_cosine_with_tags"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchPeriodic cosine -5 5 4 name:wave env:test"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "wave", env: "test"}
+            values: [5.0, 0.0, -5.0, 0.0]
+
+    - name: "mockFetchPeriodic_sine_with_scale"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchPeriodic sine 0 2 4 name:small_wave | scale 5"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "small_wave"}
+            values: [5.0, 10.0, 5.0, 0.0]
+    - name: "mockFetchPeriodic_triangle_with_scale"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchPeriodic triangle 1 8 4 name:triangle | scale 5"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "triangle" }
+            values: [ 22.5, 40, 22.5, 5 ]
+    - name: "mockFetchPeriodic_triangle_odd_period"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchPeriodic triangle 1 8 7 name:traingle_odd"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:07:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: { name: "traingle_odd" }
+            values: [ 4.5, 6.5, 7.5, 5.5, 3.5, 1.5, 2.5]

@@ -45,7 +45,7 @@ public class M3QLParser {
     }
 
     private boolean isMockFetchSpaceSeparated(String functionName){
-     return "mockFetchLine".equals(functionName);
+     return "mockFetchLine".equals(functionName) || "mockFetchPeriodic".equals(functionName);
     }
 }
 PARSER_END(M3QLParser)

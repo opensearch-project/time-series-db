@@ -39,6 +39,22 @@
         }
       }
     },
+    "3" : {
+      "filter" : {
+        "match_none" : {
+          "boost" : 1.0
+        }
+      },
+      "aggregations" : {
+        "3_unfold" : {
+          "time_series_unfold" : {
+            "min_timestamp" : 1000000000,
+            "max_timestamp" : 1001000000,
+            "step" : 100000
+          }
+        }
+      }
+    },
     "0_coordinator" : {
       "coordinator_pipeline" : {
         "buckets_path" : [ ],
@@ -87,6 +103,31 @@
         "inputReference" : "1_unfold"
       }
     },
+    "3_coordinator" : {
+      "coordinator_pipeline" : {
+        "buckets_path" : [ ],
+        "stages" : [
+          {
+            "type" : "mockFetchPeriodic",
+            "periodicFunction" : "sine",
+            "min" : 0.0,
+            "max" : 10.0,
+            "period" : 4.0,
+            "tags" : {
+              "name" : "c",
+              "env" : "test"
+            },
+            "startTime" : 1000000000,
+            "endTime" : 1001000000,
+            "step" : 100000
+          }
+        ],
+        "references" : {
+          "3_unfold" : "3>3_unfold"
+        },
+        "inputReference" : "3_unfold"
+      }
+    },
     "2" : {
       "coordinator_pipeline" : {
         "buckets_path" : [ ],
@@ -94,6 +135,10 @@
           {
             "type" : "union",
             "right_op_reference" : "1"
+          },
+          {
+            "type" : "union",
+            "right_op_reference" : "3"
           },
           {
             "type" : "scale",
@@ -105,7 +150,8 @@
         ],
         "references" : {
           "0" : "0_coordinator",
-          "1" : "1_coordinator"
+          "1" : "1_coordinator",
+          "3" : "3_coordinator"
         },
         "inputReference" : "0"
       }
