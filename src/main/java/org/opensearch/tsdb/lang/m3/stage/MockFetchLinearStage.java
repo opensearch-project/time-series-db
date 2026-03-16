@@ -35,47 +35,57 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
 
     private final double start;
     private final double stop;
-    private final double stepSize;
+    private final double slope;
 
     /**
      * Constructor for MockFetchLinearStage.
      *
      * @param start Starting value for the linear progression
      * @param stop Ending value for the linear progression (inclusive)
-     * @param stepSize Increment for each step
+     * @param slope Increment for each step
      * @param tags Map of tag key-value pairs for the series
      * @param startTime Start timestamp in milliseconds
      * @param step Step size in milliseconds (time interval)
      */
-    public MockFetchLinearStage(double start, double stop, double stepSize, Map<String, String> tags, long startTime, long step) {
-        super(tags, startTime, step);
-        if (stepSize == 0) {
-            throw new IllegalArgumentException("MockFetchLinear requires non-zero stepSize");
+    public MockFetchLinearStage(
+        double start,
+        double stop,
+        double slope,
+        Map<String, String> tags,
+        long startTime,
+        long endTime,
+        long step
+    ) {
+        super(tags, startTime, endTime, step);
+        if (slope == 0) {
+            throw new IllegalArgumentException("MockFetchLinear requires non-zero slope");
         }
         // Validate step direction matches start/stop range
-        if (stop > start && stepSize < 0) {
+        if (stop > start && slope < 0) {
             throw new IllegalArgumentException("Step size must be positive if end is greater than start");
         }
-        if (start > stop && stepSize > 0) {
+        if (start > stop && slope > 0) {
             throw new IllegalArgumentException("Step size must be negative if start is greater than end");
         }
         this.start = start;
         this.stop = stop;
-        this.stepSize = stepSize;
+        this.slope = slope;
     }
 
     @Override
     protected List<Double> generateValues() {
+        // Cap number of points by the time window (exclusive endTime)
+        int maxSamples = (int) ((endTime - startTime) / step);
         List<Double> values = new ArrayList<>();
 
-        if (stepSize > 0) {
+        if (slope > 0) {
             // Ascending
-            for (double value = start; value <= stop; value += stepSize) {
+            for (double value = start; value <= stop && values.size() < maxSamples; value += slope) {
                 values.add(value);
             }
         } else {
             // Descending
-            for (double value = start; value >= stop; value += stepSize) {
+            for (double value = start; value >= stop && values.size() < maxSamples; value += slope) {
                 values.add(value);
             }
         }
@@ -102,7 +112,7 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
     public void toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.field("start", start);
         builder.field("stop", stop);
-        builder.field("stepSize", stepSize);
+        builder.field("slope", slope);
         writeCommonFieldsToXContent(builder);
     }
 
@@ -110,7 +120,7 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
     public void writeTo(StreamOutput out) throws IOException {
         out.writeDouble(start);
         out.writeDouble(stop);
-        out.writeDouble(stepSize);
+        out.writeDouble(slope);
         writeCommonFields(out);
     }
 
@@ -124,13 +134,14 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
     public static MockFetchLinearStage readFrom(StreamInput in) throws IOException {
         double start = in.readDouble();
         double stop = in.readDouble();
-        double stepSize = in.readDouble();
+        double slope = in.readDouble();
         Object[] commonFields = readCommonFields(in);
         @SuppressWarnings("unchecked")
         Map<String, String> tags = (Map<String, String>) commonFields[0];
         long startTime = (long) commonFields[1];
-        long step = (long) commonFields[2];
-        return new MockFetchLinearStage(start, stop, stepSize, tags, startTime, step);
+        long endTime = (long) commonFields[2];
+        long step = (long) commonFields[3];
+        return new MockFetchLinearStage(start, stop, slope, tags, startTime, endTime, step);
     }
 
     /**
@@ -147,19 +158,23 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
         if (!args.containsKey("stop")) {
             throw new IllegalArgumentException("MockFetchLinear requires 'stop' argument");
         }
-        if (!args.containsKey("stepSize")) {
-            throw new IllegalArgumentException("MockFetchLinear requires 'stepSize' argument");
+        if (!args.containsKey("slope")) {
+            throw new IllegalArgumentException("MockFetchLinear requires 'slope' argument");
+        }
+        if (!args.containsKey("endTime")) {
+            throw new IllegalArgumentException("MockFetchLinear requires 'endTime' argument");
         }
 
         double start = ((Number) args.get("start")).doubleValue();
         double stop = ((Number) args.get("stop")).doubleValue();
-        double stepSize = ((Number) args.get("stepSize")).doubleValue();
+        double slope = ((Number) args.get("slope")).doubleValue();
 
         Map<String, String> tags = parseTagsFromArgs(args, NAME);
         long startTime = parseStartTimeFromArgs(args);
+        long endTime = parseEndTimeFromArgs(args);
         long step = parseStepFromArgs(args);
 
-        return new MockFetchLinearStage(start, stop, stepSize, tags, startTime, step);
+        return new MockFetchLinearStage(start, stop, slope, tags, startTime, endTime, step);
     }
 
     /**
@@ -179,11 +194,11 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
     }
 
     /**
-     * Returns the stepSize for testing purposes.
-     * @return stepSize value
+     * Returns the slope for testing purposes.
+     * @return slope value
      */
-    public double getStepSize() {
-        return stepSize;
+    public double getSlope() {
+        return slope;
     }
 
     @Override
@@ -191,13 +206,11 @@ public class MockFetchLinearStage extends AbstractMockFetchStage {
         if (this == obj) return true;
         if (!super.equals(obj)) return false;
         MockFetchLinearStage that = (MockFetchLinearStage) obj;
-        return Double.compare(that.start, start) == 0
-            && Double.compare(that.stop, stop) == 0
-            && Double.compare(that.stepSize, stepSize) == 0;
+        return Double.compare(that.start, start) == 0 && Double.compare(that.stop, stop) == 0 && Double.compare(that.slope, slope) == 0;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), start, stop, stepSize);
+        return Objects.hash(super.hashCode(), start, stop, slope);
     }
 }

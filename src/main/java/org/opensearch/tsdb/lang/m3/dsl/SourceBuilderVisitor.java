@@ -604,9 +604,10 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         MockFetchLinearStage mockFetchLinearStage = new MockFetchLinearStage(
             planNode.getStart(),
             planNode.getStop(),
-            planNode.getStepSize(),
+            planNode.getSlope(),
             planNode.getTags(),
             params.startTime(),
+            params.endTime(),
             params.step()
         );
 

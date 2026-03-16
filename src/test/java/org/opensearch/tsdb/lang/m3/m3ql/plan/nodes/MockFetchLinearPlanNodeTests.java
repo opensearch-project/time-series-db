@@ -23,16 +23,16 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
     public void testMockFetchLinearPlanNodeCreation() {
         double start = 0.0;
         double stop = 10.0;
-        double stepSize = 1.0;
+        double slope = 1.0;
         Map<String, String> tags = Map.of("name", "test");
 
-        MockFetchLinearPlanNode node = new MockFetchLinearPlanNode(1, start, stop, stepSize, tags);
+        MockFetchLinearPlanNode node = new MockFetchLinearPlanNode(1, start, stop, slope, tags);
 
         assertEquals(start, node.getStart(), 0.001);
         assertEquals(stop, node.getStop(), 0.001);
-        assertEquals(stepSize, node.getStepSize(), 0.001);
+        assertEquals(slope, node.getSlope(), 0.001);
         assertEquals(tags, node.getTags());
-        assertEquals("MOCK_FETCH_LINEAR(start=0.0, stop=10.0, stepSize=1.0, tags={name=test})", node.getExplainName());
+        assertEquals("MOCK_FETCH_LINEAR(start=0.0, stop=10.0, slope=1.0, tags={name=test})", node.getExplainName());
     }
 
     public void testMockFetchLinearPlanNodeConstructorValidation() {
@@ -60,7 +60,7 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
 
         assertEquals(0.0, planNode.getStart(), 0.001);
         assertEquals(10.0, planNode.getStop(), 0.001);
-        assertEquals(1.0, planNode.getStepSize(), 0.001);
+        assertEquals(1.0, planNode.getSlope(), 0.001);
         assertTrue(planNode.getTags().isEmpty());
     }
 
@@ -75,7 +75,7 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
 
         assertEquals(-10.0, planNode.getStart(), 0.001);
         assertEquals(0.0, planNode.getStop(), 0.001);
-        assertEquals(2.5, planNode.getStepSize(), 0.001);
+        assertEquals(2.5, planNode.getSlope(), 0.001);
     }
 
     public void testMockFetchLinearPlanNodeFactoryMethodWithTags() {
@@ -83,7 +83,7 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
         functionNode.setFunctionName("mockFetchLinear");
         functionNode.addChildNode(new ValueNode("5.0"));
         functionNode.addChildNode(new ValueNode("15.0"));
-        functionNode.addChildNode(new ValueNode("0.5"));
+        functionNode.addChildNode(new ValueNode("2.5"));
 
         // Add tag: name="linear_test"
         TagKeyNode tagKey1 = new TagKeyNode();
@@ -101,7 +101,7 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
 
         assertEquals(5.0, planNode.getStart(), 0.001);
         assertEquals(15.0, planNode.getStop(), 0.001);
-        assertEquals(0.5, planNode.getStepSize(), 0.001);
+        assertEquals(2.5, planNode.getSlope(), 0.001);
         assertEquals(Map.of("name", "linear_test", "region", "east"), planNode.getTags());
     }
 
@@ -110,13 +110,13 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
         functionNode.setFunctionName("mockFetchLinear");
         functionNode.addChildNode(new ValueNode("100.0"));
         functionNode.addChildNode(new ValueNode("0.0"));
-        functionNode.addChildNode(new ValueNode("-10.0")); // negative stepSize for descending
+        functionNode.addChildNode(new ValueNode("-10.0")); // negative slope for descending
 
         MockFetchLinearPlanNode planNode = MockFetchLinearPlanNode.of(functionNode);
 
         assertEquals(100.0, planNode.getStart(), 0.001);
         assertEquals(0.0, planNode.getStop(), 0.001);
-        assertEquals(-10.0, planNode.getStepSize(), 0.001);
+        assertEquals(-10.0, planNode.getSlope(), 0.001);
     }
 
     public void testMockFetchLinearPlanNodeFactoryMethodValidation() {
@@ -157,13 +157,13 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
         invalidStop.addChildNode(new ValueNode("1.0"));
         expectThrows(IllegalArgumentException.class, () -> MockFetchLinearPlanNode.of(invalidStop));
 
-        // Invalid numeric value for stepSize
-        FunctionNode invalidStepSize = new FunctionNode();
-        invalidStepSize.setFunctionName("mockFetchLinear");
-        invalidStepSize.addChildNode(new ValueNode("0.0"));
-        invalidStepSize.addChildNode(new ValueNode("10.0"));
-        invalidStepSize.addChildNode(new ValueNode("not-a-number"));
-        expectThrows(IllegalArgumentException.class, () -> MockFetchLinearPlanNode.of(invalidStepSize));
+        // Invalid numeric value for slope
+        FunctionNode invalidslope = new FunctionNode();
+        invalidslope.setFunctionName("mockFetchLinear");
+        invalidslope.addChildNode(new ValueNode("0.0"));
+        invalidslope.addChildNode(new ValueNode("10.0"));
+        invalidslope.addChildNode(new ValueNode("not-a-number"));
+        expectThrows(IllegalArgumentException.class, () -> MockFetchLinearPlanNode.of(invalidslope));
 
         // Wrong node type for first argument
         FunctionNode wrongType = new FunctionNode();
@@ -201,7 +201,7 @@ public class MockFetchLinearPlanNodeTests extends BasePlanNodeTests {
         MockFetchLinearPlanNode mockFetchLinearNode = (MockFetchLinearPlanNode) result;
         assertEquals(10.0, mockFetchLinearNode.getStart(), 0.001);
         assertEquals(26.0, mockFetchLinearNode.getStop(), 0.001);
-        assertEquals(2.0, mockFetchLinearNode.getStepSize(), 0.001);
+        assertEquals(2.0, mockFetchLinearNode.getSlope(), 0.001);
     }
 
     private static class TestMockLinearVisitor extends M3PlanVisitor<String> {

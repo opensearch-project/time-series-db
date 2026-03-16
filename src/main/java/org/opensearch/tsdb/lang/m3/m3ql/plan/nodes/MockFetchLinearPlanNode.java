@@ -22,13 +22,13 @@ import java.util.Map;
 
 /**
  * MockFetchLinearPlanNode represents a node in the M3QL plan that generates mock time series data
- * with linear progression from start to stop with the given stepSize.
+ * with linear progression from start to stop with the given slope.
  * It is primarily used for testing and demonstration purposes.
  */
 public class MockFetchLinearPlanNode extends M3PlanNode {
     private final double start;
     private final double stop;
-    private final double stepSize;
+    private final double slope;
     private final Map<String, String> tags;
 
     /**
@@ -37,14 +37,14 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
      * @param id node id
      * @param start Starting value for the linear progression
      * @param stop Ending value for the linear progression (inclusive)
-     * @param stepSize Increment for each step
+     * @param slope Increment for each step
      * @param tags Map of tag key-value pairs
      */
-    public MockFetchLinearPlanNode(int id, double start, double stop, double stepSize, Map<String, String> tags) {
+    public MockFetchLinearPlanNode(int id, double start, double stop, double slope, Map<String, String> tags) {
         super(id);
         this.start = start;
         this.stop = stop;
-        this.stepSize = stepSize;
+        this.slope = slope;
         this.tags = tags != null ? new HashMap<>(tags) : new HashMap<>();
     }
 
@@ -55,7 +55,7 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
 
     @Override
     public String getExplainName() {
-        return String.format(Locale.ROOT, "MOCK_FETCH_LINEAR(start=%s, stop=%s, stepSize=%s, tags=%s)", start, stop, stepSize, tags);
+        return String.format(Locale.ROOT, "MOCK_FETCH_LINEAR(start=%s, stop=%s, slope=%s, tags=%s)", start, stop, slope, tags);
     }
 
     /**
@@ -75,11 +75,11 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
     }
 
     /**
-     * Returns the stepSize value.
-     * @return stepSize value
+     * Returns the slope value.
+     * @return slope value
      */
-    public double getStepSize() {
-        return stepSize;
+    public double getSlope() {
+        return slope;
     }
 
     /**
@@ -92,7 +92,7 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
 
     /**
      * Creates the mockFetchLinear plan node from the corresponding AST Node.
-     * Expects arguments in order: start, stop, stepSize, followed by optional tags.
+     * Expects arguments in order: start, stop, slope, followed by optional tags.
      *
      * @param functionNode The function AST node representing mockFetchLinear
      * @return MockFetchLinearPlanNode instance
@@ -105,18 +105,18 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
 
         List<M3ASTNode> children = functionNode.getChildren();
         if (children.size() < 3) {
-            throw new IllegalArgumentException("mockFetchLinear requires at least 3 arguments: start, stop, stepSize");
+            throw new IllegalArgumentException("mockFetchLinear requires at least 3 arguments: start, stop, slope");
         }
 
         // Parse the three required numeric arguments
         double start;
         double stop;
-        double stepSize;
+        double slope;
 
         try {
             M3ASTNode startNode = children.get(0);
             M3ASTNode stopNode = children.get(1);
-            M3ASTNode stepSizeNode = children.get(2);
+            M3ASTNode slopeNode = children.get(2);
 
             if (!(startNode instanceof ValueNode)) {
                 throw new IllegalArgumentException("First argument (start) must be a numeric value");
@@ -124,13 +124,13 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
             if (!(stopNode instanceof ValueNode)) {
                 throw new IllegalArgumentException("Second argument (stop) must be a numeric value");
             }
-            if (!(stepSizeNode instanceof ValueNode)) {
-                throw new IllegalArgumentException("Third argument (stepSize) must be a numeric value");
+            if (!(slopeNode instanceof ValueNode)) {
+                throw new IllegalArgumentException("Third argument (slope) must be a numeric value");
             }
 
             start = Double.parseDouble(((ValueNode) startNode).getValue());
             stop = Double.parseDouble(((ValueNode) stopNode).getValue());
-            stepSize = Double.parseDouble(((ValueNode) stepSizeNode).getValue());
+            slope = Double.parseDouble(((ValueNode) slopeNode).getValue());
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Invalid numeric value in mockFetchLinear arguments", e);
         }
@@ -151,7 +151,7 @@ public class MockFetchLinearPlanNode extends M3PlanNode {
             }
         }
 
-        return new MockFetchLinearPlanNode(M3PlannerContext.generateId(), start, stop, stepSize, tags);
+        return new MockFetchLinearPlanNode(M3PlannerContext.generateId(), start, stop, slope, tags);
     }
 
     /**
