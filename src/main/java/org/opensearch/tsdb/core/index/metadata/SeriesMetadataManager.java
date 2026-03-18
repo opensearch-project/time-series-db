@@ -7,46 +7,58 @@
  */
 package org.opensearch.tsdb.core.index.metadata;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.SnapshotDeletionPolicy;
+import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
+import org.opensearch.tsdb.core.utils.KeyedRefCounter;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
 
 /**
  * Manages live series metadata files with snapshot protection and cleanup.
  * This class handles the lifecycle of metadata files including writing, snapshot tracking,
  * and cleanup of old files while protecting files referenced by active snapshots.
+ *
+ * <p> SeriesMetadataManager is used from the LiveSeriesIndex and ClosedChunkIndex, and also references their IndexWriters.
+ * The caller (LiveSeriesIndex or ClosedChunkIndex) must ensure correct lifecycle of the IndexWriter instances.
  */
 public class SeriesMetadataManager {
-
+    private static final Logger log = LogManager.getLogger(SeriesMetadataManager.class);
     private static final String SERIES_METADATA_FILE_KEY = "live_series_metadata_file";
     private final Directory directory;
-    private final IndexWriter indexWriter;
+    private final Supplier<IndexWriter> indexWriterSupplier;
     private final SnapshotDeletionPolicy snapshotDeletionPolicy;
-    private final Map<IndexCommit, MetadataAwareIndexCommit> activeSnapshots;
+    private final KeyedRefCounter<IndexCommit> activeSnapshots;
     private final ReentrantLock metadataLock;
 
     /**
      * Create a new SeriesMetadataManager.
      *
      * @param directory the Lucene directory where metadata files are stored
-     * @param indexWriter the IndexWriter for the index
+     * @param indexWriterSupplier supplier that returns the current IndexWriter; the supplier
+     *                            is called each time an operation needs the writer, so it
+     *                            always reflects the writer currently owned by the caller
      * @param snapshotDeletionPolicy the snapshot deletion policy
      */
-    public SeriesMetadataManager(Directory directory, IndexWriter indexWriter, SnapshotDeletionPolicy snapshotDeletionPolicy) {
+    public SeriesMetadataManager(
+        Directory directory,
+        Supplier<IndexWriter> indexWriterSupplier,
+        SnapshotDeletionPolicy snapshotDeletionPolicy
+    ) {
         this.directory = directory;
-        this.indexWriter = indexWriter;
+        this.indexWriterSupplier = indexWriterSupplier;
         this.snapshotDeletionPolicy = snapshotDeletionPolicy;
-        this.activeSnapshots = new ConcurrentHashMap<>();
+        this.activeSnapshots = new KeyedRefCounter<>();
         this.metadataLock = new ReentrantLock();
     }
 
@@ -78,8 +90,9 @@ public class SeriesMetadataManager {
             commitData.put(SERIES_METADATA_FILE_KEY, metadataFilename);
             commitData.putAll(additionalCommitData);
 
-            indexWriter.setLiveCommitData(commitData.entrySet(), true);
-            indexWriter.commit();
+            IndexWriter writer = indexWriterSupplier.get();
+            writer.setLiveCommitData(commitData.entrySet(), true);
+            writer.commit();
 
             cleanupOldMetadataFiles();
         } finally {
@@ -94,7 +107,7 @@ public class SeriesMetadataManager {
      * @throws IOException if reading fails
      */
     public void applyMetadata(java.util.function.BiConsumer<Long, Long> consumer) throws IOException {
-        Iterable<Map.Entry<String, String>> commitData = indexWriter.getLiveCommitData();
+        Iterable<Map.Entry<String, String>> commitData = indexWriterSupplier.get().getLiveCommitData();
         if (commitData == null) {
             return;
         }
@@ -122,7 +135,7 @@ public class SeriesMetadataManager {
         IndexCommit luceneCommit = snapshotDeletionPolicy.snapshot();
         String metadataFilename = extractMetadataFilename(luceneCommit);
         MetadataAwareIndexCommit wrappedCommit = new MetadataAwareIndexCommit(luceneCommit, metadataFilename);
-        activeSnapshots.put(luceneCommit, wrappedCommit);
+        activeSnapshots.acquire(luceneCommit);
         return wrappedCommit;
     }
 
@@ -134,9 +147,13 @@ public class SeriesMetadataManager {
      */
     public void release(IndexCommit snapshot) throws IOException {
         IndexCommit luceneCommit = extractLuceneCommit(snapshot);
-        activeSnapshots.remove(luceneCommit);
+        activeSnapshots.release(luceneCommit);
         snapshotDeletionPolicy.release(luceneCommit);
-        indexWriter.deleteUnusedFiles();
+        try {
+            indexWriterSupplier.get().deleteUnusedFiles();
+        } catch (AlreadyClosedException e) {
+            log.warn("IndexWriter already closed when attempting to delete unused files after snapshot release", e);
+        }
         cleanupOldMetadataFiles();
     }
 
@@ -174,7 +191,7 @@ public class SeriesMetadataManager {
         metadataLock.lock();
         try {
             // Get current metadata filename from commit data (source of truth)
-            Iterable<Map.Entry<String, String>> commitData = indexWriter.getLiveCommitData();
+            Iterable<Map.Entry<String, String>> commitData = indexWriterSupplier.get().getLiveCommitData();
             String currentMetadataFile = null;
             if (commitData != null) {
                 for (Map.Entry<String, String> entry : commitData) {
@@ -185,12 +202,14 @@ public class SeriesMetadataManager {
                 }
             }
 
-            // Collect protected files (from active snapshots)
-            Set<String> protectedFiles = activeSnapshots.values()
-                .stream()
-                .map(MetadataAwareIndexCommit::getMetadataFilename)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+            // Collect protected files (from active snapshots).
+            Set<String> protectedFiles = new HashSet<>();
+            for (IndexCommit commit : activeSnapshots.keys()) {
+                String filename = extractMetadataFilename(commit);
+                if (filename != null) {
+                    protectedFiles.add(filename);
+                }
+            }
 
             // Always protect current file if it exists
             if (currentMetadataFile != null) {

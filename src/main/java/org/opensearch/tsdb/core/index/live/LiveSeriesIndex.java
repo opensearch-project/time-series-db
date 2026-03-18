@@ -61,6 +61,7 @@ public class LiveSeriesIndex implements Closeable {
     protected static final String INDEX_DIR_NAME = "live_series_index";
     private final Analyzer analyzer;
     private final Directory directory;
+    // LiveSeriesIndex does not modify the indexWriter, and hence we don't need locking/synchronization for the indexWriter
     private final IndexWriter indexWriter;
     private final SnapshotDeletionPolicy snapshotDeletionPolicy;
     private final ReaderManager directoryReaderManager;
@@ -91,7 +92,7 @@ public class LiveSeriesIndex implements Closeable {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             indexWriter = new IndexWriter(directory, iwc);
-            this.metadataManager = new SeriesMetadataManager(directory, indexWriter, snapshotDeletionPolicy);
+            this.metadataManager = new SeriesMetadataManager(directory, () -> indexWriter, snapshotDeletionPolicy);
             directoryReaderManager = new ReaderManager(DirectoryReader.open(indexWriter, true, false));
         } catch (IOException e) {
             // close resources as LiveSeriesIndex initialization failed

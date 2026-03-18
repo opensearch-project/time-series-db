@@ -13,6 +13,7 @@ import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.Term;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.service.ClusterApplierService;
+import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.lucene.Lucene;
 import org.opensearch.common.settings.IndexScopedSettings;
 import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
@@ -52,13 +53,20 @@ import org.opensearch.telemetry.metrics.Counter;
 import org.opensearch.telemetry.metrics.Histogram;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
 import org.opensearch.telemetry.metrics.tags.Tags;
+import org.apache.lucene.index.KeepOnlyLastCommitDeletionPolicy;
+import org.apache.lucene.index.SnapshotDeletionPolicy;
 import org.junit.After;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
+import org.opensearch.tsdb.core.head.Head;
+import org.opensearch.tsdb.core.index.live.LiveSeriesIndex;
+import org.opensearch.tsdb.core.index.metadata.SeriesMetadataManager;
+import org.opensearch.tsdb.core.utils.KeyedRefCounter;
 import org.opensearch.tsdb.core.utils.Time;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1798,6 +1806,48 @@ public class TSDBEngineTests extends EngineTestCase {
             metricsEngine = null;
             engineStore = null;
             TSDBMetrics.cleanup();
+        }
+    }
+
+    @SuppressForbidden(reason = "reflection is needed to test by injecting a failing SnapshotDeletionPolicy")
+    public void testAcquireSafeIndexCommitReleasesSnapshotsOnPartialFailure() throws Exception {
+        // Ensure the live index has at least one commit so snapshotWithReleaseAction() succeeds
+        publishSample(1, createSampleJson(series1, 1000L, 10.0));
+        metricsEngine.flush(false, true);
+
+        // Inject an uninitialized SnapshotDeletionPolicy — its snapshot() throws because
+        // onInit() was never called (lastCommit == null inside the policy).
+        Field sdpField = TSDBEngine.class.getDeclaredField("snapshotDeletionPolicy");
+        sdpField.setAccessible(true);
+        SnapshotDeletionPolicy originalPolicy = (SnapshotDeletionPolicy) sdpField.get(metricsEngine);
+        SnapshotDeletionPolicy uninitializedPolicy = new SnapshotDeletionPolicy(new KeepOnlyLastCommitDeletionPolicy());
+        sdpField.set(metricsEngine, uninitializedPolicy);
+
+        try {
+            // acquireSafeIndexCommit() must fail because snapshotDeletionPolicy.snapshot() throws.
+            // The catch block must then run release actions for the already-acquired live snapshot.
+            expectThrows(EngineException.class, () -> metricsEngine.acquireSafeIndexCommit());
+
+            // Navigate to SeriesMetadataManager.activeSnapshots to verify the live snapshot was released.
+            Field headField = TSDBEngine.class.getDeclaredField("head");
+            headField.setAccessible(true);
+            Head head = (Head) headField.get(metricsEngine);
+
+            Field metadataManagerField = LiveSeriesIndex.class.getDeclaredField("metadataManager");
+            metadataManagerField.setAccessible(true);
+            SeriesMetadataManager metadataManager = (SeriesMetadataManager) metadataManagerField.get(head.getLiveSeriesIndex());
+
+            Field activeSnapshotsField = SeriesMetadataManager.class.getDeclaredField("activeSnapshots");
+            activeSnapshotsField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            KeyedRefCounter<Object> activeSnapshots = (KeyedRefCounter<Object>) activeSnapshotsField.get(metadataManager);
+
+            assertTrue(
+                "Live index snapshot must be released after failed acquireSafeIndexCommit — catch block cleanup did not run",
+                activeSnapshots.keys().isEmpty()
+            );
+        } finally {
+            sdpField.set(metricsEngine, originalPolicy);
         }
     }
 }

@@ -915,9 +915,9 @@ public class TSDBEngine extends Engine {
      */
     @Override
     public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
+        List<Runnable> releaseActions = new ArrayList<>();
         try {
             List<IndexCommit> snapshots = new ArrayList<>();
-            List<Runnable> releaseActions = new ArrayList<>();
 
             // Snapshot live index
             LiveSeriesIndex.SnapshotResult liveIndexSnapshotResult = head.getLiveSeriesIndex().snapshotWithReleaseAction();
@@ -959,6 +959,14 @@ public class TSDBEngine extends Engine {
             return new GatedCloseable<>(compositeCommit, compositeCommit::releaseSnapshots);
 
         } catch (Exception e) {
+            // release acquired index commit snapshots by executing the release actions obtained so far
+            for (Runnable releaseAction : releaseActions) {
+                try {
+                    releaseAction.run();
+                } catch (Exception releaseException) {
+                    logger.warn("Failed to release snapshot during acquireSafeIndexCommit cleanup", releaseException);
+                }
+            }
             throw new EngineException(shardId, "Failed to acquire safe index commit", e);
         }
     }

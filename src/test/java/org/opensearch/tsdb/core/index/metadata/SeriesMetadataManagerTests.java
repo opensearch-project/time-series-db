@@ -36,7 +36,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit with metadata
                 Map<Long, Long> metadata = new HashMap<>();
@@ -63,7 +63,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Write metadata
                 Map<Long, Long> originalMetadata = new HashMap<>();
@@ -90,7 +90,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit with metadata
                 Map<Long, Long> metadata = Map.of(1L, 100L);
@@ -132,7 +132,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit 1
                 manager.commitWithMetadata(Map.of(1L, 100L));
@@ -176,7 +176,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit 1 and snapshot
                 manager.commitWithMetadata(Map.of(1L, 100L));
@@ -220,7 +220,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit with empty metadata
                 manager.commitWithMetadata(new HashMap<>());
@@ -243,7 +243,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Write large metadata (10K series)
                 Map<Long, Long> metadata = new HashMap<>();
@@ -274,7 +274,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Try to read metadata from empty index (no commits yet)
                 Map<Long, Long> readMetadata = new HashMap<>();
@@ -299,7 +299,7 @@ public class SeriesMetadataManagerTests extends OpenSearchTestCase {
             iwc.setIndexDeletionPolicy(snapshotDeletionPolicy);
 
             try (IndexWriter writer = new IndexWriter(dir, iwc)) {
-                SeriesMetadataManager manager = new SeriesMetadataManager(dir, writer, snapshotDeletionPolicy);
+                SeriesMetadataManager manager = new SeriesMetadataManager(dir, () -> writer, snapshotDeletionPolicy);
 
                 // Commit 1 - creates series_metadata_1
                 manager.commitWithMetadata(Map.of(1L, 100L));

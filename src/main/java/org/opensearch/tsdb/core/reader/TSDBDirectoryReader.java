@@ -22,7 +22,6 @@ import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
 import org.opensearch.tsdb.core.index.live.MemChunkReader;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.LongSupplier;
@@ -335,12 +334,12 @@ public class TSDBDirectoryReader extends DirectoryReader {
 
     @Override
     protected DirectoryReader doOpenIfChanged(IndexCommit indexCommit) throws IOException {
-        throw new UnsupportedEncodingException("TSDBDirectoryReader does not support opening with IndexCommit");
+        throw new UnsupportedOperationException("TSDBDirectoryReader does not support opening with IndexCommit");
     }
 
     @Override
     protected DirectoryReader doOpenIfChanged(IndexWriter indexWriter, boolean b) throws IOException {
-        throw new UnsupportedEncodingException("TSDBDirectoryReader does not support opening with IndexWriter");
+        throw new UnsupportedOperationException("TSDBDirectoryReader does not support opening with IndexWriter");
     }
 
     @Override
