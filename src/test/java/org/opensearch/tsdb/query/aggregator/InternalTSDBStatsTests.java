@@ -50,7 +50,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
     // ============================================================================================
 
     public void testHeadStats() throws IOException {
-        InternalTSDBStats.HeadStats stats1 = new InternalTSDBStats.HeadStats(100L, 200L, 1000L, 2000L);
+        InternalTSDBStats.HeadStats stats1 = new InternalTSDBStats.HeadStats(100L, 100L, 1000L, 2000L);
 
         // Test serialization
         BytesStreamOutput out = new BytesStreamOutput();
@@ -180,7 +180,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
 
     public void testForCoordinatorLevelConstructor() {
         // Arrange
-        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 200L, 1000L, 2000L);
+        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 100L, 1000L, 2000L);
         Map<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> labelStats = createTestLabelStats();
 
         // Act
@@ -273,7 +273,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
         // Test all XContent variations in one test
 
         // Variation 1: With all fields
-        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(508L, 937L, 1591516800000L, 1598896800143L);
+        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(508L, 508L, 1591516800000L, 1598896800143L);
         Map<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> labelStats = new HashMap<>();
         labelStats.put("cluster", new InternalTSDBStats.CoordinatorLevelStats.LabelStats(100L, Map.of("prod", 80L, "staging", 15L)));
 
@@ -417,7 +417,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
     }
 
     public void testEqualsAndHashCode() {
-        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 200L, 1000L, 2000L);
+        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 100L, 1000L, 2000L);
         Map<String, InternalTSDBStats.CoordinatorLevelStats.LabelStats> labelStats = createTestLabelStats();
 
         InternalTSDBStats stats1 = InternalTSDBStats.forCoordinatorLevel(
@@ -460,7 +460,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
             stats1,
             InternalTSDBStats.forCoordinatorLevel(
                 TEST_NAME,
-                new InternalTSDBStats.HeadStats(999L, 200L, 1000L, 2000L),
+                new InternalTSDBStats.HeadStats(999L, 999L, 1000L, 2000L),
                 new InternalTSDBStats.CoordinatorLevelStats(500L, labelStats),
                 TEST_METADATA
             )
@@ -515,7 +515,7 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
         assertNull(shardDeserialized.getHeadStats());
 
         // Scenario 2: Coordinator-level with headStats
-        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 200L, 1000L, 2000L);
+        InternalTSDBStats.HeadStats headStats = new InternalTSDBStats.HeadStats(100L, 100L, 1000L, 2000L);
         InternalTSDBStats coordOriginal = InternalTSDBStats.forCoordinatorLevel(
             TEST_NAME,
             headStats,
@@ -981,6 +981,141 @@ public class InternalTSDBStatsTests extends OpenSearchTestCase {
         assertEquals(0L, resultLabelStats.get("cluster").valuesStats().get("prod").longValue());
         // staging has 1 seriesId -> count should be 1
         assertEquals(1L, resultLabelStats.get("cluster").valuesStats().get("staging").longValue());
+    }
+
+    // ============================================================================================
+    // Section 9: mergeHeadStats — unit tests and HeadStats propagation through reduce
+    // ============================================================================================
+
+    public void testMergeHeadStatsWithMultipleInputs() {
+        // All three aggregations have HeadStats; verify sum, min, and max are taken correctly.
+        InternalTSDBStats agg1 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(100L, 50L, 1000L, 3000L),
+            new InternalTSDBStats.CoordinatorLevelStats(100L, new HashMap<>()),
+            TEST_METADATA
+        );
+        InternalTSDBStats agg2 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(200L, 100L, 500L, 4000L),  // smallest minTime, largest maxTime
+            new InternalTSDBStats.CoordinatorLevelStats(200L, new HashMap<>()),
+            TEST_METADATA
+        );
+        InternalTSDBStats agg3 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(50L, 25L, 2000L, 2500L),  // middle minTime, smallest maxTime
+            new InternalTSDBStats.CoordinatorLevelStats(50L, new HashMap<>()),
+            TEST_METADATA
+        );
+
+        InternalTSDBStats.HeadStats merged = InternalTSDBStats.mergeHeadStats(List.of(agg1, agg2, agg3));
+
+        assertNotNull("mergeHeadStats should be non-null when any input has HeadStats", merged);
+        assertEquals("numSeries should be sum of all inputs", 350L, merged.numSeries());
+        assertEquals("numChunks should be sum of all inputs", 175L, merged.numChunks());
+        assertEquals("minTime should be minimum across all inputs", 500L, merged.minTime());
+        assertEquals("maxTime should be maximum across all inputs", 4000L, merged.maxTime());
+    }
+
+    public void testMergeHeadStatsWithMixedNullAndNonNull() {
+        // One aggregation has HeadStats, one does not; only non-null contributes.
+        InternalTSDBStats withHead = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(75L, 40L, 2000L, 5000L),
+            new InternalTSDBStats.CoordinatorLevelStats(75L, new HashMap<>()),
+            TEST_METADATA
+        );
+        InternalTSDBStats noHead = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            null,
+            new InternalTSDBStats.CoordinatorLevelStats(100L, new HashMap<>()),
+            TEST_METADATA
+        );
+
+        InternalTSDBStats.HeadStats merged = InternalTSDBStats.mergeHeadStats(List.of(withHead, noHead));
+
+        assertNotNull("mergeHeadStats should be non-null when at least one input has HeadStats", merged);
+        assertEquals(75L, merged.numSeries());
+        assertEquals(40L, merged.numChunks());
+        assertEquals(2000L, merged.minTime());
+        assertEquals(5000L, merged.maxTime());
+    }
+
+    public void testMergeHeadStatsWithAllNull() {
+        InternalTSDBStats agg1 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            null,
+            new InternalTSDBStats.CoordinatorLevelStats(100L, new HashMap<>()),
+            TEST_METADATA
+        );
+        InternalTSDBStats agg2 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            null,
+            new InternalTSDBStats.CoordinatorLevelStats(200L, new HashMap<>()),
+            TEST_METADATA
+        );
+
+        InternalTSDBStats.HeadStats merged = InternalTSDBStats.mergeHeadStats(List.of(agg1, agg2));
+
+        assertNull("mergeHeadStats should return null when all inputs have null HeadStats", merged);
+    }
+
+    public void testMergeHeadStatsEmptyList() {
+        InternalTSDBStats.HeadStats merged = InternalTSDBStats.mergeHeadStats(List.of());
+        assertNull("mergeHeadStats should return null for empty list", merged);
+    }
+
+    public void testReduceShardLevelWithHeadStats() {
+        // HeadStats from shard-level aggregations should be merged (sum, min, max) in reduceShardLevel.
+        InternalTSDBStats agg1 = InternalTSDBStats.forShardLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(10L, 10L, 1000L, 5000L),
+            new InternalTSDBStats.ShardLevelStats(setOf(1L, 2L), new HashMap<>(), true),
+            TEST_METADATA
+        );
+        InternalTSDBStats agg2 = InternalTSDBStats.forShardLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(20L, 20L, 500L, 6000L),
+            new InternalTSDBStats.ShardLevelStats(setOf(3L, 4L), new HashMap<>(), true),
+            TEST_METADATA
+        );
+
+        InternalAggregation result = agg1.reduce(List.of(agg1, agg2), createPartialReduceContext());
+        InternalTSDBStats reducedStats = (InternalTSDBStats) result;
+
+        InternalTSDBStats.HeadStats headStats = reducedStats.getHeadStats();
+        assertNotNull("HeadStats should be merged from shard-level aggregations", headStats);
+        assertEquals("numSeries should be sum", 30L, headStats.numSeries());
+        assertEquals("numChunks should be sum", 30L, headStats.numChunks());
+        assertEquals("minTime should be minimum", 500L, headStats.minTime());
+        assertEquals("maxTime should be maximum", 6000L, headStats.maxTime());
+    }
+
+    public void testReduceCoordinatorLevelWithHeadStats() {
+        // HeadStats should survive the coordinator-level reduce phase.
+        InternalTSDBStats agg1 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(10L, 10L, 1000L, 5000L),
+            new InternalTSDBStats.CoordinatorLevelStats(100L, new HashMap<>()),
+            TEST_METADATA
+        );
+        InternalTSDBStats agg2 = InternalTSDBStats.forCoordinatorLevel(
+            TEST_NAME,
+            new InternalTSDBStats.HeadStats(20L, 20L, 500L, 6000L),
+            new InternalTSDBStats.CoordinatorLevelStats(200L, new HashMap<>()),
+            TEST_METADATA
+        );
+
+        InternalAggregation result = agg1.reduce(List.of(agg1, agg2), createFinalReduceContext());
+        InternalTSDBStats reducedStats = (InternalTSDBStats) result;
+
+        InternalTSDBStats.HeadStats headStats = reducedStats.getHeadStats();
+        assertNotNull("HeadStats should be preserved through coordinator-level reduce", headStats);
+        assertEquals(30L, headStats.numSeries());
+        assertEquals(30L, headStats.numChunks());
+        assertEquals(500L, headStats.minTime());
+        assertEquals(6000L, headStats.maxTime());
+        assertEquals(300L, reducedStats.getNumSeries().longValue());
     }
 
     // ============================================================================================

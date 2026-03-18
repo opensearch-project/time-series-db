@@ -22,6 +22,9 @@ import org.opensearch.tsdb.framework.models.TimeSeriesSample;
 import org.opensearch.tsdb.utils.TSDBTestUtils;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -61,6 +64,7 @@ public record RestTSDBEngineIngestor(RestClient restClient) {
      * Ingest time series data from multiple input data configurations into their respective indices.
      * Each InputDataConfig specifies which index its data should go to.
      * Uses bulk API with batching for efficient ingestion.
+     * Sorted all time series samples by timestamp for the same index, to avoid ooo event cutoff
      *
      * @param inputDataConfigs List of input data configurations with their target indices
      * @throws IOException If ingestion fails
@@ -70,12 +74,24 @@ public record RestTSDBEngineIngestor(RestClient restClient) {
             return;
         }
 
+        // Collect all samples per index, then sort each index's samples by timestamp.
+        // Sorting ensures that samples across multiple time series are interleaved chronologically
+        // before ingestion. Without this, series are emitted one-at-a-time: a shard may process
+        // series1 up to its maxTime (e.g. 07:00) and then receive series2's first sample (e.g. 00:00),
+        // which falls outside a short OOO cutoff window and gets rejected.
+        Map<String, List<TimeSeriesSample>> samplesByIndex = new HashMap<>();
         for (InputDataConfig inputDataConfig : inputDataConfigs) {
             if (inputDataConfig.indexName() == null || inputDataConfig.indexName().isEmpty()) {
                 throw new IllegalArgumentException("InputDataConfig must specify an index_name for data ingestion");
             }
             List<TimeSeriesSample> samples = TimeSeriesSampleGenerator.generateSamples(inputDataConfig);
-            ingestInBulk(samples, inputDataConfig.indexName(), DEFAULT_BULK_SIZE);
+            samplesByIndex.computeIfAbsent(inputDataConfig.indexName(), k -> new ArrayList<>()).addAll(samples);
+        }
+
+        for (Map.Entry<String, List<TimeSeriesSample>> entry : samplesByIndex.entrySet()) {
+            List<TimeSeriesSample> samples = entry.getValue();
+            samples.sort(Comparator.comparing(TimeSeriesSample::timestamp));
+            ingestInBulk(samples, entry.getKey(), DEFAULT_BULK_SIZE);
         }
     }
 

@@ -622,6 +622,50 @@ public class LiveSeriesIndexLeafReaderTests extends OpenSearchTestCase {
         }
     }
 
+    public void testNumChunksForDocWithMMappedChunks() throws IOException {
+        // 3 chunks total, 2 mMapped → should count only the 1 remaining in-memory chunk
+        MemChunk chunk1 = new MemChunk(1L, 1000L, 2000L, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
+        MemChunk chunk2 = new MemChunk(2L, 2000L, 3000L, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
+        MemChunk chunk3 = new MemChunk(3L, 3000L, 4000L, null, org.opensearch.tsdb.core.chunk.Encoding.XOR);
+        referenceToChunkMap.put(810L, List.of(chunk1, chunk2, chunk3));
+        mMappedChunks.put(810L, java.util.Set.of(chunk1, chunk3)); // chunk1 and chunk3 are mMapped
+
+        createTestDocument(810L, "partial_mmapped_metric", "server2", "region2");
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LiveSeriesIndexLeafReader leafReader = new LiveSeriesIndexLeafReader(
+                reader.leaves().getFirst().reader(),
+                memChunkReader,
+                mMappedChunks,
+                LabelStorageType.BINARY
+            );
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            assertEquals("Should count only chunk2 (the one not mMapped)", 1, leafReader.numChunksForDoc(0, tsdbDocValues));
+        }
+    }
+
+    public void testNumChunksForDocNoChunks() throws IOException {
+        // Series reference exists but has no chunks (empty list from memChunkReader) → should return 0
+        referenceToChunkMap.put(830L, List.of());
+
+        createTestDocument(830L, "no_chunks_metric", "server4", "region4");
+        indexWriter.commit();
+
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            LiveSeriesIndexLeafReader leafReader = new LiveSeriesIndexLeafReader(
+                reader.leaves().getFirst().reader(),
+                memChunkReader,
+                mMappedChunks,
+                LabelStorageType.BINARY
+            );
+            TSDBDocValues tsdbDocValues = leafReader.getTSDBDocValues();
+
+            assertEquals("Should return 0 when series has no chunks", 0, leafReader.numChunksForDoc(0, tsdbDocValues));
+        }
+    }
+
     private void createTestDocument(long reference, String metricName, String host, String region) throws IOException {
         Document doc = new Document();
         doc.add(new NumericDocValuesField(REFERENCE, reference));

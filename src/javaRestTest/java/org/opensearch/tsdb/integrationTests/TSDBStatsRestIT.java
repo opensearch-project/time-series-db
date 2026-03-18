@@ -33,6 +33,19 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
 
     private static final String TEST_DATA_YAML = "test_cases/tsdb_stats_rest_it.yaml";
     private boolean dataLoaded = false;
+    // OVERRIDE max_closeable_chunks_per_chunk_range_percentage = 100, otherwise only 15% of closed chunk will be dropped
+    // This is to test numChunks in HeadStats
+    private static final String CUSTOMIZED_INDEX_SETTINGS_YAML = """
+        index.refresh_interval: "1s"
+        index.tsdb_engine.enabled: true
+        index.tsdb_engine.labels.storage_type: binary
+        index.tsdb_engine.lang.m3.default_step_size: "10s"
+        index.tsdb_engine.max_closeable_chunks_per_chunk_range_percentage: 100
+        index.queries.cache.enabled: false
+        index.requests.cache.enable: false
+        index.translog.durability: async
+        index.translog.sync_interval: "1s"
+        """;
 
     /**
      * Lazily initialize test data on first use for each test.
@@ -40,8 +53,11 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
      */
     private void ensureDataLoaded() throws Exception {
         if (!dataLoaded) {
-            initializeTest(TEST_DATA_YAML);
+            initializeTest(TEST_DATA_YAML, CUSTOMIZED_INDEX_SETTINGS_YAML);
             setupTest();
+            // Force CCI creation and MemChunk drop
+            Request flushRequest = new Request("POST", "/tsdb_stats_test/_flush?force=true");
+            client().performRequest(flushRequest);
             dataLoaded = true;
         }
     }
@@ -53,8 +69,15 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
     public void testBasicEndpoint() throws Exception {
         ensureDataLoaded();
 
+        // "numChunks": 20, because 1 MemChunk(20m OOO cutoff window) + 1 open MemChunk
         String expectedJson = """
             {
+              "headStats": {
+                "numSeries": 10,
+                "numChunks": 20,
+                "minTime": 1735713600000,
+                "maxTime": 9223372036854775807
+              },
               "labelStats": {
                 "numSeries": 10,
                 "name": {
@@ -128,7 +151,7 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
         // Test POST request returns same result
         Request postRequest = new Request("POST", "/_tsdb/stats");
         postRequest.addParameter("start", "1735689600000");
-        postRequest.addParameter("end", "1735707600000");
+        postRequest.addParameter("end", "1735714800000");
         postRequest.setJsonEntity("{\"query\": \"fetch name:*\"}");
 
         Response postResponse = client().performRequest(postRequest);
@@ -274,6 +297,12 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
         // Grouped format - same as default/testTSDBStatsEndpointExists
         String expectedGroupedJson = """
             {
+              "headStats": {
+                "numSeries": 10,
+                "numChunks": 20,
+                "minTime": 1735713600000,
+                "maxTime": 9223372036854775807
+              },
               "labelStats": {
                 "numSeries": 10,
                 "name": {
@@ -348,6 +377,12 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
         // Flat format has arrays sorted by count descending, then name ascending
         String expectedFlatJson = """
             {
+              "headStats": {
+                "numSeries": 10,
+                "numChunks": 20,
+                "minTime": 1735713600000,
+                "maxTime": 9223372036854775807
+              },
               "seriesCountByMetricName": [
                 {"name": "http_requests_total", "value": 6},
                 {"name": "db_connections", "value": 2},
@@ -410,6 +445,12 @@ public class TSDBStatsRestIT extends RestTimeSeriesTestFramework {
         // Filtered to service:api AND name:http_* (5 series - all api series have http_* names)
         String expectedJson = """
             {
+              "headStats": {
+                "numSeries": 5,
+                "numChunks": 10,
+                "minTime": 1735713600000,
+                "maxTime": 9223372036854775807
+              },
               "labelStats": {
                 "numSeries": 5,
                 "name": {

@@ -61,33 +61,21 @@ public class InternalTSDBStats extends InternalAggregation {
      * Statistics for the head (in-memory time series).
      *
      * @param numSeries the number of active time series in the head
-     * @param chunkCount the total number of memory chunks currently held
+     * @param numChunks total MemChunks across all series (≥ numSeries due to OOO or not-yet-dropped chunks)
      * @param minTime the minimum sample timestamp present in the head
      * @param maxTime the maximum sample timestamp present in the head
      */
-    public record HeadStats(long numSeries, long chunkCount, long minTime, long maxTime) {
+    public record HeadStats(long numSeries, long numChunks, long minTime, long maxTime) {
 
-        /**
-         * Deserializes a {@code HeadStats} instance from a stream.
-         *
-         * @param in the stream input to read from
-         * @throws IOException if an I/O error occurs during reading
-         */
         public HeadStats(StreamInput in) throws IOException {
-            this(in.readVLong(), in.readVLong(), in.readVLong(), in.readVLong());
+            this(in.readVLong(), in.readVLong(), in.readLong(), in.readLong());
         }
 
-        /**
-         * Serializes this {@code HeadStats} instance to a stream.
-         *
-         * @param out the stream output to write to
-         * @throws IOException if an I/O error occurs during writing
-         */
         public void writeTo(StreamOutput out) throws IOException {
             out.writeVLong(numSeries);
-            out.writeVLong(chunkCount);
-            out.writeVLong(minTime);
-            out.writeVLong(maxTime);
+            out.writeVLong(numChunks);
+            out.writeLong(minTime);
+            out.writeLong(maxTime);
         }
     }
 
@@ -280,6 +268,7 @@ public class InternalTSDBStats extends InternalAggregation {
      * Factory method for creating shard-level stats (with seriesIds ).
      *
      * @param name the name of the aggregation
+     * @param headStats the head statistics (null if not populated)
      * @param shardStats the shard-level statistics with seriesIds
      * @param metadata the aggregation metadata
      * @return InternalTSDBStats instance for shard-level phase
@@ -442,6 +431,9 @@ public class InternalTSDBStats extends InternalAggregation {
         Set<Long> mergedSeriesIds = new HashSet<>();
         Map<String, Map<String, Set<Long>>> mergedLabelStats = new HashMap<>();
 
+        // Merge HeadStats from all shard-level aggregations
+        HeadStats mergedHeadStats = mergeHeadStats(aggregations);
+
         // Capture global includeValueStats flag from first shard (all shards have same value)
         boolean includeValueStats = false;
         if (!aggregations.isEmpty()) {
@@ -538,7 +530,7 @@ public class InternalTSDBStats extends InternalAggregation {
 
         // Return coordinator-level stats (seriesId converted to counts to save network bandwidth)
         CoordinatorLevelStats coordinatorStats = new CoordinatorLevelStats(totalSeries, finalLabelStats);
-        return forCoordinatorLevel(name, null, coordinatorStats, metadata);
+        return forCoordinatorLevel(name, mergedHeadStats, coordinatorStats, metadata);
     }
 
     /**
@@ -548,7 +540,7 @@ public class InternalTSDBStats extends InternalAggregation {
      * is needed because each time series exists on only one shard (guaranteed by routing).</p>
      */
     private InternalTSDBStats reduceCoordinatorLevel(List<InternalAggregation> aggregations) {
-        HeadStats mergedHeadStats = null; // TODO: Merge HeadStats in future when populated
+        HeadStats mergedHeadStats = mergeHeadStats(aggregations);
         Long totalSeries = null;
         Map<String, LabelStatsBuilder> builders = new HashMap<>();
 
@@ -608,6 +600,38 @@ public class InternalTSDBStats extends InternalAggregation {
         boolean hasNumSeries = false;
         Long numSeries = null;
         Map<String, Long> valueCounts = new LinkedHashMap<>();
+    }
+
+    /**
+     * Merges HeadStats from multiple aggregations by summing numSeries,
+     * taking the minimum minTime, and taking the maximum maxTime.
+     *
+     * @param aggregations the list of aggregations containing HeadStats to merge
+     * @return merged HeadStats, or null if no aggregation had HeadStats
+     */
+    static HeadStats mergeHeadStats(List<InternalAggregation> aggregations) {
+        long totalNumSeries = 0;
+        long totalNumChunks = 0;
+        long minTime = Long.MAX_VALUE;
+        long maxTime = Long.MIN_VALUE;
+        boolean hasAny = false;
+
+        for (InternalAggregation agg : aggregations) {
+            InternalTSDBStats stats = (InternalTSDBStats) agg;
+            if (stats.headStats != null) {
+                hasAny = true;
+                totalNumSeries += stats.headStats.numSeries();
+                totalNumChunks += stats.headStats.numChunks();
+                if (stats.headStats.minTime() < minTime) {
+                    minTime = stats.headStats.minTime();
+                }
+                if (stats.headStats.maxTime() > maxTime) {
+                    maxTime = stats.headStats.maxTime();
+                }
+            }
+        }
+
+        return hasAny ? new HeadStats(totalNumSeries, totalNumChunks, minTime, maxTime) : null;
     }
 
     /**
@@ -680,7 +704,7 @@ public class InternalTSDBStats extends InternalAggregation {
         if (headStats != null) {
             builder.startObject("headStats");
             builder.field("numSeries", headStats.numSeries());
-            builder.field("chunkCount", headStats.chunkCount());
+            builder.field("numChunks", headStats.numChunks());
             builder.field("minTime", headStats.minTime());
             builder.field("maxTime", headStats.maxTime());
             builder.endObject();

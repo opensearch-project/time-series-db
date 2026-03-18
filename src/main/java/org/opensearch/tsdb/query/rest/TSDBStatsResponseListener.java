@@ -42,7 +42,8 @@ public class TSDBStatsResponseListener extends RestToXContentListener<SearchResp
     private static final String FIELD_ERROR = "error";
     private static final String FIELD_HEAD_STATS = "headStats";
     private static final String FIELD_NUM_SERIES = "numSeries";
-    private static final String FIELD_CHUNK_COUNT = "chunkCount";
+    private static final String FIELD_NUM_CHUNKS = "numChunks";
+
     private static final String FIELD_MIN_TIME = "minTime";
     private static final String FIELD_MAX_TIME = "maxTime";
     private static final String FIELD_LABEL_STATS = "labelStats";
@@ -266,7 +267,7 @@ public class TSDBStatsResponseListener extends RestToXContentListener<SearchResp
     private void writeHeadStats(InternalTSDBStats.HeadStats headStats, XContentBuilder builder) throws IOException {
         builder.startObject(FIELD_HEAD_STATS);
         builder.field(FIELD_NUM_SERIES, headStats.numSeries());
-        builder.field(FIELD_CHUNK_COUNT, headStats.chunkCount());
+        builder.field(FIELD_NUM_CHUNKS, headStats.numChunks());
         builder.field(FIELD_MIN_TIME, headStats.minTime());
         builder.field(FIELD_MAX_TIME, headStats.maxTime());
         builder.endObject();

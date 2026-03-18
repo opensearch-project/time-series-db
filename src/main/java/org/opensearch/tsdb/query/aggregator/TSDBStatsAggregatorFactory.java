@@ -44,6 +44,7 @@ public class TSDBStatsAggregatorFactory extends AggregatorFactory {
     private final long minTimestamp;
     private final long maxTimestamp;
     private final boolean includeValueStats;
+    private final boolean includeHeadStats;
 
     /**
      * Creates a TSDB stats aggregator factory.
@@ -56,6 +57,7 @@ public class TSDBStatsAggregatorFactory extends AggregatorFactory {
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param includeValueStats Whether to include per-value statistics
+     * @param includeHeadStats Whether to include head (in-memory) statistics
      * @throws IOException If an error occurs during initialization
      */
     public TSDBStatsAggregatorFactory(
@@ -66,12 +68,14 @@ public class TSDBStatsAggregatorFactory extends AggregatorFactory {
         Map<String, Object> metadata,
         long minTimestamp,
         long maxTimestamp,
-        boolean includeValueStats
+        boolean includeValueStats,
+        boolean includeHeadStats
     ) throws IOException {
         super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.includeValueStats = includeValueStats;
+        this.includeHeadStats = includeHeadStats;
     }
 
     @Override
@@ -81,7 +85,16 @@ public class TSDBStatsAggregatorFactory extends AggregatorFactory {
         CardinalityUpperBound cardinality,
         Map<String, Object> metadata
     ) throws IOException {
-        return new TSDBStatsAggregator(name, searchContext, parent, minTimestamp, maxTimestamp, includeValueStats, metadata);
+        return new TSDBStatsAggregator(
+            name,
+            searchContext,
+            parent,
+            minTimestamp,
+            maxTimestamp,
+            includeValueStats,
+            includeHeadStats,
+            metadata
+        );
     }
 
     @Override

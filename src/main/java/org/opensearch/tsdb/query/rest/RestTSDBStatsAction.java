@@ -95,7 +95,7 @@ import static org.opensearch.tsdb.query.utils.TSDBStatsConstants.AGGREGATION_NAM
  * {
  *   "headStats": {
  *     "numSeries": 508,
- *     "chunkCount": 937,
+ *     "numChunks": 937,
  *     "minTime": 1591516800000,
  *     "maxTime": 1598896800143
  *   },
@@ -130,7 +130,6 @@ import static org.opensearch.tsdb.query.utils.TSDBStatsConstants.AGGREGATION_NAM
  * {
  *   "headStats": {
  *     "numSeries": 508,
- *     "chunkCount": 937,
  *     "minTime": 1591516800000,
  *     "maxTime": 1598896800143
  *   },
@@ -401,13 +400,21 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
         // Determine what statistics to include
         boolean includeValueStats = includeOptions.contains(TSDBStatsConstants.INCLUDE_ALL)
             || includeOptions.contains(TSDBStatsConstants.INCLUDE_VALUE_STATS);
+        boolean includeHeadStats = includeOptions.contains(TSDBStatsConstants.INCLUDE_ALL)
+            || includeOptions.contains(TSDBStatsConstants.INCLUDE_HEAD_STATS);
 
         try {
             // Build QueryBuilder from the already-parsed FetchPlanNode
             QueryBuilder filter = buildQueryFromFetch(fetchPlan, startMs, endMs);
 
             // Build aggregation
-            TSDBStatsAggregationBuilder aggBuilder = new TSDBStatsAggregationBuilder(AGGREGATION_NAME, startMs, endMs, includeValueStats);
+            TSDBStatsAggregationBuilder aggBuilder = new TSDBStatsAggregationBuilder(
+                AGGREGATION_NAME,
+                startMs,
+                endMs,
+                includeValueStats,
+                includeHeadStats
+            );
 
             // Build search request
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(filter).aggregation(aggBuilder).size(0);

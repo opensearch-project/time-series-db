@@ -35,12 +35,13 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
     // ========== Constructor Tests ==========
 
     public void testConstructorWithValidParameters() {
-        TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
 
         assertEquals(TEST_NAME, builder.getName());
         assertEquals(MIN_TIMESTAMP, builder.getMinTimestamp());
         assertEquals(MAX_TIMESTAMP, builder.getMaxTimestamp());
         assertTrue(builder.isIncludeValueStats());
+        assertTrue(builder.isIncludeHeadStats());
         assertEquals("tsdb_stats_agg", builder.getType());
         assertEquals(AggregationBuilder.BucketCardinality.NONE, builder.bucketCardinality());
     }
@@ -49,14 +50,14 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         // max < min
         IllegalArgumentException ex1 = expectThrows(
             IllegalArgumentException.class,
-            () -> new TSDBStatsAggregationBuilder(TEST_NAME, 2000L, 1000L, true)
+            () -> new TSDBStatsAggregationBuilder(TEST_NAME, 2000L, 1000L, true, true)
         );
         assertTrue(ex1.getMessage().contains("maxTimestamp must be greater than minTimestamp"));
 
         // max == min
         IllegalArgumentException ex2 = expectThrows(
             IllegalArgumentException.class,
-            () -> new TSDBStatsAggregationBuilder(TEST_NAME, 1000L, 1000L, true)
+            () -> new TSDBStatsAggregationBuilder(TEST_NAME, 1000L, 1000L, true, true)
         );
         assertTrue(ex2.getMessage().contains("maxTimestamp must be greater than minTimestamp"));
     }
@@ -64,8 +65,8 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
     // ========== Serialization Tests ==========
 
     public void testSerializationRoundTrip() throws IOException {
-        // includeValueStats=true
-        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        // includeValueStats=true, includeHeadStats=true
+        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
         TSDBStatsAggregationBuilder deserialized = serializeAndDeserialize(original);
 
         assertEquals(original, deserialized);
@@ -74,16 +75,18 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         assertEquals(original.getMinTimestamp(), deserialized.getMinTimestamp());
         assertEquals(original.getMaxTimestamp(), deserialized.getMaxTimestamp());
         assertEquals(original.isIncludeValueStats(), deserialized.isIncludeValueStats());
+        assertEquals(original.isIncludeHeadStats(), deserialized.isIncludeHeadStats());
 
-        // includeValueStats=false
-        TSDBStatsAggregationBuilder original2 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false);
+        // includeValueStats=false, includeHeadStats=false
+        TSDBStatsAggregationBuilder original2 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false, false);
         TSDBStatsAggregationBuilder deserialized2 = serializeAndDeserialize(original2);
         assertEquals(original2, deserialized2);
         assertFalse(deserialized2.isIncludeValueStats());
+        assertFalse(deserialized2.isIncludeHeadStats());
     }
 
     public void testSerializationWithEdgeCaseTimestamps() throws IOException {
-        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, Long.MIN_VALUE, Long.MAX_VALUE, true);
+        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, Long.MIN_VALUE, Long.MAX_VALUE, true, true);
         TSDBStatsAggregationBuilder deserialized = serializeAndDeserialize(original);
 
         assertEquals(original, deserialized);
@@ -94,7 +97,7 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
     // ========== XContent Tests ==========
 
     public void testXContentGeneration() throws IOException {
-        TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
 
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder();
         builder.internalXContent(xContentBuilder, null);
@@ -103,13 +106,14 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         assertTrue(json.contains("\"min_timestamp\":" + MIN_TIMESTAMP));
         assertTrue(json.contains("\"max_timestamp\":" + MAX_TIMESTAMP));
         assertTrue(json.contains("\"include_value_stats\":true"));
+        assertTrue(json.contains("\"include_head_stats\":true"));
     }
 
     public void testXContentParsing() throws IOException {
         // Full round-trip: parse with all fields
         String json = String.format(
             Locale.ROOT,
-            "{\"min_timestamp\":%d,\"max_timestamp\":%d,\"include_value_stats\":true}",
+            "{\"min_timestamp\":%d,\"max_timestamp\":%d,\"include_value_stats\":true,\"include_head_stats\":true}",
             MIN_TIMESTAMP,
             MAX_TIMESTAMP
         );
@@ -122,12 +126,13 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
             assertEquals(MIN_TIMESTAMP, parsed.getMinTimestamp());
             assertEquals(MAX_TIMESTAMP, parsed.getMaxTimestamp());
             assertTrue(parsed.isIncludeValueStats());
+            assertTrue(parsed.isIncludeHeadStats());
         }
 
-        // With include_value_stats=false
+        // With include_value_stats=false, include_head_stats=false
         String json2 = String.format(
             Locale.ROOT,
-            "{\"min_timestamp\":%d,\"max_timestamp\":%d,\"include_value_stats\":false}",
+            "{\"min_timestamp\":%d,\"max_timestamp\":%d,\"include_value_stats\":false,\"include_head_stats\":false}",
             MIN_TIMESTAMP,
             MAX_TIMESTAMP
         );
@@ -136,12 +141,18 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
             parser.nextToken();
             TSDBStatsAggregationBuilder parsed = TSDBStatsAggregationBuilder.parse(TEST_NAME, parser);
             assertFalse(parsed.isIncludeValueStats());
+            assertFalse(parsed.isIncludeHeadStats());
         }
     }
 
     public void testXContentParsingMissingRequiredFields() throws IOException {
         // Missing min_timestamp
-        try (XContentParser parser = createParser(XContentType.JSON.xContent(), "{\"max_timestamp\":2000,\"include_value_stats\":true}")) {
+        try (
+            XContentParser parser = createParser(
+                XContentType.JSON.xContent(),
+                "{\"max_timestamp\":2000,\"include_value_stats\":true,\"include_head_stats\":true}"
+            )
+        ) {
             parser.nextToken();
             IllegalArgumentException ex = expectThrows(
                 IllegalArgumentException.class,
@@ -151,7 +162,12 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         }
 
         // Missing max_timestamp
-        try (XContentParser parser = createParser(XContentType.JSON.xContent(), "{\"min_timestamp\":1000,\"include_value_stats\":true}")) {
+        try (
+            XContentParser parser = createParser(
+                XContentType.JSON.xContent(),
+                "{\"min_timestamp\":1000,\"include_value_stats\":true,\"include_head_stats\":true}"
+            )
+        ) {
             parser.nextToken();
             IllegalArgumentException ex = expectThrows(
                 IllegalArgumentException.class,
@@ -161,13 +177,30 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         }
 
         // Missing include_value_stats
-        try (XContentParser parser = createParser(XContentType.JSON.xContent(), "{\"min_timestamp\":1000,\"max_timestamp\":2000}")) {
+        try (
+            XContentParser parser = createParser(
+                XContentType.JSON.xContent(),
+                "{\"min_timestamp\":1000,\"max_timestamp\":2000,\"include_head_stats\":true}"
+            )
+        ) {
             parser.nextToken();
             IllegalArgumentException ex = expectThrows(
                 IllegalArgumentException.class,
                 () -> TSDBStatsAggregationBuilder.parse(TEST_NAME, parser)
             );
             assertTrue(ex.getMessage().contains("Required parameter 'include_value_stats' is missing"));
+        }
+
+        // Missing include_head_stats: should default to false (not throw)
+        try (
+            XContentParser parser = createParser(
+                XContentType.JSON.xContent(),
+                "{\"min_timestamp\":1000,\"max_timestamp\":2000,\"include_value_stats\":true}"
+            )
+        ) {
+            parser.nextToken();
+            TSDBStatsAggregationBuilder parsed = TSDBStatsAggregationBuilder.parse(TEST_NAME, parser);
+            assertFalse("include_head_stats should default to false when not provided", parsed.isIncludeHeadStats());
         }
     }
 
@@ -176,7 +209,7 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         String json = String.format(
             Locale.ROOT,
             "{\"min_timestamp\":%d,\"unknown_num\":99,\"max_timestamp\":%d,"
-                + "\"unknown_bool\":false,\"include_value_stats\":true,"
+                + "\"unknown_bool\":false,\"include_value_stats\":true,\"include_head_stats\":true,"
                 + "\"nested\":{\"a\":1},\"arr\":[1,2],\"unknown_str\":\"val\"}",
             MIN_TIMESTAMP,
             MAX_TIMESTAMP
@@ -195,15 +228,29 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
     // ========== Equals and HashCode Tests ==========
 
     public void testEqualsAndHashCode() {
-        TSDBStatsAggregationBuilder builder1 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
-        TSDBStatsAggregationBuilder builder2 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
-        TSDBStatsAggregationBuilder differentValueStats = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false);
-        TSDBStatsAggregationBuilder differentMax = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, 3000L, true);
+        TSDBStatsAggregationBuilder builder1 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
+        TSDBStatsAggregationBuilder builder2 = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
+        TSDBStatsAggregationBuilder differentValueStats = new TSDBStatsAggregationBuilder(
+            TEST_NAME,
+            MIN_TIMESTAMP,
+            MAX_TIMESTAMP,
+            false,
+            true
+        );
+        TSDBStatsAggregationBuilder differentHeadStats = new TSDBStatsAggregationBuilder(
+            TEST_NAME,
+            MIN_TIMESTAMP,
+            MAX_TIMESTAMP,
+            true,
+            false
+        );
+        TSDBStatsAggregationBuilder differentMax = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, 3000L, true, true);
 
         // equals
         assertEquals(builder1, builder2);
         assertEquals(builder1, builder1);
         assertNotEquals(builder1, differentValueStats);
+        assertNotEquals(builder1, differentHeadStats);
         assertNotEquals(builder1, differentMax);
         assertNotEquals(builder1, null);
         assertNotEquals(builder1, new Object());
@@ -215,7 +262,7 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
     // ========== Shallow Copy Tests ==========
 
     public void testShallowCopy() {
-        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregationBuilder original = new TSDBStatsAggregationBuilder(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, true);
         org.opensearch.search.aggregations.AggregatorFactories.Builder subFactoriesBuilder =
             new org.opensearch.search.aggregations.AggregatorFactories.Builder();
 
@@ -225,6 +272,7 @@ public class TSDBStatsAggregationBuilderTests extends OpenSearchTestCase {
         assertEquals(original.getMinTimestamp(), copy.getMinTimestamp());
         assertEquals(original.getMaxTimestamp(), copy.getMaxTimestamp());
         assertEquals(original.isIncludeValueStats(), copy.isIncludeValueStats());
+        assertEquals(original.isIncludeHeadStats(), copy.isIncludeHeadStats());
         assertNotSame(original, copy);
 
         // With metadata

@@ -33,8 +33,8 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
 
     public void testSupportsConcurrentSegmentSearch() {
         // Arrange - Test with both true and false for includeValueStats
-        TSDBStatsAggregatorFactory factory1 = createFactory("test_css_true", 1000L, 2000L, true);
-        TSDBStatsAggregatorFactory factory2 = createFactory("test_css_false", 1000L, 2000L, false);
+        TSDBStatsAggregatorFactory factory1 = createFactory("test_css_true", 1000L, 2000L, true, false);
+        TSDBStatsAggregatorFactory factory2 = createFactory("test_css_false", 1000L, 2000L, false, false);
 
         // Act & Assert - CSS support should be unconditional
         assertTrue("TSDBStatsAggregatorFactory should support CSS", factory1.supportsConcurrentSegmentSearch());
@@ -50,7 +50,7 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
         long maxTimestamp = 10000L;
 
         // Act
-        TSDBStatsAggregatorFactory factory = createFactory("config_test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregatorFactory factory = createFactory("config_test", minTimestamp, maxTimestamp, true, true);
 
         // Assert - Verify factory was created successfully with correct name
         assertNotNull("Factory should be created successfully", factory);
@@ -62,7 +62,7 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
         boolean includeValueStats = true;
-        TSDBStatsAggregatorFactory factory = createFactory("test_create", minTimestamp, maxTimestamp, includeValueStats);
+        TSDBStatsAggregatorFactory factory = createFactory("test_create", minTimestamp, maxTimestamp, includeValueStats, false);
 
         // Create mock SearchContext
         SearchContext searchContext = mock(SearchContext.class);
@@ -86,7 +86,7 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
 
     public void testCreateInternalWithDifferentParameters() throws Exception {
         // Arrange - Test with includeValueStats=false and custom metadata
-        TSDBStatsAggregatorFactory factory = createFactory("test_no_values", 2000L, 6000L, false);
+        TSDBStatsAggregatorFactory factory = createFactory("test_no_values", 2000L, 6000L, false, false);
 
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.bigArrays()).thenReturn(new BigArrays(null, new NoneCircuitBreakerService(), "test"));
@@ -109,7 +109,7 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
 
     public void testCreateInternalWithExtremeTimestamps() throws Exception {
         // Arrange - Test edge case with extreme timestamp values
-        TSDBStatsAggregatorFactory factory = createFactory("test_extreme", Long.MIN_VALUE, Long.MAX_VALUE, true);
+        TSDBStatsAggregatorFactory factory = createFactory("test_extreme", Long.MIN_VALUE, Long.MAX_VALUE, true, true);
 
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.bigArrays()).thenReturn(new BigArrays(null, new NoneCircuitBreakerService(), "test"));
@@ -129,11 +129,40 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
         aggregator.close();
     }
 
+    public void testCreateInternalWithHeadStatsDisabled() throws Exception {
+        // Arrange - explicitly disable head stats collection
+        TSDBStatsAggregatorFactory factory = createFactory("test_no_head", 1000L, 5000L, true, false);
+
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.bigArrays()).thenReturn(new BigArrays(null, new NoneCircuitBreakerService(), "test"));
+
+        // Act
+        TSDBStatsAggregator aggregator = (TSDBStatsAggregator) factory.createInternal(
+            searchContext,
+            null,
+            CardinalityUpperBound.NONE,
+            Map.of()
+        );
+
+        // Assert
+        assertNotNull("Should create aggregator with head stats disabled", aggregator);
+        assertEquals("test_no_head", aggregator.name());
+
+        // Cleanup
+        aggregator.close();
+    }
+
     /**
      * Helper method to create TSDBStatsAggregatorFactory with minimal parameters.
      * Uses null for complex OpenSearch infrastructure components that aren't needed for basic tests.
      */
-    private TSDBStatsAggregatorFactory createFactory(String name, long minTimestamp, long maxTimestamp, boolean includeValueStats) {
+    private TSDBStatsAggregatorFactory createFactory(
+        String name,
+        long minTimestamp,
+        long maxTimestamp,
+        boolean includeValueStats,
+        boolean includeHeadStats
+    ) {
         try {
             // Create an empty AggregatorFactories.Builder to satisfy the constructor
             AggregatorFactories.Builder subFactoriesBuilder = new AggregatorFactories.Builder();
@@ -146,7 +175,8 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
                 Map.of(), // metadata
                 minTimestamp,
                 maxTimestamp,
-                includeValueStats
+                includeValueStats,
+                includeHeadStats
             );
         } catch (Exception e) {
             throw new RuntimeException("Failed to create factory for test", e);

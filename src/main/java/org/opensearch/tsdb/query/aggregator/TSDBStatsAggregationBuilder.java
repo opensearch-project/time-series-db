@@ -38,7 +38,7 @@ import java.util.Map;
  *
  * <h2>Usage Example:</h2>
  * <pre>{@code
- * TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder("tsdb_stats", 1000000L, 2000000L, true);
+ * TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder("tsdb_stats", 1000000L, 2000000L, true, true);
  * }</pre>
  *
  * @since 0.0.1
@@ -50,6 +50,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
     private final long minTimestamp;
     private final long maxTimestamp;
     private final boolean includeValueStats;
+    private final boolean includeHeadStats;
 
     /**
      * Creates a TSDB stats aggregation builder.
@@ -58,9 +59,16 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param includeValueStats Whether to include per-value statistics
+     * @param includeHeadStats Whether to include head (in-memory) statistics
      * @throws IllegalArgumentException if maxTimestamp is not greater than minTimestamp
      */
-    public TSDBStatsAggregationBuilder(String name, long minTimestamp, long maxTimestamp, boolean includeValueStats) {
+    public TSDBStatsAggregationBuilder(
+        String name,
+        long minTimestamp,
+        long maxTimestamp,
+        boolean includeValueStats,
+        boolean includeHeadStats
+    ) {
         super(name);
 
         // Validate time range
@@ -73,6 +81,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.includeValueStats = includeValueStats;
+        this.includeHeadStats = includeHeadStats;
     }
 
     /**
@@ -86,6 +95,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = in.readLong();
         this.maxTimestamp = in.readLong();
         this.includeValueStats = in.readBoolean();
+        this.includeHeadStats = in.readBoolean();
     }
 
     /**
@@ -100,6 +110,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = clone.minTimestamp;
         this.maxTimestamp = clone.maxTimestamp;
         this.includeValueStats = clone.includeValueStats;
+        this.includeHeadStats = clone.includeHeadStats;
     }
 
     @Override
@@ -107,6 +118,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         out.writeLong(minTimestamp);
         out.writeLong(maxTimestamp);
         out.writeBoolean(includeValueStats);
+        out.writeBoolean(includeHeadStats);
     }
 
     @Override
@@ -115,6 +127,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         builder.field("min_timestamp", minTimestamp);
         builder.field("max_timestamp", maxTimestamp);
         builder.field("include_value_stats", includeValueStats);
+        builder.field("include_head_stats", includeHeadStats);
         builder.endObject();
         return builder;
     }
@@ -131,6 +144,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         Long minTimestamp = null;
         Long maxTimestamp = null;
         Boolean includeValueStats = null;
+        Boolean includeHeadStats = null;
 
         XContentParser.Token token;
         String currentFieldName = null;
@@ -148,6 +162,8 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
             } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
                 if ("include_value_stats".equals(currentFieldName)) {
                     includeValueStats = parser.booleanValue();
+                } else if ("include_head_stats".equals(currentFieldName)) {
+                    includeHeadStats = parser.booleanValue();
                 } else {
                     parser.skipChildren();
                 }
@@ -168,8 +184,11 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
                 "Required parameter 'include_value_stats' is missing for aggregation '" + aggregationName + "'"
             );
         }
+        if (includeHeadStats == null) {
+            includeHeadStats = false;
+        }
 
-        return new TSDBStatsAggregationBuilder(aggregationName, minTimestamp, maxTimestamp, includeValueStats);
+        return new TSDBStatsAggregationBuilder(aggregationName, minTimestamp, maxTimestamp, includeValueStats, includeHeadStats);
     }
 
     @Override
@@ -192,7 +211,8 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
             metadata,
             minTimestamp,
             maxTimestamp,
-            includeValueStats
+            includeValueStats,
+            includeHeadStats
         );
     }
 
@@ -219,7 +239,10 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         }
 
         TSDBStatsAggregationBuilder that = (TSDBStatsAggregationBuilder) obj;
-        return minTimestamp == that.minTimestamp && maxTimestamp == that.maxTimestamp && includeValueStats == that.includeValueStats;
+        return minTimestamp == that.minTimestamp
+            && maxTimestamp == that.maxTimestamp
+            && includeValueStats == that.includeValueStats
+            && includeHeadStats == that.includeHeadStats;
     }
 
     @Override
@@ -228,6 +251,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         result = 31 * result + Long.hashCode(minTimestamp);
         result = 31 * result + Long.hashCode(maxTimestamp);
         result = 31 * result + Boolean.hashCode(includeValueStats);
+        result = 31 * result + Boolean.hashCode(includeHeadStats);
         return result;
     }
 
@@ -256,6 +280,15 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
      */
     public boolean isIncludeValueStats() {
         return includeValueStats;
+    }
+
+    /**
+     * Gets whether to include head statistics.
+     *
+     * @return true if head statistics should be included
+     */
+    public boolean isIncludeHeadStats() {
+        return includeHeadStats;
     }
 
     /**

@@ -9,6 +9,7 @@ package org.opensearch.tsdb.query.aggregator;
 
 import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.index.CompositeReader;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
@@ -20,7 +21,12 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermVectors;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.tsdb.core.chunk.ChunkIterator;
+import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
+import org.opensearch.tsdb.core.index.live.MemChunkReader;
+import org.opensearch.tsdb.core.mapping.Constants;
+import org.opensearch.tsdb.core.mapping.LabelStorageType;
 import org.opensearch.tsdb.core.model.ByteLabels;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
@@ -32,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Shared test utilities for aggregator tests.
@@ -239,4 +246,49 @@ public class AggregatorTestUtils {
             }
         };
     }
+
+    public static TSDBLeafReaderWithContext createLiveSeriesIndexLeafReaderWithLabels(
+        long minTimestamp,
+        long maxTimestamp,
+        long seriesId,
+        Map<String, String> labelPairs
+    ) throws IOException {
+        Directory directory = new ByteBuffersDirectory();
+        IndexWriter indexWriter = new IndexWriter(directory, new IndexWriterConfig());
+
+        Document doc = new Document();
+        // Add REFERENCE field (LiveSeriesIndex field)
+        doc.add(new NumericDocValuesField(Constants.IndexSchema.REFERENCE, seriesId));
+        // Add labels as binary doc values for LabelStorageType.BINARY
+        Labels labels = ByteLabels.fromMap(labelPairs);
+        doc.add(
+            new org.apache.lucene.document.BinaryDocValuesField(
+                Constants.IndexSchema.LABELS,
+                new BytesRef(((ByteLabels) labels).getRawBytes())
+            )
+        );
+        indexWriter.addDocument(doc);
+        indexWriter.commit();
+
+        DirectoryReader tempReader = DirectoryReader.open(indexWriter);
+        LeafReader baseReader = tempReader.leaves().get(0).reader();
+
+        // Create a real LiveSeriesIndexLeafReader with mocked chunk reader
+        MemChunkReader mockChunkReader = mock(MemChunkReader.class);
+        when(mockChunkReader.getChunks(org.mockito.ArgumentMatchers.anyLong())).thenReturn(List.of());
+
+        LiveSeriesIndexLeafReader liveReader = new LiveSeriesIndexLeafReader(
+            baseReader,
+            mockChunkReader,
+            LabelStorageType.BINARY,
+            minTimestamp,
+            java.util.Collections.emptyMap()
+        );
+
+        CompositeReader compositeReader = createCompositeReaderWrapper(liveReader);
+        LeafReaderContext context = compositeReader.leaves().get(0);
+
+        return new TSDBLeafReaderWithContext(liveReader, context, compositeReader, tempReader, indexWriter, directory);
+    }
+
 }

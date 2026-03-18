@@ -19,6 +19,7 @@ import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.aggregations.LeafBucketCollectorBase;
 import org.opensearch.search.aggregations.metrics.MetricsAggregator;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
@@ -51,6 +52,7 @@ public class TSDBStatsAggregator extends MetricsAggregator {
     private final long minTimestamp;
     private final long maxTimestamp;
     private final boolean includeValueStats;
+    private final boolean includeHeadStats;
 
     // Series identifiers (reference or labels_hash) we've already processed
     // TODO limit unbounded memory usage
@@ -65,6 +67,13 @@ public class TSDBStatsAggregator extends MetricsAggregator {
     // Key grouping is deferred to buildAggregation() to avoid parsing in hot path
     private final Map<Integer, Set<Long>> ordinalToSeriesIdsMap;
 
+    // HeadStats accumulator: tracks stats from LiveSeriesIndexLeafReader segments
+    private long headNumSeries;
+    private long headNumChunks;
+    private long headMinTime;
+    private long headMaxTime;
+    private boolean hasHeadStats;
+
     /**
      * Creates a TSDB stats aggregator.
      *
@@ -74,6 +83,7 @@ public class TSDBStatsAggregator extends MetricsAggregator {
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param includeValueStats Whether to include per-value statistics
+     * @param includeHeadStats Whether to include head (in-memory) statistics
      * @param metadata The aggregation metadata
      * @throws IOException If an error occurs during initialization
      */
@@ -84,12 +94,14 @@ public class TSDBStatsAggregator extends MetricsAggregator {
         long minTimestamp,
         long maxTimestamp,
         boolean includeValueStats,
+        boolean includeHeadStats,
         Map<String, Object> metadata
     ) throws IOException {
         super(name, context, parent, metadata);
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.includeValueStats = includeValueStats;
+        this.includeHeadStats = includeHeadStats;
 
         this.seenSeriesIds = new HashSet<>();
 
@@ -97,6 +109,13 @@ public class TSDBStatsAggregator extends MetricsAggregator {
         this.labelValuePairOrdinalMap = new BytesRefHash(pool);
 
         this.ordinalToSeriesIdsMap = includeValueStats ? new HashMap<>() : null;
+
+        // Initialize HeadStats accumulator
+        this.headNumSeries = 0;
+        this.headNumChunks = 0;
+        this.headMinTime = Long.MAX_VALUE;
+        this.headMaxTime = Long.MIN_VALUE;
+        this.hasHeadStats = false;
     }
 
     @Override
@@ -109,6 +128,19 @@ public class TSDBStatsAggregator extends MetricsAggregator {
         // No matching data in this segment, skip it
         if (!tsdbLeafReader.overlapsTimeRange(minTimestamp, maxTimestamp)) {
             return sub;
+        }
+
+        // Collect HeadStats from LiveSeriesIndexLeafReader segments
+        if (includeHeadStats && tsdbLeafReader instanceof LiveSeriesIndexLeafReader) {
+            hasHeadStats = true;
+            long leafMinTime = tsdbLeafReader.getMinIndexTimestamp();
+            long leafMaxTime = tsdbLeafReader.getMaxIndexTimestamp();
+            if (leafMinTime < headMinTime) {
+                headMinTime = leafMinTime;
+            }
+            if (leafMaxTime > headMaxTime) {
+                headMaxTime = leafMaxTime;
+            }
         }
 
         return new TSDBStatsLeafBucketCollector(ctx, tsdbLeafReader, sub);
@@ -128,6 +160,11 @@ public class TSDBStatsAggregator extends MetricsAggregator {
 
         @Override
         public void collect(int doc, long bucket) throws IOException {
+            // Accumulate per-doc HeadStats for live series segments
+            if (includeHeadStats && tsdbLeafReader instanceof LiveSeriesIndexLeafReader) {
+                headNumSeries++;
+                headNumChunks += ((LiveSeriesIndexLeafReader) tsdbLeafReader).numChunksForDoc(doc, tsdbDocValues);
+            }
             Labels labels = tsdbLeafReader.labelsForDoc(doc, tsdbDocValues);
             // We assume labels hash is the seriesId
             // This need to be changed when we start accepting reference/seriesId from indexing
@@ -206,8 +243,13 @@ public class TSDBStatsAggregator extends MetricsAggregator {
             includeValueStats  // Pass global flag so coordinator knows if value stats were collected
         );
 
+        // Build HeadStats if any LiveSeriesIndexLeafReader segments were encountered
+        InternalTSDBStats.HeadStats headStats = hasHeadStats
+            ? new InternalTSDBStats.HeadStats(headNumSeries, headNumChunks, headMinTime, headMaxTime)
+            : null;
+
         // Return using factory method
-        return InternalTSDBStats.forShardLevel(name, null, shardStats, metadata());
+        return InternalTSDBStats.forShardLevel(name, headStats, shardStats, metadata());
     }
 
     @Override

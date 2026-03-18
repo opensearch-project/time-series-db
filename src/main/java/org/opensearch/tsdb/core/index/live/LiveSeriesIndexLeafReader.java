@@ -135,6 +135,31 @@ public class LiveSeriesIndexLeafReader extends TSDBLeafReader {
         return chunkIterators;
     }
 
+    /**
+     * Returns the number of MemChunks(open+OOO_cutoff) for the series corresponding to the given document.
+     *
+     * @param docId the document ID to look up
+     * @param tsdbDocValues the doc values reader for this leaf
+     * @return number of MemChunks for the series, or 0 if the doc has no series reference
+     * @throws IOException if an I/O error occurs
+     */
+    public int numChunksForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
+        NumericDocValues seriesRefValue = tsdbDocValues.getChunkRefDocValues();
+        if (!seriesRefValue.advanceExact(docId)) {
+            return 0;
+        }
+        long seriesRef = seriesRefValue.longValue();
+        int numChunks = 0;
+        Set<MemChunk> chunksToFilter = mMappedChunks.getOrDefault(seriesRef, Collections.emptySet());
+        List<MemChunk> memChunks = memChunkReader.getChunks(seriesRef); // get all memchunks for the series
+        for (MemChunk memChunk : memChunks) {
+            if (!chunksToFilter.contains(memChunk)) {
+                numChunks++;
+            }
+        }
+        return numChunks;
+    }
+
     @Override
     public Labels labelsForDoc(int docId, TSDBDocValues tsdbDocValues) throws IOException {
         return tsdbDocValues.getLabelsStorage().readLabels(docId);

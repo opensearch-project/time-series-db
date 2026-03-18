@@ -57,7 +57,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
     public void testBuildEmptyAggregationBehavior() throws IOException {
         // Test with includeValueStats=true
-        TSDBStatsAggregator aggregator1 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregator aggregator1 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false);
         InternalAggregation result1 = aggregator1.buildEmptyAggregation();
 
         assertNotNull("Empty aggregation should not be null", result1);
@@ -72,7 +72,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         aggregator1.close();
 
         // Test with includeValueStats=false
-        TSDBStatsAggregator aggregator2 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false);
+        TSDBStatsAggregator aggregator2 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false, false);
         InternalAggregation result2 = aggregator2.buildEmptyAggregation();
 
         assertNotNull("Empty aggregation should not be null", result2);
@@ -81,7 +81,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         aggregator2.close();
 
         // Test multiple empty aggregations (idempotency)
-        TSDBStatsAggregator aggregator3 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregator aggregator3 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false);
         InternalAggregation firstResult = aggregator3.buildEmptyAggregation();
         InternalAggregation secondResult = aggregator3.buildEmptyAggregation();
         assertEquals("Multiple calls should return equivalent results", firstResult, secondResult);
@@ -90,15 +90,15 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
     public void testResourceCleanup() throws IOException {
         // Test close with includeValueStats=true
-        TSDBStatsAggregator aggregator1 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregator aggregator1 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false);
         aggregator1.close();
 
         // Test close with includeValueStats=false (ordinalFingerprintSets is null)
-        TSDBStatsAggregator aggregator2 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false);
+        TSDBStatsAggregator aggregator2 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, false, false);
         aggregator2.close();
 
         // Test close after buildEmptyAggregation
-        TSDBStatsAggregator aggregator3 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true);
+        TSDBStatsAggregator aggregator3 = createAggregator(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false);
         aggregator3.buildEmptyAggregation();
         aggregator3.close();
     }
@@ -106,14 +106,14 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
     public void testAggregatorWithMetadata() throws IOException {
         // Test with metadata
         Map<String, Object> metadata = Map.of("key1", "value1", "key2", 42);
-        TSDBStatsAggregator aggregator1 = createAggregatorWithMetadata(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, metadata);
+        TSDBStatsAggregator aggregator1 = createAggregatorWithMetadata(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false, metadata);
         InternalAggregation result1 = aggregator1.buildEmptyAggregation();
         assertNotNull("Result should have metadata", result1.getMetadata());
         assertEquals("Metadata should match", metadata, result1.getMetadata());
         aggregator1.close();
 
         // Test without metadata
-        TSDBStatsAggregator aggregator2 = createAggregatorWithMetadata(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, null);
+        TSDBStatsAggregator aggregator2 = createAggregatorWithMetadata(TEST_NAME, MIN_TIMESTAMP, MAX_TIMESTAMP, true, false, null);
         InternalAggregation result2 = aggregator2.buildEmptyAggregation();
         assertNull("Result should have null metadata", result2.getMetadata());
         aggregator2.close();
@@ -125,7 +125,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Test 1: Non-TSDB LeafReader should throw exception
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator1 = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator1 = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         Directory directory = new ByteBuffersDirectory();
         IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig());
@@ -147,7 +147,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Test 2: Non-overlapping time range (should prune)
         long queryMinTimestamp = 1000L;
         long queryMaxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator2 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true);
+        TSDBStatsAggregator aggregator2 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true, false);
 
         long leafMinTimestamp = 6000L;
         long leafMaxTimestamp = 10000L;
@@ -165,7 +165,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         aggregator2.close();
 
         // Test 3: Overlapping time range (should return new collector)
-        TSDBStatsAggregator aggregator3 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true);
+        TSDBStatsAggregator aggregator3 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true, false);
 
         long leafMinTimestamp2 = 2000L;
         long leafMaxTimestamp2 = 6000L;
@@ -184,7 +184,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         aggregator3.close();
 
         // Test 4: Exact boundary (no overlap - should prune)
-        TSDBStatsAggregator aggregator4 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true);
+        TSDBStatsAggregator aggregator4 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true, false);
 
         long leafMinTimestamp3 = 0L;
         long leafMaxTimestamp3 = 999L;
@@ -208,7 +208,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Arrange
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         Map<String, String> labels = new HashMap<>();
         labels.put("service", "api");
@@ -250,7 +250,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Arrange: two segments with the same labels → same stableHash → second should be deduped
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         // Same labels = same stableHash = dedup
         Map<String, String> sameLabels = Map.of("service", "api");
@@ -296,7 +296,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Arrange
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         Map<String, String> labels = Map.of("service", "api", "region", "us-west");
 
@@ -327,7 +327,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Arrange
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, false);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, false, false);
 
         Map<String, String> labels = Map.of("service", "api");
 
@@ -359,7 +359,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Arrange: two different series with different labels
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         Map<String, String> labels1 = Map.of("service", "api", "host", "server1");
         Map<String, String> labels2 = Map.of("service", "web", "host", "server2");
@@ -411,7 +411,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // To get different stableHash (avoid dedup) but share a label value, use different labels overall.
         long minTimestamp = 1000L;
         long maxTimestamp = 5000L;
-        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true);
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
 
         // Two series that share "service:api" but differ on another label → different stableHash, same ordinal for "service:api"
         Map<String, String> labels1 = Map.of("service", "api", "host", "server1");
@@ -449,6 +449,103 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         }
     }
 
+    // ========== HeadStats Collection Tests ==========
+
+    public void testCollectHeadStatsFromLiveSeriesIndexLeafReader() throws IOException {
+        // Arrange
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, true);
+
+        Map<String, String> labels = Map.of("service", "api");
+
+        AggregatorTestUtils.TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createLiveSeriesIndexLeafReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            12345L,
+            labels
+        );
+
+        try {
+            // Act
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            collector.collect(0, 0);
+            InternalAggregation result = aggregator.buildAggregation(0);
+
+            // Assert
+            InternalTSDBStats stats = (InternalTSDBStats) result;
+            assertNotNull("Stats should not be null", stats);
+            // HeadStats should be populated since we used LiveSeriesIndexLeafReader with includeHeadStats=true
+            assertNotNull("HeadStats should be populated for LiveSeriesIndexLeafReader", stats.getHeadStats());
+            assertEquals("HeadStats numSeries should match numDocs", 1L, stats.getHeadStats().numSeries());
+            assertEquals("HeadStats minTime should match reader minTimestamp", minTimestamp, stats.getHeadStats().minTime());
+            // LiveSeriesIndexLeafReader sets maxTimestamp to Long.MAX_VALUE (live/open-ended)
+            assertEquals("HeadStats maxTime should match LiveSeriesIndexLeafReader max", Long.MAX_VALUE, stats.getHeadStats().maxTime());
+        } finally {
+            readerCtx.close();
+            aggregator.close();
+        }
+    }
+
+    public void testNoHeadStatsForClosedChunkReader() throws IOException {
+        // Arrange - ClosedChunkIndex reader should NOT populate HeadStats
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, true);
+
+        Map<String, String> labels = Map.of("service", "api");
+
+        AggregatorTestUtils.TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            labels
+        );
+
+        try {
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            collector.collect(0, 0);
+            InternalAggregation result = aggregator.buildAggregation(0);
+
+            InternalTSDBStats stats = (InternalTSDBStats) result;
+            assertNotNull("Stats should not be null", stats);
+            // HeadStats should NOT be populated for non-LiveSeriesIndex readers
+            assertNull("HeadStats should be null for ClosedChunkIndex reader", stats.getHeadStats());
+        } finally {
+            readerCtx.close();
+            aggregator.close();
+        }
+    }
+
+    public void testNoHeadStatsWhenIncludeHeadStatsFalse() throws IOException {
+        // Arrange - Even LiveSeriesIndexLeafReader should NOT populate HeadStats when includeHeadStats=false
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        TSDBStatsAggregator aggregator = createAggregator("test", minTimestamp, maxTimestamp, true, false);
+
+        Map<String, String> labels = Map.of("service", "api");
+
+        AggregatorTestUtils.TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createLiveSeriesIndexLeafReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            12345L,
+            labels
+        );
+
+        try {
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            collector.collect(0, 0);
+            InternalAggregation result = aggregator.buildAggregation(0);
+
+            InternalTSDBStats stats = (InternalTSDBStats) result;
+            assertNotNull("Stats should not be null", stats);
+            // HeadStats should be null because includeHeadStats=false
+            assertNull("HeadStats should be null when includeHeadStats=false", stats.getHeadStats());
+        } finally {
+            readerCtx.close();
+            aggregator.close();
+        }
+    }
+
     // ========== Helper Methods ==========
 
     /**
@@ -468,9 +565,14 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         return (InternalTSDBStats) shardResult.reduce(List.of(shardResult), reduceContext);
     }
 
-    private TSDBStatsAggregator createAggregator(String name, long minTimestamp, long maxTimestamp, boolean includeValueStats)
-        throws IOException {
-        return createAggregatorWithMetadata(name, minTimestamp, maxTimestamp, includeValueStats, Map.of());
+    private TSDBStatsAggregator createAggregator(
+        String name,
+        long minTimestamp,
+        long maxTimestamp,
+        boolean includeValueStats,
+        boolean includeHeadStats
+    ) throws IOException {
+        return createAggregatorWithMetadata(name, minTimestamp, maxTimestamp, includeValueStats, includeHeadStats, Map.of());
     }
 
     private TSDBStatsAggregator createAggregatorWithMetadata(
@@ -478,6 +580,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         long minTimestamp,
         long maxTimestamp,
         boolean includeValueStats,
+        boolean includeHeadStats,
         Map<String, Object> metadata
     ) throws IOException {
         CircuitBreakerService circuitBreakerService = new NoneCircuitBreakerService();
@@ -486,6 +589,15 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.bigArrays()).thenReturn(bigArrays);
 
-        return new TSDBStatsAggregator(name, searchContext, null, minTimestamp, maxTimestamp, includeValueStats, metadata);
+        return new TSDBStatsAggregator(
+            name,
+            searchContext,
+            null,
+            minTimestamp,
+            maxTimestamp,
+            includeValueStats,
+            includeHeadStats,
+            metadata
+        );
     }
 }
