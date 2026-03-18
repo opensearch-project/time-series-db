@@ -13,6 +13,7 @@ import org.opensearch.search.aggregations.AggregatorFactories;
 import org.opensearch.search.aggregations.CardinalityUpperBound;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.tsdb.query.utils.TSDBStatsConstants;
 
 import java.util.Map;
 
@@ -146,7 +147,8 @@ public class TSDBStatsAggregatorFactoryTests extends OpenSearchTestCase {
                 Map.of(), // metadata
                 minTimestamp,
                 maxTimestamp,
-                includeValueStats
+                includeValueStats,
+                TSDBStatsConstants.DEDUP_MODE_RECOMPUTED
             );
         } catch (Exception e) {
             throw new RuntimeException("Failed to create factory for test", e);

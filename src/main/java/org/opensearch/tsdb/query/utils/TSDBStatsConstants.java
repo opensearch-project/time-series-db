@@ -26,4 +26,8 @@ public final class TSDBStatsConstants {
     // Format values
     public static final String FORMAT_GROUPED = "grouped";
     public static final String FORMAT_FLAT = "flat";
+
+    // Dedup mode values
+    public static final String DEDUP_MODE_INDEXED = "indexed";
+    public static final String DEDUP_MODE_RECOMPUTED = "recomputed";
 }

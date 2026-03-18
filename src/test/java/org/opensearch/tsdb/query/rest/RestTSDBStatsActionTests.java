@@ -541,6 +541,54 @@ public class RestTSDBStatsActionTests extends OpenSearchTestCase {
         assertThat(channel.capturedResponse().content().utf8ToString(), containsString("Invalid format"));
     }
 
+    // ========== Dedup Mode Parameter Tests ==========
+
+    public void testDedupModeDefaultIsIndexed() throws Exception {
+        // No dedup_mode param → defaults to "indexed" (no error)
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_tsdb/stats")
+            .withParams(Map.of("query", "fetch service:api"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    public void testValidDedupModeParameters() throws Exception {
+        // dedup_mode=indexed should succeed
+        FakeRestRequest requestIndexed = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_tsdb/stats")
+            .withParams(Map.of("query", "fetch service:api", "dedup_mode", "indexed"))
+            .build();
+        FakeRestChannel channelIndexed = new FakeRestChannel(requestIndexed, true, 1);
+        action.handleRequest(requestIndexed, channelIndexed, mockClient);
+        assertThat(channelIndexed.capturedResponse().status(), equalTo(RestStatus.OK));
+
+        // dedup_mode=recomputed should also succeed
+        FakeRestRequest requestRecomputed = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_tsdb/stats")
+            .withParams(Map.of("query", "fetch service:api", "dedup_mode", "recomputed"))
+            .build();
+        FakeRestChannel channelRecomputed = new FakeRestChannel(requestRecomputed, true, 1);
+        action.handleRequest(requestRecomputed, channelRecomputed, mockClient);
+        assertThat(channelRecomputed.capturedResponse().status(), equalTo(RestStatus.OK));
+    }
+
+    public void testInvalidDedupModeReturnsError() throws Exception {
+        FakeRestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withMethod(RestRequest.Method.GET)
+            .withPath("/_tsdb/stats")
+            .withParams(Map.of("query", "fetch service:api", "dedup_mode", "foo"))
+            .build();
+        FakeRestChannel channel = new FakeRestChannel(request, true, 1);
+
+        action.handleRequest(request, channel, mockClient);
+
+        assertThat(channel.capturedResponse().status(), equalTo(RestStatus.BAD_REQUEST));
+        assertThat(channel.capturedResponse().content().utf8ToString(), containsString("Invalid dedup_mode"));
+    }
+
     // ========== Combined Parameter Tests ==========
 
     public void testAllParametersTogether() throws Exception {

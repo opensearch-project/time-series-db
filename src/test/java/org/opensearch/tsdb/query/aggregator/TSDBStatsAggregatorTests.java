@@ -23,6 +23,7 @@ import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.tsdb.query.aggregator.AggregatorTestUtils.TSDBLeafReaderWithContext;
+import org.opensearch.tsdb.query.utils.TSDBStatsConstants;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -145,17 +146,14 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         aggregator1.close();
 
         // Test 2: Non-overlapping time range (should prune)
+        // Use CCI reader because LSI always sets maxTimestamp=Long.MAX_VALUE, breaking pruning tests
         long queryMinTimestamp = 1000L;
         long queryMaxTimestamp = 5000L;
         TSDBStatsAggregator aggregator2 = createAggregator("test", queryMinTimestamp, queryMaxTimestamp, true);
 
         long leafMinTimestamp = 6000L;
         long leafMaxTimestamp = 10000L;
-        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
-            leafMinTimestamp,
-            leafMaxTimestamp,
-            null
-        );
+        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockCCIReaderWithLabels(leafMinTimestamp, leafMaxTimestamp, null);
         LeafBucketCollector mockSubCollector2 = mock(LeafBucketCollector.class);
 
         LeafBucketCollector result1 = aggregator2.getLeafCollector(readerCtx1.context, mockSubCollector2);
@@ -169,7 +167,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
         long leafMinTimestamp2 = 2000L;
         long leafMaxTimestamp2 = 6000L;
-        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
+        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockCCIReaderWithLabels(
             leafMinTimestamp2,
             leafMaxTimestamp2,
             null
@@ -188,7 +186,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
         long leafMinTimestamp3 = 0L;
         long leafMaxTimestamp3 = 999L;
-        TSDBLeafReaderWithContext readerCtx3 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
+        TSDBLeafReaderWithContext readerCtx3 = AggregatorTestUtils.createMockCCIReaderWithLabels(
             leafMinTimestamp3,
             leafMaxTimestamp3,
             null
@@ -215,7 +213,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         labels.put("host", "server1");
         labels.put("env", "prod");
 
-        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels);
+        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels);
 
         try {
             // Act
@@ -255,16 +253,8 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         // Same labels = same stableHash = dedup
         Map<String, String> sameLabels = Map.of("service", "api");
 
-        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
-            minTimestamp,
-            maxTimestamp,
-            sameLabels
-        );
-        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(
-            minTimestamp,
-            maxTimestamp,
-            sameLabels
-        );
+        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, sameLabels);
+        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, sameLabels);
 
         try {
             // Act - Collect from first document (should process), then second with SAME labels (should skip)
@@ -300,7 +290,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
         Map<String, String> labels = Map.of("service", "api", "region", "us-west");
 
-        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels);
+        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels);
 
         try {
             // Act
@@ -331,7 +321,7 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
 
         Map<String, String> labels = Map.of("service", "api");
 
-        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels);
+        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels);
 
         try {
             // Act
@@ -364,8 +354,8 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         Map<String, String> labels1 = Map.of("service", "api", "host", "server1");
         Map<String, String> labels2 = Map.of("service", "web", "host", "server2");
 
-        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels1);
-        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels2);
+        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels1);
+        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels2);
 
         try {
             // Act - Collect from both documents
@@ -417,8 +407,8 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         Map<String, String> labels1 = Map.of("service", "api", "host", "server1");
         Map<String, String> labels2 = Map.of("service", "api", "host", "server2");
 
-        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels1);
-        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockTSDBLeafReaderWithLabels(minTimestamp, maxTimestamp, labels2);
+        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels1);
+        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockLSIReaderWithLabels(minTimestamp, maxTimestamp, labels2);
 
         try {
             LeafBucketCollector collector1 = aggregator.getLeafCollector(readerCtx1.context, LeafBucketCollector.NO_OP_COLLECTOR);
@@ -442,6 +432,126 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
                 labelStats.get("service").valuesStats().get("api").longValue()
             );
 
+        } finally {
+            readerCtx1.close();
+            readerCtx2.close();
+            aggregator.close();
+        }
+    }
+
+    // ========== Indexed Dedup Mode Tests ==========
+
+    public void testIndexedDedupModeWithCCIReader() throws IOException {
+        // Indexed mode with ClosedChunkIndexLeafReader reads seriesId from "labels_hash" field
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long seriesId = 12345L;
+        Map<String, String> labels = Map.of("service", "api", "host", "server1");
+
+        TSDBStatsAggregator aggregator = createAggregatorWithDedupMode(
+            "test",
+            minTimestamp,
+            maxTimestamp,
+            true,
+            TSDBStatsConstants.DEDUP_MODE_INDEXED
+        );
+
+        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockCCIReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            labels,
+            seriesId
+        );
+
+        try {
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            collector.collect(0, 0);
+            InternalAggregation result = aggregator.buildAggregation(0);
+
+            InternalTSDBStats stats = reduceToCoordinator(result);
+            assertEquals("Should have 1 unique series", 1L, stats.getNumSeries().longValue());
+            assertEquals("Should have 2 label keys", 2, stats.getLabelStats().size());
+            assertTrue("Should contain 'service'", stats.getLabelStats().containsKey("service"));
+        } finally {
+            readerCtx.close();
+            aggregator.close();
+        }
+    }
+
+    public void testIndexedDedupModeWithLSIReader() throws IOException {
+        // Indexed mode with LiveSeriesIndexLeafReader reads seriesId from "reference" field
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long seriesId = 67890L;
+        Map<String, String> labels = Map.of("service", "web");
+
+        TSDBStatsAggregator aggregator = createAggregatorWithDedupMode(
+            "test",
+            minTimestamp,
+            maxTimestamp,
+            true,
+            TSDBStatsConstants.DEDUP_MODE_INDEXED
+        );
+
+        TSDBLeafReaderWithContext readerCtx = AggregatorTestUtils.createMockLSIReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            labels,
+            seriesId
+        );
+
+        try {
+            LeafBucketCollector collector = aggregator.getLeafCollector(readerCtx.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            collector.collect(0, 0);
+            InternalAggregation result = aggregator.buildAggregation(0);
+
+            InternalTSDBStats stats = reduceToCoordinator(result);
+            assertEquals("Should have 1 unique series", 1L, stats.getNumSeries().longValue());
+            assertEquals("service:web count should be 1", 1L, stats.getLabelStats().get("service").valuesStats().get("web").longValue());
+        } finally {
+            readerCtx.close();
+            aggregator.close();
+        }
+    }
+
+    public void testIndexedDedupModeDeduplicatesSameSeriesId() throws IOException {
+        // Two CCI segments with the same seriesId → second should be deduped without decoding labels
+        long minTimestamp = 1000L;
+        long maxTimestamp = 5000L;
+        long sameSeriesId = 99999L;
+
+        TSDBStatsAggregator aggregator = createAggregatorWithDedupMode(
+            "test",
+            minTimestamp,
+            maxTimestamp,
+            true,
+            TSDBStatsConstants.DEDUP_MODE_INDEXED
+        );
+
+        Map<String, String> labels = Map.of("service", "api");
+        TSDBLeafReaderWithContext readerCtx1 = AggregatorTestUtils.createMockCCIReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            labels,
+            sameSeriesId
+        );
+        TSDBLeafReaderWithContext readerCtx2 = AggregatorTestUtils.createMockCCIReaderWithLabels(
+            minTimestamp,
+            maxTimestamp,
+            labels,
+            sameSeriesId
+        );
+
+        try {
+            LeafBucketCollector c1 = aggregator.getLeafCollector(readerCtx1.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            c1.collect(0, 0);
+
+            LeafBucketCollector c2 = aggregator.getLeafCollector(readerCtx2.context, LeafBucketCollector.NO_OP_COLLECTOR);
+            c2.collect(0, 0);
+
+            InternalAggregation result = aggregator.buildAggregation(0);
+            InternalTSDBStats stats = reduceToCoordinator(result);
+            assertEquals("Should have 1 unique series (second deduped by indexed seriesId)", 1L, stats.getNumSeries().longValue());
         } finally {
             readerCtx1.close();
             readerCtx2.close();
@@ -473,6 +583,22 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         return createAggregatorWithMetadata(name, minTimestamp, maxTimestamp, includeValueStats, Map.of());
     }
 
+    private TSDBStatsAggregator createAggregatorWithDedupMode(
+        String name,
+        long minTimestamp,
+        long maxTimestamp,
+        boolean includeValueStats,
+        String dedupMode
+    ) throws IOException {
+        CircuitBreakerService circuitBreakerService = new NoneCircuitBreakerService();
+        BigArrays bigArrays = new BigArrays(null, circuitBreakerService, "test");
+
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.bigArrays()).thenReturn(bigArrays);
+
+        return new TSDBStatsAggregator(name, searchContext, null, minTimestamp, maxTimestamp, includeValueStats, dedupMode, Map.of());
+    }
+
     private TSDBStatsAggregator createAggregatorWithMetadata(
         String name,
         long minTimestamp,
@@ -486,6 +612,15 @@ public class TSDBStatsAggregatorTests extends OpenSearchTestCase {
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.bigArrays()).thenReturn(bigArrays);
 
-        return new TSDBStatsAggregator(name, searchContext, null, minTimestamp, maxTimestamp, includeValueStats, metadata);
+        return new TSDBStatsAggregator(
+            name,
+            searchContext,
+            null,
+            minTimestamp,
+            maxTimestamp,
+            includeValueStats,
+            TSDBStatsConstants.DEDUP_MODE_RECOMPUTED,
+            metadata
+        );
     }
 }

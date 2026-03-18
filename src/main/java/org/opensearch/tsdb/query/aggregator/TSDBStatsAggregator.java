@@ -10,6 +10,7 @@ package org.opensearch.tsdb.query.aggregator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.util.ByteBlockPool;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefHash;
@@ -19,9 +20,13 @@ import org.opensearch.search.aggregations.LeafBucketCollector;
 import org.opensearch.search.aggregations.LeafBucketCollectorBase;
 import org.opensearch.search.aggregations.metrics.MetricsAggregator;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.tsdb.core.index.closed.ClosedChunkIndexLeafReader;
+import org.opensearch.tsdb.core.index.live.LiveSeriesIndexLeafReader;
+import org.opensearch.tsdb.core.mapping.Constants;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.reader.TSDBDocValues;
 import org.opensearch.tsdb.core.reader.TSDBLeafReader;
+import org.opensearch.tsdb.query.utils.TSDBStatsConstants;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -51,6 +56,7 @@ public class TSDBStatsAggregator extends MetricsAggregator {
     private final long minTimestamp;
     private final long maxTimestamp;
     private final boolean includeValueStats;
+    private final String dedupMode;
 
     // Series identifiers (reference or labels_hash) we've already processed
     // TODO limit unbounded memory usage
@@ -74,6 +80,7 @@ public class TSDBStatsAggregator extends MetricsAggregator {
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param includeValueStats Whether to include per-value statistics
+     * @param dedupMode The dedup mode ("indexed" or "recomputed")
      * @param metadata The aggregation metadata
      * @throws IOException If an error occurs during initialization
      */
@@ -84,12 +91,14 @@ public class TSDBStatsAggregator extends MetricsAggregator {
         long minTimestamp,
         long maxTimestamp,
         boolean includeValueStats,
+        String dedupMode,
         Map<String, Object> metadata
     ) throws IOException {
         super(name, context, parent, metadata);
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.includeValueStats = includeValueStats;
+        this.dedupMode = dedupMode;
 
         this.seenSeriesIds = new HashSet<>();
 
@@ -117,27 +126,70 @@ public class TSDBStatsAggregator extends MetricsAggregator {
     private class TSDBStatsLeafBucketCollector extends LeafBucketCollectorBase {
 
         private final TSDBLeafReader tsdbLeafReader;
-        private TSDBDocValues tsdbDocValues;
+        private final TSDBDocValues tsdbDocValues;
+        private final NumericDocValues seriesIdDocValues;
 
         public TSDBStatsLeafBucketCollector(LeafReaderContext ctx, TSDBLeafReader tsdbLeafReader, LeafBucketCollector sub)
             throws IOException {
             super(sub, null);
             this.tsdbLeafReader = tsdbLeafReader;
             this.tsdbDocValues = this.tsdbLeafReader.getTSDBDocValues();
+
+            if (TSDBStatsConstants.DEDUP_MODE_INDEXED.equals(dedupMode)) {
+                // Determine the field name for the pre-indexed seriesId based on reader type.
+                // For LSI (LiveSeriesIndex), the seriesId is stored as "reference" in NumericDocValues.
+                // For CCI (ClosedChunkIndex), the seriesId is stored as "labels_hash" in NumericDocValues.
+                // ASSUMPTION: reference == labels_hash for cross-segment dedup correctness.
+                // reference in LSI is seriesID, labels_hash in CCI is labels.stableHash() used for sorting.
+                // We assume reference == labels_hash. If in the future reference != labels_hash,
+                // we need to fix how we read indexed reference from CCI.
+                String fieldName;
+                if (tsdbLeafReader instanceof LiveSeriesIndexLeafReader) {
+                    fieldName = Constants.IndexSchema.REFERENCE;
+                } else if (tsdbLeafReader instanceof ClosedChunkIndexLeafReader) {
+                    fieldName = Constants.IndexSchema.LABELS_HASH;
+                } else {
+                    throw new IOException("Unsupported TSDBLeafReader type for indexed dedup: " + tsdbLeafReader.getClass().getName());
+                }
+                this.seriesIdDocValues = tsdbLeafReader.getNumericDocValues(fieldName);
+                if (this.seriesIdDocValues == null) {
+                    throw new IOException("NumericDocValues field '" + fieldName + "' not found");
+                }
+            } else {
+                this.seriesIdDocValues = null;
+            }
         }
 
         @Override
         public void collect(int doc, long bucket) throws IOException {
-            Labels labels = tsdbLeafReader.labelsForDoc(doc, tsdbDocValues);
-            // We assume labels hash is the seriesId
-            // This need to be changed when we start accepting reference/seriesId from indexing
-            // Currently we by default use BytesLabels which uses 64-bit MurmurHash3 for series identity.
-            // Collision probability is ~n²/2^65: ~1 in 37M for 1M series, ~1 in 370 for 1B series.
-            // Acceptable for stats counting.
-            long seriesId = labels.stableHash();
-            // Already processed this series - skip entire document
-            if (!seenSeriesIds.add(seriesId)) {
-                return;
+            Labels labels;
+            long seriesId;
+
+            if (TSDBStatsConstants.DEDUP_MODE_INDEXED.equals(dedupMode)) {
+                // Fast path: read pre-indexed seriesId from NumericDocValues.
+                // For LSI this reads the "reference" field; for CCI this reads the "labels_hash" field.
+                // ASSUMPTION: reference == labels_hash for cross-segment dedup correctness.
+                // If this assumption breaks (e.g., during hash algorithm migration), use dedup_mode=recomputed.
+                if (!seriesIdDocValues.advanceExact(doc)) {
+                    throw new IOException("SeriesId not found for doc " + doc);
+                }
+                seriesId = seriesIdDocValues.longValue();
+                if (!seenSeriesIds.add(seriesId)) {
+                    return; // Skip without decoding labels -- fast!
+                }
+                labels = tsdbLeafReader.labelsForDoc(doc, tsdbDocValues);
+            } else {
+                // Slow path: decode labels and compute hash
+                labels = tsdbLeafReader.labelsForDoc(doc, tsdbDocValues);
+                // We assume labels hash is the seriesId
+                // Currently we by default use BytesLabels which uses 64-bit MurmurHash3 for series identity.
+                // Collision probability is ~n^2/2^65: ~1 in 37M for 1M series, ~1 in 370 for 1B series.
+                // Acceptable for stats counting.
+                seriesId = labels.stableHash();
+                // Already processed this series - skip entire document
+                if (!seenSeriesIds.add(seriesId)) {
+                    return;
+                }
             }
 
             // TODO process each label using BytesRef directly (avoid String conversion)

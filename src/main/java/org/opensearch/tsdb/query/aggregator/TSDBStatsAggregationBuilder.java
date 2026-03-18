@@ -18,9 +18,11 @@ import org.opensearch.search.aggregations.AggregatorFactories.Builder;
 import org.opensearch.search.aggregations.AggregatorFactory;
 import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
 import org.opensearch.tsdb.TSDBPlugin;
+import org.opensearch.tsdb.query.utils.TSDBStatsConstants;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Aggregation builder for TSDB statistics aggregations.
@@ -38,7 +40,7 @@ import java.util.Map;
  *
  * <h2>Usage Example:</h2>
  * <pre>{@code
- * TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder("tsdb_stats", 1000000L, 2000000L, true);
+ * TSDBStatsAggregationBuilder builder = new TSDBStatsAggregationBuilder("tsdb_stats", 1000000L, 2000000L, true, "indexed");
  * }</pre>
  *
  * @since 0.0.1
@@ -50,6 +52,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
     private final long minTimestamp;
     private final long maxTimestamp;
     private final boolean includeValueStats;
+    private final String dedupMode;
 
     /**
      * Creates a TSDB stats aggregation builder.
@@ -58,9 +61,14 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
      * @param minTimestamp The minimum timestamp for filtering
      * @param maxTimestamp The maximum timestamp for filtering
      * @param includeValueStats Whether to include per-value statistics
+     * @param dedupMode The dedup mode ("indexed" or "recomputed")
+     *                  "indexed": Reads pre-indexed numeric value from NumericDocValues (reference for LSI,
+     *                             labels_hash for CCI), avoiding binary label decoding for duplicate series.
+     *                  "recomputed": Decodes labels and calls stableHash() (existing behavior), useful during
+     *                                hash algorithm migrations.
      * @throws IllegalArgumentException if maxTimestamp is not greater than minTimestamp
      */
-    public TSDBStatsAggregationBuilder(String name, long minTimestamp, long maxTimestamp, boolean includeValueStats) {
+    public TSDBStatsAggregationBuilder(String name, long minTimestamp, long maxTimestamp, boolean includeValueStats, String dedupMode) {
         super(name);
 
         // Validate time range
@@ -73,6 +81,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.includeValueStats = includeValueStats;
+        this.dedupMode = dedupMode;
     }
 
     /**
@@ -86,6 +95,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = in.readLong();
         this.maxTimestamp = in.readLong();
         this.includeValueStats = in.readBoolean();
+        this.dedupMode = in.readString();
     }
 
     /**
@@ -100,6 +110,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         this.minTimestamp = clone.minTimestamp;
         this.maxTimestamp = clone.maxTimestamp;
         this.includeValueStats = clone.includeValueStats;
+        this.dedupMode = clone.dedupMode;
     }
 
     @Override
@@ -107,6 +118,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         out.writeLong(minTimestamp);
         out.writeLong(maxTimestamp);
         out.writeBoolean(includeValueStats);
+        out.writeString(dedupMode);
     }
 
     @Override
@@ -115,6 +127,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         builder.field("min_timestamp", minTimestamp);
         builder.field("max_timestamp", maxTimestamp);
         builder.field("include_value_stats", includeValueStats);
+        builder.field("dedup_mode", dedupMode);
         builder.endObject();
         return builder;
     }
@@ -131,6 +144,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         Long minTimestamp = null;
         Long maxTimestamp = null;
         Boolean includeValueStats = null;
+        String dedupMode = TSDBStatsConstants.DEDUP_MODE_INDEXED;
 
         XContentParser.Token token;
         String currentFieldName = null;
@@ -148,6 +162,12 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
             } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
                 if ("include_value_stats".equals(currentFieldName)) {
                     includeValueStats = parser.booleanValue();
+                } else {
+                    parser.skipChildren();
+                }
+            } else if (token == XContentParser.Token.VALUE_STRING) {
+                if ("dedup_mode".equals(currentFieldName)) {
+                    dedupMode = parser.text();
                 } else {
                     parser.skipChildren();
                 }
@@ -169,7 +189,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
             );
         }
 
-        return new TSDBStatsAggregationBuilder(aggregationName, minTimestamp, maxTimestamp, includeValueStats);
+        return new TSDBStatsAggregationBuilder(aggregationName, minTimestamp, maxTimestamp, includeValueStats, dedupMode);
     }
 
     @Override
@@ -192,7 +212,8 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
             metadata,
             minTimestamp,
             maxTimestamp,
-            includeValueStats
+            includeValueStats,
+            dedupMode
         );
     }
 
@@ -219,7 +240,10 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         }
 
         TSDBStatsAggregationBuilder that = (TSDBStatsAggregationBuilder) obj;
-        return minTimestamp == that.minTimestamp && maxTimestamp == that.maxTimestamp && includeValueStats == that.includeValueStats;
+        return minTimestamp == that.minTimestamp
+            && maxTimestamp == that.maxTimestamp
+            && includeValueStats == that.includeValueStats
+            && Objects.equals(dedupMode, that.dedupMode);
     }
 
     @Override
@@ -228,6 +252,7 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
         result = 31 * result + Long.hashCode(minTimestamp);
         result = 31 * result + Long.hashCode(maxTimestamp);
         result = 31 * result + Boolean.hashCode(includeValueStats);
+        result = 31 * result + Objects.hashCode(dedupMode);
         return result;
     }
 
@@ -256,6 +281,15 @@ public class TSDBStatsAggregationBuilder extends AbstractAggregationBuilder<TSDB
      */
     public boolean isIncludeValueStats() {
         return includeValueStats;
+    }
+
+    /**
+     * Gets the dedup mode.
+     *
+     * @return the dedup mode string ("indexed" or "recomputed")
+     */
+    public String getDedupMode() {
+        return dedupMode;
     }
 
     /**

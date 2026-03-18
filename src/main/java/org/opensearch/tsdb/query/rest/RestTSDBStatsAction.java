@@ -84,6 +84,7 @@ import static org.opensearch.tsdb.query.utils.TSDBStatsConstants.AGGREGATION_NAM
  *   <li><b>format</b> (optional): Response format. Valid values: grouped, flat (default: grouped)</li>
  *   <li><b>partitions</b> (optional): Comma-separated list of indices to query</li>
  *   <li><b>explain</b> (optional): Return translated DSL instead of executing (default: false)</li>
+ *   <li><b>dedup_mode</b> (optional): Deduplication mode. Valid values: indexed, recomputed (default: indexed)</li>
  * </ul>
  *
  * <h2>Response Formats:</h2>
@@ -165,6 +166,7 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
     private static final String BASE_PATH = "/_tsdb/stats";
     private static final String INCLUDE_PARAM = "include";
     private static final String FORMAT_PARAM = "format";
+    private static final String DEDUP_MODE_PARAM = "dedup_mode";
     private static final String DEFAULT_START_TIME = "now-30m";
     private static final String DEFAULT_END_TIME = "now";
 
@@ -181,6 +183,11 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
     // Valid format options (TreeSet for deterministic toString() order in error messages)
     private static final Set<String> VALID_FORMAT_OPTIONS = new TreeSet<>(
         Arrays.asList(TSDBStatsConstants.FORMAT_GROUPED, TSDBStatsConstants.FORMAT_FLAT)
+    );
+
+    // Valid dedup_mode options (TreeSet for deterministic toString() order in error messages)
+    private static final Set<String> VALID_DEDUP_MODE_OPTIONS = new TreeSet<>(
+        Arrays.asList(TSDBStatsConstants.DEDUP_MODE_INDEXED, TSDBStatsConstants.DEDUP_MODE_RECOMPUTED)
     );
 
     /**
@@ -263,6 +270,23 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
         }
 
         return format;
+    }
+
+    /**
+     * Parses and validates the dedup_mode parameter.
+     *
+     * @param request the REST request
+     * @return the dedup mode value ("indexed" or "recomputed")
+     * @throws IllegalArgumentException if invalid dedup_mode is provided
+     */
+    private String parseDedupModeParam(RestRequest request) {
+        String dedupMode = request.param(DEDUP_MODE_PARAM, TSDBStatsConstants.DEDUP_MODE_INDEXED);
+
+        if (!VALID_DEDUP_MODE_OPTIONS.contains(dedupMode)) {
+            throw new IllegalArgumentException("Invalid dedup_mode: " + dedupMode + ". Valid options: " + VALID_DEDUP_MODE_OPTIONS);
+        }
+
+        return dedupMode;
     }
 
     /**
@@ -380,12 +404,14 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
             return errorResponse("Start time must be before end time", RestStatus.BAD_REQUEST);
         }
 
-        // Parse include and format parameters with validation
+        // Parse include, format, and dedup_mode parameters with validation
         List<String> includeOptions;
         String format;
+        String dedupMode;
         try {
             includeOptions = parseIncludeParam(request);
             format = parseFormatParam(request);
+            dedupMode = parseDedupModeParam(request);
         } catch (IllegalArgumentException e) {
             return errorResponse(e.getMessage(), RestStatus.BAD_REQUEST);
         }
@@ -407,7 +433,13 @@ public class RestTSDBStatsAction extends BaseTSDBAction {
             QueryBuilder filter = buildQueryFromFetch(fetchPlan, startMs, endMs);
 
             // Build aggregation
-            TSDBStatsAggregationBuilder aggBuilder = new TSDBStatsAggregationBuilder(AGGREGATION_NAME, startMs, endMs, includeValueStats);
+            TSDBStatsAggregationBuilder aggBuilder = new TSDBStatsAggregationBuilder(
+                AGGREGATION_NAME,
+                startMs,
+                endMs,
+                includeValueStats,
+                dedupMode
+            );
 
             // Build search request
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(filter).aggregation(aggBuilder).size(0);
