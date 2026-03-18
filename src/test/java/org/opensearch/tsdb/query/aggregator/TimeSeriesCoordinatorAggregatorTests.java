@@ -152,4 +152,66 @@ public class TimeSeriesCoordinatorAggregatorTests extends OpenSearchTestCase {
         assertTrue(mergedDs.indexes().contains(new AggregationDataSource.IndexInfo("2d", "10s")));
         assertTrue(mergedDs.indexes().contains(new AggregationDataSource.IndexInfo("30d", "1m")));
     }
+
+    // ========== Profiling Tests ==========
+
+    public void testDoReduceWithProfilingEnabled() {
+        Map<String, Object> metadata = Map.of("_enable_coordinator_profiling", true);
+
+        TimeSeries oneSeries = new TimeSeries(
+            List.of(new FloatSample(1000L, 10.0)),
+            ByteLabels.fromMap(Map.of("x", "y")),
+            1000L,
+            1000L,
+            1000L,
+            "s1"
+        );
+        InternalTimeSeries unfoldAgg = new InternalTimeSeries("unfold_a", List.of(oneSeries), Map.of());
+
+        TimeSeriesCoordinatorAggregator aggregator = new TimeSeriesCoordinatorAggregator(
+            "test_profiling",
+            new String[0],
+            Collections.emptyList(),
+            new LinkedHashMap<>(),
+            Map.of("a", "unfold_a"),
+            "a",
+            metadata
+        );
+
+        Aggregations aggregations = new Aggregations(List.of(unfoldAgg));
+        PipelineAggregator.PipelineTree emptyTree = new PipelineAggregator.PipelineTree(Collections.emptyMap(), Collections.emptyList());
+        InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forFinalReduction(null, null, s -> {}, emptyTree);
+
+        InternalAggregation result = aggregator.doReduce(aggregations, context);
+
+        assertTrue("Should return InternalTimeSeriesWithCoordinatorProfile", result instanceof InternalTimeSeriesWithCoordinatorProfile);
+
+        InternalTimeSeriesWithCoordinatorProfile profiledResult = (InternalTimeSeriesWithCoordinatorProfile) result;
+        assertNotNull("Should have coordinator profile info", profiledResult.getCoordinatorProfileInfo());
+    }
+
+    public void testDoReduceWithProfilingEnabledButEmptyResult() {
+        Map<String, Object> metadata = Map.of("_enable_coordinator_profiling", true);
+
+        TimeSeriesCoordinatorAggregator aggregator = new TimeSeriesCoordinatorAggregator(
+            "test_empty_profiling",
+            new String[0],
+            Collections.emptyList(),
+            new LinkedHashMap<>(),
+            Map.of(),
+            null,
+            metadata
+        );
+
+        Aggregations aggregations = new Aggregations(Collections.emptyList());
+        PipelineAggregator.PipelineTree emptyTree = new PipelineAggregator.PipelineTree(Collections.emptyMap(), Collections.emptyList());
+        InternalAggregation.ReduceContext context = InternalAggregation.ReduceContext.forFinalReduction(null, null, s -> {}, emptyTree);
+
+        InternalAggregation result = aggregator.doReduce(aggregations, context);
+
+        assertTrue(
+            "Should return InternalTimeSeriesWithCoordinatorProfile for empty result with profiling",
+            result instanceof InternalTimeSeriesWithCoordinatorProfile
+        );
+    }
 }
