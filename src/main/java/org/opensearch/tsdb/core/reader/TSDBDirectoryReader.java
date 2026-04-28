@@ -389,14 +389,16 @@ public class TSDBDirectoryReader extends DirectoryReader {
     }
 
     /*
-    * Return null to disable caching for multi-directory reader.
+    * Return a valid CacheHelper to prevent NullPointerException when the query cache
+    * is enabled. The query cache calls getReaderCacheHelper().addClosedListener(...)
+    * and throws NPE if null is returned.
+    *
+    * Delegates to the live series index reader which has a CacheHelper tied to the
+    * underlying Lucene reader lifecycle.
     * */
     @Override
     public CacheHelper getReaderCacheHelper() {
-        // Multi-directory readers should return null to disable caching.
-        // This is consistent with other OpenSearch multi-directory implementations
-        // and ensures that IndicesService.canCache() returns false.
-        return null;
+        return liveSeriesIndexDirectoryReader.getReaderCacheHelper();
     }
 
     /**

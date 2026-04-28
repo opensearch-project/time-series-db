@@ -1011,4 +1011,37 @@ public class TSDBDirectoryReaderReferenceManagerTests extends OpenSearchTestCase
             }
         }
     }
+
+    @Test
+    public void testRefreshPicksUpUncommittedLiveDocuments() throws IOException {
+        when(closedChunkIndexManager.getReaderManagersWithMetadata()).thenReturn(Arrays.asList(closedReaderManager1));
+
+        referenceManager = new TSDBDirectoryReaderReferenceManager(
+            liveReaderManager,
+            () -> 0L,
+            closedChunkIndexManager,
+            memChunkReader,
+            labelStorageType,
+            mmappedChunksManager,
+            shardId
+        );
+
+        int initialDocCount = withAcquiredReader(reader -> {
+            TSDBDirectoryReader initialTSDBReader = (TSDBDirectoryReader) reader.getDelegate();
+            return initialTSDBReader.numDocs();
+        });
+
+        liveWriter.addDocument(getLiveDoc("service=uncommitted,env=test", 2000L, 5000000L));
+
+        try {
+            referenceManager.maybeRefreshBlocking();
+        } catch (Exception e) {
+            fail("Refresh failed: " + e.getMessage());
+        }
+
+        withAcquiredReader(reader -> {
+            TSDBDirectoryReader newTSDBReader = (TSDBDirectoryReader) reader.getDelegate();
+            assertTrue("Uncommitted document should be visible after refresh", newTSDBReader.numDocs() > initialDocCount);
+        });
+    }
 }

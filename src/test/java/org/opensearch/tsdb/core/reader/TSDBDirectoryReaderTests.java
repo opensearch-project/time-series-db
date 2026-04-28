@@ -903,7 +903,7 @@ public class TSDBDirectoryReaderTests extends OpenSearchTestCase {
     }
 
     @Test
-    public void testGetReaderCacheHelperReturnsNull() throws IOException {
+    public void testGetReaderCacheHelperDelegatesToLiveReader() throws IOException {
         tsdbDirectoryReader = new TSDBDirectoryReader(
             liveReader,
             () -> 0L,
@@ -914,7 +914,8 @@ public class TSDBDirectoryReaderTests extends OpenSearchTestCase {
             1L
         );
 
-        assertNull("CacheHelper should return null", tsdbDirectoryReader.getReaderCacheHelper());
+        assertNotNull(tsdbDirectoryReader.getReaderCacheHelper());
+        assertSame(liveReader.getReaderCacheHelper(), tsdbDirectoryReader.getReaderCacheHelper());
     }
 
     @Test

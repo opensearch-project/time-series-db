@@ -233,8 +233,8 @@ public class TSDBDirectoryReaderReferenceManager extends ReferenceManager<OpenSe
             return reader;
         } else {
             log.info("No changes detected for refreshing the tsdb directory reader");
-            // No structural change - attempt lightweight refresh
-            OpenSearchDirectoryReader refreshedReader = (OpenSearchDirectoryReader) DirectoryReader.openIfChanged(referenceToRefresh);
+            liveSeriesIndexReaderManager.maybeRefreshBlocking();
+            final OpenSearchDirectoryReader refreshedReader = (OpenSearchDirectoryReader) DirectoryReader.openIfChanged(referenceToRefresh);
 
             // Only record refresh interval if an actual refresh occurred (not a no-op)
             if (refreshedReader != null) {
