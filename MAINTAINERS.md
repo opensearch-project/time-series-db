@@ -10,3 +10,4 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Philip Chan | [philiplhchan](https://github.com/philiplhchan)                   | Uber        |
 | Chris Peck  | [itschrispeck](https://github.com/itschrispeck)                   | Uber        |
 | Michael Froh | [msfroh](https://github.com/msfroh)                   | Apple       |
+| Srikanth Padakanti | [srikanthpadakanti](https://github.com/srikanthpadakanti)                   | Apple       |
