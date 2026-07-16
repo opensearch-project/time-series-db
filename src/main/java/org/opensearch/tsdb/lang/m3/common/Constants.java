@@ -47,7 +47,6 @@ public class Constants {
             "divideWhen",
             "histogramCDF",
             "jainCP",
-            "mockFetchLinear",
             "nPercentile",
             "promHistogramPercentile",
             "removeAbovePercentile",
@@ -166,6 +165,11 @@ public class Constants {
          * mockFetchLine function name.
          */
         public static final String MOCK_FETCH_LINE = "mockFetchLine";
+
+        /**
+         * mockFetchLinear function name.
+         */
+        public static final String MOCK_FETCH_LINEAR = "mockFetchLinear";
 
         /**
          * mockFetchPeriodic function name.

@@ -330,6 +330,169 @@ test_case:
             values: [10, 10, 10]
           - metric: {name: "line2"}
             values: [20, 20, 20]
+    - name: "mockFetchLinear_ascending"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 5 10 1"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "mockFetchLinear"}
+            values: [5, 6, 7, 8, 9, 10]
+
+    - name: "mockFetchLinear_tag"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 7 16 2 tag1:mockFetchLinearTest env:staging"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {tag1: "mockFetchLinearTest", env: "staging"}
+            values: [7, 9, 11, 13, 15]
+
+    - name: "mockFetchLinear_descending"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 100 50 -25 name:descending"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:06:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "descending"}
+            values: [100,75,50]
+
+    - name: "mockFetchLinear_cross_zero"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear -3 3 2 name:cross_zero"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "cross_zero"}
+            values: [-3, -1, 1, 3]
+
+    - name: "mockFetchLinear_slope_with_decimal"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 10 12 0.5 name:decimal_slope"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "decimal_slope"}
+            values: [10.0, 10.5, 11.0, 11.5, 12.0]
+
+    - name: "mockFetchLinear_with_scale"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 0 4 1 name:base | scale 10"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "base"}
+            values: [0, 10, 20, 30, 40]
+    - name: "mockFetchLinear_slope_larger_than_max"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 1 2 10 name:base"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "base"}
+            values: [1]
+
+    - name: "mockFetchLinear_union_two_series"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 0 2 1 name:series1 | mockFetchLinear 10 14 2 name:series2"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:03:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {name: "series1"}
+            values: [0, 1, 2]
+          - metric: {name: "series2"}
+            values: [10, 12, 14]
+
+    - name: "mockFetchLinear_with_sum"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 0 3 1 name:a | mockFetchLinear 10 16 2 name:b | sum"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:04:00Z"
+        step: "1m"
+      expected:
+        status: "success"
+        data:
+          - metric: {}
+            values: [10, 13, 16, 19]
+
+    # MockFetchLinear validation tests
+    - name: "mockFetchLinear_invalid_positive_range_negative_slope"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear -1 20 -2"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"Step size must be positive if end is greater than start\"}"
+
+    - name: "mockFetchLinear_invalid_negative_range_positive_slope"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 15 3 2"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"Step size must be negative if start is greater than end\"}"
+
+    - name: "mockFetchLinear_zero_slope"
+      type: "m3ql"
+      indices: "test_index"
+      query: "mockFetchLinear 0 10 0"
+      time_config:
+        min_timestamp: "2025-01-01T00:00:00Z"
+        max_timestamp: "2025-01-01T00:05:00Z"
+        step: "1m"
+      expected:
+        status: "failure"
+        error_message: "Query execution failed: status=400, error={\"error\":\"MockFetchLinear requires non-zero slope\"}"
     # MockFetchPeriodic tests
     - name: "mockFetchPeriodic_simple_sine"
       type: "m3ql"

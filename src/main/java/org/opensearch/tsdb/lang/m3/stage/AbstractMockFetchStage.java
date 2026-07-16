@@ -78,7 +78,7 @@ public abstract class AbstractMockFetchStage implements UnaryPipelineStage {
     @Override
     public List<TimeSeries> process(List<TimeSeries> input) {
         if (step == 0) {
-            throw new IllegalStateException(getName() + " stage requires setQueryContext() to be called before process()");
+            throw new IllegalStateException(getName() + " stage requires non-zero step parameter");
         }
 
         List<Double> values = generateValues();

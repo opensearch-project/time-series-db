@@ -55,6 +55,22 @@
         }
       }
     },
+    "4" : {
+      "filter" : {
+        "match_none" : {
+          "boost" : 1.0
+        }
+      },
+      "aggregations" : {
+        "4_unfold" : {
+          "time_series_unfold" : {
+            "min_timestamp" : 1000000000,
+            "max_timestamp" : 1001000000,
+            "step" : 100000
+          }
+        }
+      }
+    },
     "0_coordinator" : {
       "coordinator_pipeline" : {
         "buckets_path" : [ ],
@@ -108,6 +124,30 @@
         "buckets_path" : [ ],
         "stages" : [
           {
+            "type" : "mockFetchLinear",
+            "start" : -2.0,
+            "stop" : 10.0,
+            "slope" : 4.0,
+            "tags" : {
+              "name" : "c",
+              "env" : "dev"
+            },
+            "startTime" : 1000000000,
+            "endTime" : 1001000000,
+            "step" : 100000
+          }
+        ],
+        "references" : {
+          "3_unfold" : "3>3_unfold"
+        },
+        "inputReference" : "3_unfold"
+      }
+    },
+    "4_coordinator" : {
+      "coordinator_pipeline" : {
+        "buckets_path" : [ ],
+        "stages" : [
+          {
             "type" : "mockFetchPeriodic",
             "periodicFunction" : "sine",
             "min" : 0.0,
@@ -123,9 +163,9 @@
           }
         ],
         "references" : {
-          "3_unfold" : "3>3_unfold"
+          "4_unfold" : "4>4_unfold"
         },
-        "inputReference" : "3_unfold"
+        "inputReference" : "4_unfold"
       }
     },
     "2" : {
@@ -141,6 +181,10 @@
             "right_op_reference" : "3"
           },
           {
+            "type" : "union",
+            "right_op_reference" : "4"
+          },
+          {
             "type" : "scale",
             "factor" : 2.0
           },
@@ -151,7 +195,8 @@
         "references" : {
           "0" : "0_coordinator",
           "1" : "1_coordinator",
-          "3" : "3_coordinator"
+          "3" : "3_coordinator",
+          "4" : "4_coordinator"
         },
         "inputReference" : "0"
       }

@@ -1,3 +1,3 @@
 # comprehensive mockFetch test
 # Tests: multiple mockFetch sources, binary operations, aggregations, transformations
-mockFetch -10,20,30 name:a env:prod | mockFetchLine -5 name:b env:dev | mockFetchPeriodic sine 0 10 4 name:c env:test | scale 2 | sum
+mockFetch -10,20,30 name:a env:prod | mockFetchLine -5 name:b env:dev | mockFetchLinear -2 10 4 name:c env:dev | mockFetchPeriodic sine 0 10 4 name:c env:test | scale 2 | sum
