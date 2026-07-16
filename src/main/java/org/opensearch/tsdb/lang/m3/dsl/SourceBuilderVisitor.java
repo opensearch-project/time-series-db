@@ -141,6 +141,7 @@ import org.opensearch.tsdb.lang.m3.m3ql.plan.visitor.M3PlanVisitor;
 import org.opensearch.tsdb.lang.m3.stage.ValueFilterStage;
 import org.opensearch.tsdb.metrics.TSDBMetrics;
 import org.opensearch.tsdb.metrics.TSDBMetricsConstants;
+import org.opensearch.tsdb.query.aggregator.ProfilingTimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.search.CachedWildcardQueryBuilder;
 import org.opensearch.tsdb.query.search.TimeRangePruningQueryBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
@@ -455,6 +456,10 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
                     params.step()
                 );
 
+                if (params.profile()) {
+                    unfoldPipelineAggregationBuilder.setMetadata(Map.of("_enable_coordinator_profiling", true));
+                }
+
                 // Set the unfold aggregation builder for the FetchPlanNode
                 holder.setUnfoldAggregationBuilder(unfoldPipelineAggregationBuilder);
             }
@@ -473,7 +478,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
 
             // Set the coordinator aggregation builder for the FetchPlanNode
             holder.addPipelineAggregationBuilder(
-                new TimeSeriesCoordinatorAggregationBuilder(
+                getCoordinatorBuilder(
+                    params,
                     planNode.getId() + COORDINATOR_NAME_SUFFIX,
                     stages,
                     EMPTY_MAP,
@@ -520,6 +526,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             params.endTime(),
             params.step()
         );
+        if (params.profile()) {
+            unfoldAgg.setMetadata(Map.of("_enable_coordinator_profiling", true));
+        }
 
         // Wrap unfold in a filter aggregation with MatchNoneQueryBuilder
         FilterAggregationBuilder filterAgg = new FilterAggregationBuilder(String.valueOf(planNode.getId()), new MatchNoneQueryBuilder());
@@ -529,7 +538,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Add coordinator that references the unfold aggregation
         String unfoldPath = planNode.getId() + ">" + unfoldAggName;
         holder.addPipelineAggregationBuilder(
-            new TimeSeriesCoordinatorAggregationBuilder(
+            getCoordinatorBuilder(
+                params,
                 planNode.getId() + COORDINATOR_NAME_SUFFIX,
                 coordinatorStages,
                 EMPTY_MAP,  // No macros
@@ -574,6 +584,9 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             params.endTime(),
             params.step()
         );
+        if (params.profile()) {
+            unfoldAgg.setMetadata(Map.of("_enable_coordinator_profiling", true));
+        }
 
         // Wrap unfold in a filter aggregation with MatchNoneQueryBuilder
         FilterAggregationBuilder filterAgg = new FilterAggregationBuilder(String.valueOf(planNode.getId()), new MatchNoneQueryBuilder());
@@ -583,7 +596,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         // Add coordinator that references the unfold aggregation
         String unfoldPath = planNode.getId() + ">" + unfoldAggName;
         holder.addPipelineAggregationBuilder(
-            new TimeSeriesCoordinatorAggregationBuilder(
+            getCoordinatorBuilder(
+                params,
                 planNode.getId() + COORDINATOR_NAME_SUFFIX,
                 coordinatorStages,
                 EMPTY_MAP,  // No macros
@@ -1077,7 +1091,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             // Create child visitors with isRootVisitor=false since these are sub-plans
             childComponents[i] = new SourceBuilderVisitor(params, context).process(child);
         }
-        ComponentHolder merged = ComponentHolder.merge(planNode.getId(), childComponents);
+        ComponentHolder merged = ComponentHolder.merge(planNode.getId(), params, childComponents);
 
         // Add a UnionStage for each additional child beyond the first
         List<PipelineStage> stages = new ArrayList<>();
@@ -1110,7 +1124,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
         String lhsId = String.valueOf(lhsComponents.getId());
         referencesMap.put(lhsId, getTerminalReference(lhsComponents));
         merged.addPipelineAggregationBuilder(
-            new TimeSeriesCoordinatorAggregationBuilder(String.valueOf(planNode.getId()), stages, EMPTY_MAP, referencesMap, lhsId)
+            getCoordinatorBuilder(params, String.valueOf(planNode.getId()), stages, EMPTY_MAP, referencesMap, lhsId)
         );
 
         return merged;
@@ -1136,6 +1150,22 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             return new UnionStage(rhsReferenceName);
         }
         throw new IllegalArgumentException("Unsupported plan node type for binary operation: " + planNode.getClass().getSimpleName());
+    }
+
+    private static TimeSeriesCoordinatorAggregationBuilder getCoordinatorBuilder(
+        M3OSTranslator.Params params,
+        String name,
+        List<PipelineStage> stages,
+        LinkedHashMap<String, TimeSeriesCoordinatorAggregator.MacroDefinition> macroDefinitions,
+        Map<String, String> references,
+        String inputReference
+    ) {
+        if (params.profile()) {
+            return new ProfilingTimeSeriesCoordinatorAggregationBuilder(name, stages, macroDefinitions, references, inputReference);
+        } else {
+            return new TimeSeriesCoordinatorAggregationBuilder(name, stages, macroDefinitions, references, inputReference);
+        }
+
     }
 
     /* package-private for test purpose */
@@ -1324,7 +1354,7 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
             return id;
         }
 
-        private static ComponentHolder merge(int id, ComponentHolder... holders) {
+        private static ComponentHolder merge(int id, M3OSTranslator.Params params, ComponentHolder... holders) {
             assert holders.length >= 2 : "should only merge multiple ComponentHolders";
 
             ComponentHolder merged = new ComponentHolder(id);
@@ -1364,7 +1394,8 @@ public class SourceBuilderVisitor extends M3PlanVisitor<SourceBuilderVisitor.Com
                             )
                         );
 
-                    TimeSeriesCoordinatorAggregationBuilder lifted = new TimeSeriesCoordinatorAggregationBuilder(
+                    TimeSeriesCoordinatorAggregationBuilder lifted = getCoordinatorBuilder(
+                        params,
                         existing.getName(),
                         existing.getStages(),
                         EMPTY_MAP,

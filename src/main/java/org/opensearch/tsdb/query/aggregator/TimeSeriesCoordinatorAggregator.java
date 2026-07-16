@@ -34,6 +34,7 @@ import java.util.Objects;
 import java.util.function.LongConsumer;
 
 import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
+import org.opensearch.tsdb.query.utils.StageProfiler;
 
 /**
  * Coordinator pipeline aggregator that handles a list of pipeline stages at the coordinator.
@@ -270,9 +271,19 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
      */
     @Override
     public InternalAggregation doReduce(Aggregations aggregations, ReduceContext context) {
+        // Conditionally enable profiling
+        StageProfiler stageProfiler = null;
+        boolean profilingEnabled = isProfilingEnabled();
+
+        if (context.isFinalReduce() && profilingEnabled) {
+            stageProfiler = new StageProfiler();
+        }
+
         try (ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerConsumer.createConsumer(context)) {
-            // Execute the main pipeline stages, with macro support if macros are defined
-            List<TimeSeries> result = processMainPipeline(aggregations, cbConsumer);
+            long reduceStartTime = System.nanoTime();
+
+            // Execute the main pipeline stages with optional profiling
+            List<TimeSeries> result = processMainPipeline(aggregations, cbConsumer, stageProfiler);
 
             // Track final result size for OOM protection (list + all time series)
             if (result != null && !result.isEmpty()) {
@@ -293,24 +304,84 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
                 }
             }
 
+            // Return profiled version if profiling was enabled
+            if (stageProfiler != null) {
+                long reduceTimeNanos = System.nanoTime() - reduceStartTime;
+                long totalTimeNanos = stageProfiler.getTotalTime();
+                long[] internalTimings = collectInternalTimings(aggregations);
+                CoordinatorProfileInfo profileInfo = new CoordinatorProfileInfo(
+                    stageProfiler.getResults(),
+                    reduceTimeNanos,
+                    totalTimeNanos,
+                    internalTimings[0],  // internalReduceTimeNanos
+                    internalTimings[1],  // serializeTimeNanos
+                    internalTimings[2]   // deserializeTimeNanos
+                );
+                return new InternalTimeSeriesWithCoordinatorProfile(name(), result, metadata(), null, profileInfo);
+            }
+
             return new InternalTimeSeries(name(), result, metadata(), null, mergedStats, mergedDataSource);
         }
+    }
+
+    /**
+     * Traverse the already-reduced reference aggregations and collect the internal timing
+     * values embedded by {@code InternalTimeSeries.reduce()} when profiling is enabled.
+     *
+     * @return {@code long[3]} – {@code [internalReduceNanos, serializeNanos, deserializeNanos]}
+     */
+    private long[] collectInternalTimings(Aggregations aggregations) {
+        long internalReduceTotal = 0;
+        long serTotal = 0;
+        long deserTotal = 0;
+        for (String bucketsPath : references.values()) {
+            String[] pathElements = bucketsPath.split(AggregationConstants.BUCKETS_PATH_SEPARATOR);
+            Aggregation agg = aggregations.get(pathElements[0]);
+            for (int i = 1; i < pathElements.length && agg != null; i++) {
+                if (agg instanceof InternalSingleBucketAggregation single) {
+                    agg = single.getAggregations().get(pathElements[i]);
+                } else {
+                    agg = null;
+                }
+            }
+            if (agg instanceof InternalTimeSeriesWithCoordinatorProfile p && p.getCoordinatorProfileInfo() != null) {
+                CoordinatorProfileInfo partial = p.getCoordinatorProfileInfo();
+                internalReduceTotal += partial.getInternalReduceTimeNanos();
+                serTotal += partial.getSerializeTimeNanos();
+                deserTotal += partial.getDeserializeTimeNanos();
+            }
+        }
+        return new long[] { internalReduceTotal, serTotal, deserTotal };
     }
 
     /**
      * Process the main pipeline stages, with support for macro references.
      * Macros are definitions that can be referenced by stages in the main pipeline.
      *
+     * Backwards-compatible overload that delegates to version with profiler support.
+     *
      * @param aggregations the aggregations to process
      * @param cbConsumer optional circuit breaker consumer for memory tracking
      */
     private List<TimeSeries> processMainPipeline(Aggregations aggregations, LongConsumer cbConsumer) {
+        return processMainPipeline(aggregations, cbConsumer, null);
+    }
+
+    /**
+     * Process the main pipeline stages with optional profiling support.
+     * Macros are definitions that can be referenced by stages in the main pipeline.
+     *
+     * @param aggregations the aggregations to process
+     * @param cbConsumer optional circuit breaker consumer for memory tracking
+     * @param stageProfiler optional profiler for measuring stage execution (null = no profiling)
+     */
+    private List<TimeSeries> processMainPipeline(Aggregations aggregations, LongConsumer cbConsumer, StageProfiler stageProfiler) {
         // Extract referenced pipeline results using buckets_path
         Map<String, List<TimeSeries>> availableReferences = extractReferenceResults(aggregations);
 
         // If we have macro definitions, evaluate them and append results to available references
         if (!macroDefinitions.isEmpty()) {
-            evaluateAndAppendMacros(availableReferences, cbConsumer);
+            evaluateAndAppendMacros(availableReferences, cbConsumer, stageProfiler);
         }
 
         // Execute the main pipeline stages
@@ -328,10 +399,10 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
             resultTimeSeries = availableReferences.get(inputReference);
         }
 
-        // Apply main pipeline stages sequentially with circuit breaker tracking
+        // Apply main pipeline stages sequentially with circuit breaker tracking and optional profiling
         // When availableReferences is empty (e.g., MockFetch), resultTimeSeries starts as null
         // and the first stage (MockFetchStage) generates data from scratch
-        resultTimeSeries = executeStages(stages, resultTimeSeries, availableReferences, cbConsumer);
+        resultTimeSeries = executeStages(stages, resultTimeSeries, availableReferences, cbConsumer, stageProfiler);
         return resultTimeSeries != null ? resultTimeSeries : List.of();
     }
 
@@ -340,16 +411,35 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
      * Macros can reference other macros, so they are evaluated in dependency order.
      * Modifies the availableReferences map in place.
      *
+     * Backwards-compatible overload that delegates to version with profiler support.
+     *
      * @param availableReferences the map of available references
      * @param cbConsumer optional circuit breaker consumer for memory tracking
      */
     private void evaluateAndAppendMacros(Map<String, List<TimeSeries>> availableReferences, LongConsumer cbConsumer) {
+        evaluateAndAppendMacros(availableReferences, cbConsumer, null);
+    }
+
+    /**
+     * Evaluate macro definitions with optional profiling support.
+     * Macros can reference other macros, so they are evaluated in dependency order.
+     * Modifies the availableReferences map in place.
+     *
+     * @param availableReferences the map of available references
+     * @param cbConsumer optional circuit breaker consumer for memory tracking
+     * @param stageProfiler optional profiler for measuring stage execution (null = no profiling)
+     */
+    private void evaluateAndAppendMacros(
+        Map<String, List<TimeSeries>> availableReferences,
+        LongConsumer cbConsumer,
+        StageProfiler stageProfiler
+    ) {
         // Evaluate macros in definition order as provided by the parser/planner
         // TODO: Support topological sort for automatic dependency resolution in the future
         for (MacroDefinition macro : macroDefinitions.values()) {
             // Execute the macro stages using all references available so far
             List<TimeSeries> macroInput = getMacroInput(availableReferences, macro);
-            List<TimeSeries> macroOutput = executeStages(macro.getStages(), macroInput, availableReferences, cbConsumer);
+            List<TimeSeries> macroOutput = executeStages(macro.getStages(), macroInput, availableReferences, cbConsumer, stageProfiler);
 
             // Add the macro output to available references for subsequent macros
             availableReferences.put(macro.getName(), macroOutput);
@@ -450,6 +540,8 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
     /**
      * Execute pipeline stages on time series data with circuit breaker tracking.
      *
+     * Backwards-compatible overload that delegates to version with profiler support.
+     *
      * @param stages the pipeline stages to execute
      * @param input the input time series
      * @param availableReferences the map of available references
@@ -460,6 +552,25 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
         List<TimeSeries> input,
         Map<String, List<TimeSeries>> availableReferences,
         LongConsumer cbConsumer
+    ) {
+        return executeStages(stages, input, availableReferences, cbConsumer, null);
+    }
+
+    /**
+     * Execute pipeline stages with optional profiling support.
+     *
+     * @param stages the pipeline stages to execute
+     * @param input the input time series
+     * @param availableReferences the map of available references
+     * @param cbConsumer optional circuit breaker consumer for memory tracking
+     * @param stageProfiler optional profiler for measuring stage execution (null = no profiling)
+     */
+    private List<TimeSeries> executeStages(
+        List<PipelineStage> stages,
+        List<TimeSeries> input,
+        Map<String, List<TimeSeries>> availableReferences,
+        LongConsumer cbConsumer,
+        StageProfiler stageProfiler
     ) {
         List<TimeSeries> resultTimeSeries = input;
 
@@ -478,6 +589,7 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
                     );
                 }
 
+                // Binary stages: profiling not yet supported
                 resultTimeSeries = PipelineStageExecutor.executeBinaryStage(
                     binaryStage,
                     left,
@@ -488,16 +600,30 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
             } else {
                 // Must be UnaryPipelineStage - all stages are validated in constructor
                 UnaryPipelineStage unaryStage = (UnaryPipelineStage) stage;
+
+                // Pass profiler to executor (null when profiling disabled = zero overhead)
                 resultTimeSeries = PipelineStageExecutor.executeUnaryStage(
                     unaryStage,
                     resultTimeSeries,
                     true, // coordinator-level execution
-                    cbConsumer
+                    cbConsumer,
+                    stageProfiler  // Profile data collected here when non-null
                 );
             }
         }
 
         return resultTimeSeries != null ? resultTimeSeries : List.of();
+    }
+
+    /**
+     * Check if coordinator profiling is enabled for this aggregation.
+     * Profiling is controlled via metadata flag set by the aggregation builder.
+     *
+     * @return true if profiling should be enabled, false otherwise
+     */
+    private boolean isProfilingEnabled() {
+        Object profilingFlag = metadata().get("_enable_coordinator_profiling");
+        return profilingFlag instanceof Boolean && (Boolean) profilingFlag;
     }
 
 }

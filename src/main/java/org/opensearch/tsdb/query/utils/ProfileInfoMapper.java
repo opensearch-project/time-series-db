@@ -9,7 +9,10 @@ package org.opensearch.tsdb.query.utils;
 
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.search.aggregations.Aggregation;
+import org.opensearch.search.aggregations.Aggregations;
 import org.opensearch.search.profile.ProfileShardResult;
+import org.opensearch.tsdb.query.aggregator.InternalTimeSeriesWithCoordinatorProfile;
 
 import java.io.IOException;
 import java.util.Map;
@@ -22,6 +25,7 @@ public class ProfileInfoMapper {
     // Field names for profile output structure
     private static final String PROFILE_FIELD_NAME = "profile";
     private static final String SHARDS_FIELD_NAME = "shards";
+    private static final String COORDINATOR_FIELD_NAME = "coordinator";
     private static final String SHARD_ID_FIELD_NAME = "id";
     private static final String AGGREGATION_FIELD_NAME = "aggregations";
     private static final String SEARCH_FIELD_NAME = "searches";
@@ -57,6 +61,7 @@ public class ProfileInfoMapper {
      *   <li>aggregations: Aggregation profiling results with breakdown times and debug info</li>
      *   <li>fetch: Fetch phase profiling</li>
      *   <li>network timing: Inbound/outbound network times in milliseconds</li>
+     *   <li>coordinator: Coordinator-level profiling information (if available)</li>
      * </ul>
      *
      * @param response the SearchResponse containing profile results
@@ -107,7 +112,42 @@ public class ProfileInfoMapper {
             }
 
             builder.endArray();
+
+            // Extract and add coordinator profiling information if available
+            extractCoordinatorProfileInfo(response, builder);
+
             builder.endObject();
+        }
+    }
+
+    /**
+     * Extracts coordinator-level profiling information from aggregation results.
+     *
+     * <p>This method checks if the top-level aggregations contain an {@link InternalTimeSeriesWithCoordinatorProfile}
+     * instance and extracts its profiling data to add as a "coordinator" field in the profile output.</p>
+     *
+     * @param response the SearchResponse containing aggregations
+     * @param builder the XContentBuilder to write the coordinator profiling data to
+     * @throws IOException if an I/O error occurs during writing
+     */
+    private static void extractCoordinatorProfileInfo(SearchResponse response, XContentBuilder builder) throws IOException {
+        Aggregations aggregations = response.getAggregations();
+        if (aggregations == null) {
+            return;
+        }
+
+        // Check each aggregation to see if it's an InternalTimeSeriesWithCoordinatorProfile
+        for (Aggregation agg : aggregations) {
+            if (agg instanceof InternalTimeSeriesWithCoordinatorProfile coordinatorProfileAgg) {
+                var coordinatorProfileInfo = coordinatorProfileAgg.getCoordinatorProfileInfo();
+                if (coordinatorProfileInfo != null) {
+                    builder.startObject(COORDINATOR_FIELD_NAME);
+                    coordinatorProfileInfo.toXContent(builder, EMPTY_PARAMS);
+                    builder.endObject();
+                    // Only add the first coordinator profile found
+                    break;
+                }
+            }
         }
     }
 

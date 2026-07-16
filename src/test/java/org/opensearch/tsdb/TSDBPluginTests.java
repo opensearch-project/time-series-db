@@ -40,6 +40,7 @@ import org.opensearch.test.DummyShardLock;
 import org.opensearch.tsdb.query.fetch.LabelsFetchSubPhase;
 import org.opensearch.test.IndexSettingsModule;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.tsdb.query.aggregator.ProfilingTimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TSDBStatsAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesCoordinatorAggregationBuilder;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesInplaceAggregationBuilder;
@@ -368,13 +369,20 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<SearchPlugin.PipelineAggregationSpec> pipelineAggregations = plugin.getPipelineAggregations();
 
         assertNotNull("Pipeline aggregations list should not be null", pipelineAggregations);
-        assertThat("Should have 1 pipeline aggregation", pipelineAggregations, hasSize(1));
+        assertThat("Should have 2 pipeline aggregations", pipelineAggregations, hasSize(2));
 
         SearchPlugin.PipelineAggregationSpec spec = pipelineAggregations.get(0);
         assertThat(
             "Pipeline aggregation name should match",
             spec.getName().getPreferredName(),
             equalTo(TimeSeriesCoordinatorAggregationBuilder.NAME)
+        );
+
+        SearchPlugin.PipelineAggregationSpec spec2 = pipelineAggregations.get(1);
+        assertThat(
+            "Second pipeline aggregation name should match",
+            spec2.getName().getPreferredName(),
+            equalTo(ProfilingTimeSeriesCoordinatorAggregationBuilder.NAME)
         );
     }
 
@@ -476,7 +484,7 @@ public class TSDBPluginTests extends OpenSearchTestCase {
         List<NamedWriteableRegistry.Entry> namedWriteables = plugin.getNamedWriteables();
 
         assertNotNull("Named writeables list should not be null", namedWriteables);
-        assertThat("Should have 2 named writeables", namedWriteables, hasSize(2));
+        assertThat("Should have 3 named writeables", namedWriteables, hasSize(3));
     }
 
     public void testInternalTimeSeriesNamedWriteable() {
