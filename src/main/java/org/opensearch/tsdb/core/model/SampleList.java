@@ -168,9 +168,17 @@ public interface SampleList extends Iterable<Sample>, Accountable, Writeable {
     Iterator<Sample> iterator();
 
     /**
+     * Get an iterator that support updating the timestamp and/or value in-place
+     * @return null if the functionality is not supported
+     */
+    default UpdatableIterator updatableIterator() {
+        return null;
+    }
+
+    /**
      * A default equals implementation which compares the size and sample type with the other one,
      * and then make sure at each position the timestamp and value are the same.
-     * Note that this does not guarantee two unequal SampleList are semantically different, due to
+     * Note that even this method returns false, two SampleList can still be semantically equivalent, due to
      * the existence of NaN value
      */
     default boolean equals(SampleList other) {
@@ -196,6 +204,33 @@ public interface SampleList extends Iterable<Sample>, Accountable, Writeable {
             samples.add(new FloatSample(getTimestamp(i), getValue(i)));
         }
         return samples;
+    }
+
+    /**
+     * Iterator for updating the underlying sample list, similar to {@link java.util.ListIterator#set(Object)}
+     * all set/update operations apply to the last element returned by {@link Iterator#next()}, if {@link Iterator#next()}
+     * is not called before set operations, the behavior is undefined
+     */
+    interface UpdatableIterator extends Iterator<Sample> {
+
+        /**
+         * Update timestamp and value at the same time, by default calling
+         * {@link #setTimestamp(long)} and {@link #setValue(double)}} together
+         */
+        default void update(long timestamp, double value) {
+            setTimestamp(timestamp);
+            setValue(value);
+        }
+
+        /**
+         * Update the timestamp
+         */
+        void setTimestamp(long timestamp);
+
+        /**
+         * Update the value
+         */
+        void setValue(double value);
     }
 
     /**
@@ -270,6 +305,13 @@ public interface SampleList extends Iterable<Sample>, Accountable, Writeable {
         @Override
         public Iterator<Sample> iterator() {
             return inner.iterator();
+        }
+
+        @Override
+        public UpdatableIterator updatableIterator() {
+            // do not support in-place update because inner List might be immutable, and we cannot tell unless we catch
+            // the UnsupportedOperationException
+            return null;
         }
 
         @Override

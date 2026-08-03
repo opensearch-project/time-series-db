@@ -7,6 +7,7 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
+import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
@@ -22,7 +23,7 @@ import java.util.List;
  *
  * <p>This class follows the template method pattern, handling the iteration through
  * time series and samples while delegating the actual transformation logic to
- * concrete implementations via the {@link #mapSample(Sample)} method.</p>
+ * concrete implementations via the {@link #mapSample(long, double, UpdateConsumer)} method.</p>
  *
  * <h2>Key Characteristics:</h2>
  * <ul>
@@ -52,7 +53,7 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
      * Process a list of time series by applying the mapping function to each sample.
      * This method implements the template method pattern, iterating through all
      * time series and samples while delegating the actual transformation to
-     * {@link #mapSample(Sample)}.
+     * {@link #mapSample(long, double, UpdateConsumer)}.
      *
      * @param input The input time series to process
      * @return The processed time series with mapped samples
@@ -72,20 +73,25 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
 
         for (TimeSeries series : input) {
             SampleList originalSamples = series.getSamples();
-            List<Sample> mappedSamples = new ArrayList<>(originalSamples.size());
-
-            // Apply the mapping function to each sample
-            for (Sample sample : originalSamples) {
-                Sample mappedSample = mapSample(sample);
-                assert mappedSample == null || mappedSample != sample : "Mapped sample must be a new instance";
-                if (mappedSample != null) {
-                    mappedSamples.add(mappedSample);
+            SampleList.UpdatableIterator updatableIterator = originalSamples.updatableIterator();
+            if (updatableIterator != null) {
+                while (updatableIterator.hasNext()) {
+                    Sample sample = updatableIterator.next();
+                    mapSample(sample.getTimestamp(), sample.getValue(), updatableIterator::update);
                 }
+                // Create the new time series with mapped samples and updated metadata
+                TimeSeries mappedTimeSeries = createMappedTimeSeries(originalSamples, series);
+                result.add(mappedTimeSeries);
+            } else {
+                // The original sample list doesn't support in-place update (e.g. constant list)
+                FloatSampleList.Builder newListBuilder = new FloatSampleList.Builder(originalSamples.size());
+                for (Sample sample : originalSamples) {
+                    mapSample(sample.getTimestamp(), sample.getValue(), newListBuilder::add);
+                }
+                // Create the new time series with mapped samples and updated metadata
+                TimeSeries mappedTimeSeries = createMappedTimeSeries(newListBuilder.build(), series);
+                result.add(mappedTimeSeries);
             }
-
-            // Create the new time series with mapped samples and updated metadata
-            TimeSeries mappedTimeSeries = createMappedTimeSeries(mappedSamples, series);
-            result.add(mappedTimeSeries);
         }
 
         return result;
@@ -94,16 +100,11 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
     /**
      * Map a single sample to a new sample. This is the core transformation method
      * that concrete implementations must provide.
-     *
-     * <p>Implementations should create a new Sample instance with the transformed
-     * data. The original sample should not be modified.</p>
-     *
-     * <p>If this method returns null, the sample will be filtered out from the result.</p>
-     *
-     * @param sample The original sample to transform
-     * @return The transformed sample, or null to filter out this sample
+     * <br>
+     * The new sample should be directly consumed by provided updateConsumer, and each method call
+     * <b>must</b> call {@link UpdateConsumer#update(long, double)} once
      */
-    protected abstract Sample mapSample(Sample sample);
+    protected abstract void mapSample(long timestamp, double value, UpdateConsumer updateConsumer);
 
     /**
      * Create a new time series with the mapped samples and appropriate metadata.
@@ -115,7 +116,7 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
      * @param originalSeries The original time series
      * @return A new time series with the mapped samples and updated metadata
      */
-    protected TimeSeries createMappedTimeSeries(List<Sample> mappedSamples, TimeSeries originalSeries) {
+    protected TimeSeries createMappedTimeSeries(SampleList mappedSamples, TimeSeries originalSeries) {
         // Default implementation preserves all metadata
         return new TimeSeries(
             mappedSamples,
@@ -195,5 +196,9 @@ public abstract class AbstractMapperStage implements UnaryPipelineStage {
             return false;
         }
         return true;
+    }
+
+    public interface UpdateConsumer {
+        void update(long timestamp, double value);
     }
 }

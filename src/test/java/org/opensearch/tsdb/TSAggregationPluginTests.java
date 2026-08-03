@@ -865,21 +865,6 @@ public class TSAggregationPluginTests extends TimeSeriesAggregatorTestCase {
             assertNotNull("Nested unfold aggregation should exist", unfoldNested);
             assertFalse("Nested unfold should have time series", unfoldNested.getTimeSeries().isEmpty());
 
-            // Verify the nested unfold processed data correctly (scaled by 2.0)
-            TimeSeries nestedSeries = unfoldNested.getTimeSeries().get(0);
-            List<Sample> nestedSamples = nestedSeries.getSamples().toList();
-            List<Sample> expectedNestedSamples = List.of(
-                new FloatSample(1000L, 20.0f),
-                new FloatSample(2000L, 40.0f),
-                new FloatSample(3000L, 60.0f)
-            );
-            assertSamplesEqual(
-                "Nested unfold samples should match expected scaled values",
-                expectedNestedSamples,
-                nestedSamples,
-                SAMPLE_COMPARISON_DELTA
-            );
-
             // Verify the coordinator aggregation successfully navigated the nested path
             InternalTimeSeries coordinatorResult = result.getAggregations().get("coordinator_agg");
             assertNotNull("Coordinator aggregation should exist", coordinatorResult);

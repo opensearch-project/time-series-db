@@ -12,13 +12,11 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -88,18 +86,13 @@ public class TimeshiftStage extends AbstractMapperStage {
 
     /**
      * Map a single sample by shifting its timestamp forward by the specified amount.
-     *
-     * @param sample The original sample to transform
-     * @return A new sample with shifted timestamp but same value
      */
     @Override
-    protected Sample mapSample(Sample sample) {
-        long originalTimestamp = sample.getTimestamp();
-        long shiftedTimestamp = originalTimestamp + shiftMillis;
-        double value = sample.getValue();
+    protected void mapSample(long timestamp, double value, UpdateConsumer updateConsumer) {
+        long shiftedTimestamp = timestamp + shiftMillis;
 
         // Create new sample with shifted timestamp but same value
-        return new FloatSample(shiftedTimestamp, value);
+        updateConsumer.update(shiftedTimestamp, value);
     }
 
     /**
@@ -111,7 +104,7 @@ public class TimeshiftStage extends AbstractMapperStage {
      * @return A new time series with shifted samples and updated metadata
      */
     @Override
-    protected TimeSeries createMappedTimeSeries(List<Sample> mappedSamples, TimeSeries originalSeries) {
+    protected TimeSeries createMappedTimeSeries(SampleList mappedSamples, TimeSeries originalSeries) {
         // Create new time series with shifted samples, preserving all metadata except timestamps
         return new TimeSeries(
             mappedSamples,

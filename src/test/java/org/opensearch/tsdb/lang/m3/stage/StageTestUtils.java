@@ -12,6 +12,8 @@ import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.Sample;
+import org.opensearch.tsdb.core.model.SampleList;
+import org.opensearch.tsdb.core.model.SampleType;
 import org.opensearch.tsdb.query.aggregator.InternalTimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
@@ -127,5 +129,30 @@ public final class StageTestUtils {
         TimeSeriesProvider provider2 = new InternalTimeSeries("test2", series2, Map.of());
 
         return List.of(provider1, provider2);
+    }
+
+    public static SampleList toFloatSampleList(List<Sample> samples) {
+        FloatSampleList.Builder builder = new FloatSampleList.Builder(samples.size());
+        for (Sample sample : samples) {
+            assert sample.getSampleType() == SampleType.FLOAT_SAMPLE;
+            builder.add(sample.getTimestamp(), sample.getValue());
+        }
+        return builder.build();
+    }
+
+    public static TimeSeries constructTimeSeries(
+        List<Sample> samples,
+        Labels labels,
+        long minTimestamp,
+        long maxTimestamp,
+        long step,
+        String alias,
+        boolean convertToFloatSampleList
+    ) {
+        if (convertToFloatSampleList) {
+            return new TimeSeries(toFloatSampleList(samples), labels, minTimestamp, maxTimestamp, step, alias);
+        } else {
+            return new TimeSeries(samples, labels, minTimestamp, maxTimestamp, step, alias);
+        }
     }
 }

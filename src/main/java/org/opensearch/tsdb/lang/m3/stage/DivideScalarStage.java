@@ -11,8 +11,6 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
@@ -77,16 +75,13 @@ public class DivideScalarStage extends AbstractMapperStage {
     }
 
     @Override
-    protected Sample mapSample(Sample sample) {
-        if (sample == null) {
-            throw new IllegalArgumentException("Cannot process null sample");
-        }
-        double value = sample.getValue();
+    protected void mapSample(long timestamp, double value, UpdateConsumer updateConsumer) {
         if (Double.isNaN(value)) {
-            return sample.deepCopy(); // Keep NaN samples unchanged
+            updateConsumer.update(timestamp, value); // Keep NaN samples unchanged
+            return;
         }
         double dividedValue = value / divisor;
-        return new FloatSample(sample.getTimestamp(), dividedValue);
+        updateConsumer.update(timestamp, dividedValue);
     }
 
     @Override

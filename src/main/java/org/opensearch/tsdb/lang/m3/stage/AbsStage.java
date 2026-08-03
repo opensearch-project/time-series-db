@@ -11,8 +11,6 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
@@ -72,13 +70,11 @@ public class AbsStage extends AbstractMapperStage {
 
     /**
      * Map a single sample by taking the absolute value of its value.
-     * @param sample The original sample to transform
-     * @return A new sample with the absolute value
      */
     @Override
-    protected Sample mapSample(Sample sample) {
-        double absoluteValue = Math.abs(sample.getValue());
-        return new FloatSample(sample.getTimestamp(), absoluteValue);
+    protected void mapSample(long timestamp, double value, UpdateConsumer updateConsumer) {
+        double absoluteValue = Math.abs(value);
+        updateConsumer.update(timestamp, absoluteValue);
     }
 
     /**

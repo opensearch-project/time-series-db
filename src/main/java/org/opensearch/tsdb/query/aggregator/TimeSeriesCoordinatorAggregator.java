@@ -270,6 +270,11 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
      */
     @Override
     public InternalAggregation doReduce(Aggregations aggregations, ReduceContext context) {
+        if (aggregations.get(name()) != null) {
+            // In some unit test suite the reduce method will be called multiple times, since now we're doing in-place
+            // mutation in some of the stages, we are not idempotent anymore
+            return new InternalTimeSeries(name(), castAndGetTimeSeries(aggregations.get(name())), metadata());
+        }
         try (ReduceCircuitBreakerConsumer cbConsumer = ReduceCircuitBreakerConsumer.createConsumer(context)) {
             // Execute the main pipeline stages, with macro support if macros are defined
             List<TimeSeries> result = processMainPipeline(aggregations, cbConsumer);
@@ -403,20 +408,22 @@ public class TimeSeriesCoordinatorAggregator extends SiblingPipelineAggregator {
                 }
             }
 
-            // Extract time series from the final pipeline aggregation
-            if (currentAgg instanceof TimeSeriesProvider provider) {
-                List<TimeSeries> timeSeries = provider.getTimeSeries();
-                referenceResults.put(refName, timeSeries);
-            } else {
-                throw new IllegalArgumentException(
-                    "Referenced aggregation '"
-                        + currentAgg.getName()
-                        + "' does not implement TimeSeriesProvider, got: "
-                        + currentAgg.getClass().getSimpleName()
-                );
-            }
+            referenceResults.put(refName, castAndGetTimeSeries(currentAgg));
         }
         return referenceResults;
+    }
+
+    private static List<TimeSeries> castAndGetTimeSeries(Aggregation aggregation) {
+        if (aggregation instanceof TimeSeriesProvider provider) {
+            return provider.getTimeSeries();
+        } else {
+            throw new IllegalArgumentException(
+                "Referenced aggregation '"
+                    + aggregation.getName()
+                    + "' does not implement TimeSeriesProvider, got: "
+                    + aggregation.getClass().getSimpleName()
+            );
+        }
     }
 
     /**

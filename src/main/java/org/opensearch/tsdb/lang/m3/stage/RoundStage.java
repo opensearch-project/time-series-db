@@ -11,8 +11,6 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
@@ -95,14 +93,12 @@ public class RoundStage extends AbstractMapperStage {
 
     /**
      * Map a single sample by rounding its value to the specified precision.
-     * @param sample The original sample to transform
-     * @return A new sample with the rounded value
      */
     @Override
-    protected Sample mapSample(Sample sample) {
+    protected void mapSample(long timestamp, double value, UpdateConsumer updateConsumer) {
         // Get the display value and round it
-        double roundedValue = roundValue(sample.getValue(), precision);
-        return new FloatSample(sample.getTimestamp(), roundedValue);
+        double roundedValue = roundValue(value, precision);
+        updateConsumer.update(timestamp, roundedValue);
     }
 
     /**

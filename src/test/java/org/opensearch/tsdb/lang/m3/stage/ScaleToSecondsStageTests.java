@@ -23,6 +23,7 @@ import java.util.Map;
 
 import static org.opensearch.tsdb.TestUtils.assertSamplesEqual;
 import static org.opensearch.tsdb.TestUtils.findSeriesByLabel;
+import static org.opensearch.tsdb.lang.m3.stage.StageTestUtils.constructTimeSeries;
 
 /**
  * Unit tests for ScaleToSecondsStage.
@@ -40,6 +41,11 @@ public class ScaleToSecondsStageTests extends AbstractWireSerializingTestCase<Sc
     }
 
     public void testScaleToSecondsMultipleSeries() {
+        innerTestScaleToSecondsMultipleSeries(true);
+        innerTestScaleToSecondsMultipleSeries(false);
+    }
+
+    private void innerTestScaleToSecondsMultipleSeries(boolean useFloatSampleList) {
         ScaleToSecondsStage stage = new ScaleToSecondsStage(1);
 
         // Series 1: 10s step (scaleFactor = 1/10 = 0.1)
@@ -50,22 +56,22 @@ public class ScaleToSecondsStageTests extends AbstractWireSerializingTestCase<Sc
             new FloatSample(30000L, 40.0)
         );
         ByteLabels labels1 = ByteLabels.fromMap(Map.of("id", "series1"));
-        TimeSeries series1 = new TimeSeries(samples1, labels1, 0L, 30000L, 10000L, null);
+        TimeSeries series1 = constructTimeSeries(samples1, labels1, 0L, 30000L, 10000L, null, useFloatSampleList);
 
         // Series 2: 20s step (scaleFactor = 1/20 = 0.05)
         List<Sample> samples2 = Arrays.asList(new FloatSample(0L, 100.0), new FloatSample(20000L, 200.0), new FloatSample(40000L, 300.0));
         ByteLabels labels2 = ByteLabels.fromMap(Map.of("id", "series2"));
-        TimeSeries series2 = new TimeSeries(samples2, labels2, 0L, 40000L, 20000L, null);
+        TimeSeries series2 = constructTimeSeries(samples2, labels2, 0L, 40000L, 20000L, null, useFloatSampleList);
 
         // Series 3: 10s step with sparse samples (missing data at 10s and 30s)
         List<Sample> samples3 = Arrays.asList(new FloatSample(0L, 50.0), new FloatSample(20000L, 60.0));
         ByteLabels labels3 = ByteLabels.fromMap(Map.of("id", "series3"));
-        TimeSeries series3 = new TimeSeries(samples3, labels3, 0L, 30000L, 10000L, null);
+        TimeSeries series3 = constructTimeSeries(samples3, labels3, 0L, 30000L, 10000L, null, useFloatSampleList);
 
         // Series 4: Empty series with 10s step
         List<Sample> samples4 = List.of();
         ByteLabels labels4 = ByteLabels.fromMap(Map.of("id", "series4"));
-        TimeSeries series4 = new TimeSeries(samples4, labels4, 0L, 30000L, 10000L, null);
+        TimeSeries series4 = constructTimeSeries(samples4, labels4, 0L, 30000L, 10000L, null, useFloatSampleList);
 
         List<TimeSeries> result = stage.process(Arrays.asList(series1, series2, series3, series4));
 

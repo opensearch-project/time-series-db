@@ -11,8 +11,6 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tsdb.core.model.FloatSample;
-import org.opensearch.tsdb.core.model.Sample;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 
 import java.io.IOException;
@@ -72,12 +70,9 @@ public class LogarithmStage extends AbstractMapperStage {
 
     /**
      * Map a single sample by taking the base 10 logarithm of its value.
-     * @param sample The original sample to transform
-     * @return A new sample with the logarithmic value
      */
     @Override
-    protected Sample mapSample(Sample sample) {
-        double value = sample.getValue();
+    protected void mapSample(long timestamp, double value, UpdateConsumer updateConsumer) {
         double logarithmValue;
 
         if (value < 0) {
@@ -88,7 +83,7 @@ public class LogarithmStage extends AbstractMapperStage {
             logarithmValue = Math.log10(value);
         }
 
-        return new FloatSample(sample.getTimestamp(), logarithmValue);
+        updateConsumer.update(timestamp, logarithmValue);
     }
 
     /**

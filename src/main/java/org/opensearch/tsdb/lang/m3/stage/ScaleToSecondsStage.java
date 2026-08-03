@@ -93,16 +93,27 @@ public class ScaleToSecondsStage implements UnaryPipelineStage {
 
             // Process samples with the calculated scale factor
             SampleList originalSamples = series.getSamples();
-            FloatSampleList.Builder mappedSamplesBuilder = new FloatSampleList.Builder(originalSamples.size());
+            SampleList mappedSamples;
+            SampleList.UpdatableIterator updatableIterator = originalSamples.updatableIterator();
+            if (updatableIterator != null) {
+                while (updatableIterator.hasNext()) {
+                    Sample sample = updatableIterator.next();
+                    updatableIterator.setValue(sample.getValue() * scaleFactor);
+                }
+                mappedSamples = originalSamples;
+            } else {
+                FloatSampleList.Builder mappedSamplesBuilder = new FloatSampleList.Builder(originalSamples.size());
 
-            for (Sample sample : originalSamples) {
-                double scaledValue = sample.getValue() * scaleFactor;
-                mappedSamplesBuilder.add(sample.getTimestamp(), scaledValue);
+                for (Sample sample : originalSamples) {
+                    double scaledValue = sample.getValue() * scaleFactor;
+                    mappedSamplesBuilder.add(sample.getTimestamp(), scaledValue);
+                }
+                mappedSamples = mappedSamplesBuilder.build();
             }
 
             // Create new time series with scaled samples, preserving all metadata
             TimeSeries mappedTimeSeries = new TimeSeries(
-                mappedSamplesBuilder.build(),
+                mappedSamples,
                 series.getLabels(),
                 series.getMinTimestamp(),
                 series.getMaxTimestamp(),

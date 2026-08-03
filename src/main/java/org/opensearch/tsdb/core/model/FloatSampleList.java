@@ -144,9 +144,24 @@ public class FloatSampleList implements SampleList {
      */
     @Override
     public Iterator<Sample> iterator() {
-        return new Iterator<>() {
+        return updatableIterator();
+    }
+
+    @Override
+    public UpdatableIterator updatableIterator() {
+        return new UpdatableIterator() {
             int nextIndex = 0;
             final MutableFloatSample sampleView = new MutableFloatSample();
+
+            @Override
+            public void setTimestamp(long timestamp) {
+                timestamps[nextIndex - 1] = timestamp;
+            }
+
+            @Override
+            public void setValue(double value) {
+                values[nextIndex - 1] = value;
+            }
 
             @Override
             public boolean hasNext() {
