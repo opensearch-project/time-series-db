@@ -21,7 +21,6 @@ import org.opensearch.tsdb.query.aggregator.TimeSeries;
 import org.opensearch.tsdb.query.aggregator.TimeSeriesProvider;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
 import org.opensearch.tsdb.query.breaker.ReduceCircuitBreakerConsumer;
-import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -63,7 +62,7 @@ import org.opensearch.tsdb.core.model.SampleList;
  * @see AbstractGroupingStage
  */
 @PipelineStageAnnotation(name = "percentile_of_series")
-public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiValueSample> {
+public class PercentileOfSeriesStage extends AbstractGroupingSampleBucketsStage {
 
     /** The name identifier for this stage. */
     public static final String NAME = "percentile_of_series";
@@ -76,13 +75,6 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
 
     /** Label name added to output series to indicate percentile value. */
     private static final String PERCENTILE_LABEL = "__percentile";
-
-    /**
-     * Cached shallow size of MultiValueSample used as aggregation state.
-     * Composed of: MultiValueSample shallow size + ArrayList overhead + initial Double.
-     */
-    private static final long STATE_SIZE = MultiValueSample.SHALLOW_SIZE + SampleList.ARRAYLIST_OVERHEAD
-        + RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /** List of percentiles to calculate (0-100), sorted and deduplicated. */
     private final List<Float> percentiles;
@@ -246,44 +238,40 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
     }
 
     @Override
-    protected MultiValueSample aggregateSingleSample(MultiValueSample bucket, Sample newSample) {
-        // TODO: If the total aggregation size can be passed in the beginning, we can use
-        // MultiValueSample.withCapacity() to avoid ArrayList resizing overhead, which can
-        // optimistically make the total merging process ~2x faster.
-        if (bucket == null) {
-            // First sample for this timestamp
+    protected void aggregateSingleSample(SamplesBuckets buckets, Sample newSample) {
+        assert newSample.getTimestamp() <= buckets.maxTimestamp;
+        int index = Math.toIntExact((newSample.getTimestamp() - buckets.minTimestamp) / buckets.step);
+        if (buckets.buckets[index] == null) {
             if (newSample instanceof MultiValueSample multiValueSample) {
+                // TODO: If the total aggregation size can be passed in the beginning, we can use
+                // MultiValueSample.withCapacity() to avoid ArrayList resizing overhead, which can
+                // optimistically make the total merging process ~2x faster.
                 List<Double> values = new ArrayList<>();
                 for (Double value : multiValueSample.getValueList()) {
                     if (!Double.isNaN(value)) {
                         values.add(value);
                     }
                 }
-                return new MultiValueSample(newSample.getTimestamp(), values);
+                buckets.buckets[index] = new MultiValueSample(newSample.getTimestamp(), values);
+            } else {
+                buckets.buckets[index] = new MultiValueSample(newSample.getTimestamp(), newSample.getValue());
             }
-            // During initial collection from FloatSamples, start with single value
-            return new MultiValueSample(newSample.getTimestamp(), newSample.getValue());
-        }
-
-        // If newSample is already MultiValueSample (from another shard during reduce),
-        // append all its values to the bucket (in-place mutation), skipping NaN
-        if (newSample instanceof MultiValueSample multiValueSample) {
-            for (Double value : multiValueSample.getValueList()) {
-                if (!Double.isNaN(value)) {
-                    bucket.insert(value);
+            buckets.nonNullCount++;
+        } else {
+            if (newSample instanceof MultiValueSample multiValueSample) {
+                // If newSample is already MultiValueSample (from another shard during reduce),
+                // append all its values to the bucket (in-place mutation), skipping NaN
+                for (Double value : multiValueSample.getValueList()) {
+                    if (!Double.isNaN(value)) {
+                        ((MultiValueSample) buckets.buckets[index]).insert(value);
+                    }
                 }
+            } else {
+                // Otherwise, insert single value from FloatSample - Fast O(1) append
+                ((MultiValueSample) buckets.buckets[index]).insert(newSample.getValue());
             }
-            return bucket;
+
         }
-
-        // Otherwise, insert single value from FloatSample - Fast O(1) append
-        bucket.insert(newSample.getValue());
-        return bucket;
-    }
-
-    @Override
-    protected Sample bucketToSample(long timestamp, MultiValueSample bucket) {
-        return bucket;
     }
 
     /**
@@ -292,11 +280,6 @@ public class PercentileOfSeriesStage extends AbstractGroupingSampleStage<MultiVa
     @Override
     protected boolean needsMaterialization() {
         return true;
-    }
-
-    @Override
-    protected long estimateStateSize() {
-        return STATE_SIZE;
     }
 
     /**

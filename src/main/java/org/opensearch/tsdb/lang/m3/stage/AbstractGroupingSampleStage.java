@@ -7,11 +7,9 @@
  */
 package org.opensearch.tsdb.lang.m3.stage;
 
-import org.opensearch.common.Nullable;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.tsdb.core.model.ByteLabels;
-import org.opensearch.tsdb.core.model.FloatSampleList;
 import org.opensearch.tsdb.core.model.Labels;
 import org.opensearch.tsdb.core.model.MultiValueSample;
 import org.opensearch.tsdb.core.model.Sample;
@@ -26,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.LongConsumer;
 
-import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 /**
@@ -66,14 +63,15 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
         return processWithContext(input, true, null);
     }
 
+    protected abstract A initializeBuckets(long minTimestamp, long maxTimestamp, long step);
+
     /**
-     * Aggregate a single sample into the bucket
+     * Aggregate a single sample into the buckets
      *
-     * @param bucket could be null if the sample is the first sample of this particular timestamp
+     * @param buckets   buckets initialized by calling {@link #initializeBuckets(long, long, long)}
      * @param newSample new sample that will be aggregated to the bucket
-     * @return The bucket after aggregation, could be the original one or a newly created one
      */
-    protected abstract A aggregateSingleSample(@Nullable A bucket, Sample newSample);
+    protected abstract void aggregateSingleSample(A buckets, Sample newSample);
 
     /**
      * Convert the bucket back to {@link Sample} so that it can be put back to {@link TimeSeries}
@@ -81,13 +79,13 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
      * @return a newly constructed {@link Sample}, or it could be the bucket itself if it is already the sample,
      * like {@link org.opensearch.tsdb.core.model.SumCountSample}
      */
-    protected abstract Sample bucketToSample(long timestamp, A bucket);
+    protected abstract SampleList bucketsToSampleList(A buckets);
 
     /**
-     * Estimate the memory size of a single aggregation state value.
+     * Estimate the memory size of a single aggregation state per group value.
      * Used for circuit breaker tracking during reduce operations.
      *
-     * @return Estimated bytes for one state value (e.g., Double, SumCountSample)
+     * @return Estimated bytes for one state value (e.g., DoubleBuckets, SampleBuckets)
      */
     protected abstract long estimateStateSize();
 
@@ -104,8 +102,6 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
     protected final TimeSeries processGroup(List<TimeSeries> groupSeries, Labels groupLabels) {
         // Calculate expected number of unique timestamps based on time range and step
         TimeSeries firstSeries = groupSeries.get(0);
-        long timeRange = firstSeries.getMaxTimestamp() - firstSeries.getMinTimestamp();
-        int expectedTimestamps = (int) (timeRange / firstSeries.getStep()) + 1;
 
         // TODO: This pre-allocation assumes all time series are well-aligned with the same step size.
         // Need to revisit if we want to support multi-resolution queries where different time series
@@ -114,20 +110,13 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
 
         // Aggregate samples by timestamp using operation-specific logic
         // Pre-allocate HashMap based on expected number of timestamps
-        Map<Long, A> timestampToAggregated = HashMap.newHashMap(expectedTimestamps);
+        A buckets = initializeBuckets(firstSeries.getMinTimestamp(), firstSeries.getMaxTimestamp(), firstSeries.getStep());
 
         for (TimeSeries series : groupSeries) {
-            for (Sample sample : series.getSamples()) {
-                // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
-                if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
-                    continue;
-                }
-                long timestamp = sample.getTimestamp();
-                timestampToAggregated.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
-            }
+            aggregateSamplesIntoBuckets(series.getSamples(), buckets);
         }
-        // Create sorted samples - pre-allocate since we know the exact size
-        SampleList sampleList = mapToSampleList(timestampToAggregated);
+
+        SampleList sampleList = bucketsToSampleList(buckets);
 
         // Assumption: All time series in a group have the same metadata (start time, end time, step)
         // The result will inherit metadata from the first time series in the group
@@ -156,7 +145,7 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
         circuitBreakerConsumer.accept(RamUsageConstants.HASHMAP_SHALLOW_SIZE);
 
         // Combine samples by group across all aggregations
-        Map<ByteLabels, Map<Long, A>> groupToTimestampSample = new HashMap<>();
+        Map<ByteLabels, A> groupToBuckets = new HashMap<>();
 
         for (TimeSeriesProvider aggregation : aggregations) {
             for (TimeSeries series : aggregation.getTimeSeries()) {
@@ -164,18 +153,19 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
                 ByteLabels groupLabels = extractGroupLabelsDirect(series);
 
                 // Track new group allocation
-                boolean isNewGroup = !groupToTimestampSample.containsKey(groupLabels);
+                boolean isNewGroup = !groupToBuckets.containsKey(groupLabels);
                 if (isNewGroup) {
-                    // Track: HashMap entry + labels + inner HashMap
-                    circuitBreakerConsumer.accept(
-                        RamUsageConstants.groupEntryBaseOverhead(groupLabels) + RamUsageConstants.HASHMAP_SHALLOW_SIZE
-                    );
+                    // Track: HashMap entry + labels + inner state size
+                    circuitBreakerConsumer.accept(RamUsageConstants.groupEntryBaseOverhead(groupLabels) + estimateStateSize());
                 }
 
-                Map<Long, A> timestampToSample = groupToTimestampSample.computeIfAbsent(groupLabels, k -> new HashMap<>());
+                A buckets = groupToBuckets.computeIfAbsent(
+                    groupLabels,
+                    k -> initializeBuckets(firstTimeSeries.getMinTimestamp(), firstTimeSeries.getMaxTimestamp(), firstTimeSeries.getStep())
+                );
 
                 // Aggregate samples for this series into the group's timestamp map
-                aggregateSamplesIntoMap(series.getSamples(), timestampToSample, circuitBreakerConsumer);
+                aggregateSamplesIntoBuckets(series.getSamples(), buckets);
             }
         }
 
@@ -184,14 +174,13 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
 
         // Create the final aggregated time series for each group
         // Pre-allocate result list since we know exactly how many groups we have
-        List<TimeSeries> resultTimeSeries = new ArrayList<>(groupToTimestampSample.size());
+        List<TimeSeries> resultTimeSeries = new ArrayList<>(groupToBuckets.size());
 
-        for (Map.Entry<ByteLabels, Map<Long, A>> entry : groupToTimestampSample.entrySet()) {
+        for (Map.Entry<ByteLabels, A> entry : groupToBuckets.entrySet()) {
             ByteLabels groupLabels = entry.getKey();
-            Map<Long, A> timestampToSample = entry.getValue();
 
             // Pre-allocate samples list since we know exactly how many timestamps we have
-            SampleList sampleList = mapToSampleList(timestampToSample);
+            SampleList sampleList = bucketsToSampleList(entry.getValue());
 
             Labels finalLabels = groupLabels.isEmpty() ? ByteLabels.emptyLabels() : groupLabels;
 
@@ -223,55 +212,15 @@ public abstract class AbstractGroupingSampleStage<A> extends AbstractGroupingSta
     }
 
     /**
-     * A general method to convert from the map of (timestamp -> bucket) to a sample list, which then may or may not
-     * participate in materialization based on {@link #needsMaterialization()}.
-     * This method uses {@link #bucketToSample(long, Object)} to convert each bucket to a sample and then add each sample to
-     * an ArrayList.
-     * <br>
-     * Child classes might want to override this method if a different type of {@link SampleList} need to be returned
-     */
-    protected SampleList mapToSampleList(Map<Long, A> timestampToSample) {
-        List<Sample> samples = new ArrayList<>(timestampToSample.size());
-        timestampToSample.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(sampleEntry -> {
-            Sample sample = bucketToSample(sampleEntry.getKey(), sampleEntry.getValue());
-            // Always keep original sample type - materialization happens later if needed
-            samples.add(sample);
-        });
-        return SampleList.fromList(samples);
-    }
-
-    /**
-     * A version of {@link #mapToSampleList(Map)} specialized for bucket which is of Double type, then write result using
-     * FloatSampleList instead of a java List Wrapper
-     */
-    static SampleList doubleMapToSampleList(Map<Long, Double> timestampToSample) {
-        FloatSampleList.Builder builder = new FloatSampleList.Builder(timestampToSample.size());
-        timestampToSample.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(sampleEntry -> {
-            builder.add(sampleEntry.getKey(), sampleEntry.getValue());
-        });
-        return builder.build();
-    }
-
-    /**
      * Helper method to aggregate samples into an existing timestamp map.
      */
-    private void aggregateSamplesIntoMap(SampleList samples, Map<Long, A> timestampToSample, LongConsumer circuitBreakerConsumer) {
+    private void aggregateSamplesIntoBuckets(SampleList samples, A buckets) {
         for (Sample sample : samples) {
             // Skip NaN values - treat them as null/missing (MultiValueSample does not support getValue())
             if (!(sample instanceof MultiValueSample) && Double.isNaN(sample.getValue())) {
                 continue;
             }
-            long timestamp = sample.getTimestamp();
-
-            // Track new timestamp entry allocation
-            boolean isNewTimestamp = !timestampToSample.containsKey(timestamp);
-
-            timestampToSample.compute(timestamp, (ts, a) -> aggregateSingleSample(a, sample));
-
-            if (isNewTimestamp) {
-                // Track HashMap entry overhead for new timestamp (key + value)
-                circuitBreakerConsumer.accept(RamUsageEstimator.HASHTABLE_RAM_BYTES_PER_ENTRY + Long.BYTES + estimateStateSize());
-            }
+            aggregateSingleSample(buckets, sample);
         }
     }
 

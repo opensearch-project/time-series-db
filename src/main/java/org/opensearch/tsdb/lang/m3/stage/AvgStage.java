@@ -58,12 +58,9 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "avg")
-public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
+public class AvgStage extends AbstractGroupingSampleBucketsStage {
     /** The name identifier for this stage type. */
     public static final String NAME = "avg";
-
-    /** Cached shallow size of SumCountSample record used as aggregation state. */
-    private static final long STATE_SIZE = SumCountSample.SHALLOW_SIZE;
 
     /**
      * Constructor for average without label grouping (averages all time series together).
@@ -89,16 +86,15 @@ public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
     }
 
     @Override
-    protected SumCountSample aggregateSingleSample(SumCountSample bucket, Sample newSample) {
-        if (bucket == null) {
-            return SumCountSample.fromSample(newSample);
+    protected void aggregateSingleSample(SamplesBuckets buckets, Sample newSample) {
+        assert newSample.getTimestamp() <= buckets.maxTimestamp;
+        int index = Math.toIntExact((newSample.getTimestamp() - buckets.minTimestamp) / buckets.step);
+        if (buckets.buckets[index] == null) {
+            buckets.buckets[index] = SumCountSample.fromSample(newSample);
+            buckets.nonNullCount++;
+        } else {
+            buckets.buckets[index] = buckets.buckets[index].merge(newSample);
         }
-        return bucket.merge(newSample);
-    }
-
-    @Override
-    protected Sample bucketToSample(long timestamp, SumCountSample bucket) {
-        return bucket;
     }
 
     @Override
@@ -140,11 +136,6 @@ public class AvgStage extends AbstractGroupingSampleStage<SumCountSample> {
      */
     public static AvgStage fromArgs(Map<String, Object> args) {
         return fromArgs(args, groupByLabels -> groupByLabels.isEmpty() ? new AvgStage() : new AvgStage(groupByLabels));
-    }
-
-    @Override
-    protected long estimateStateSize() {
-        return STATE_SIZE;
     }
 
     /**

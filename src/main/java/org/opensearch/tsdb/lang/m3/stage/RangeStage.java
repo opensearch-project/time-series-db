@@ -58,12 +58,9 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "range")
-public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
+public class RangeStage extends AbstractGroupingSampleBucketsStage {
     /** The name identifier for this stage type. */
     public static final String NAME = "range";
-
-    /** Cached shallow size of MinMaxSample record used as aggregation state. */
-    private static final long STATE_SIZE = MinMaxSample.SHALLOW_SIZE;
 
     /**
      * Constructor for range without label grouping (calculates range across all time series together).
@@ -89,16 +86,15 @@ public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
     }
 
     @Override
-    protected MinMaxSample aggregateSingleSample(MinMaxSample bucket, Sample newSample) {
-        if (bucket == null) {
-            return MinMaxSample.fromSample(newSample);
+    protected void aggregateSingleSample(SamplesBuckets buckets, Sample newSample) {
+        assert newSample.getTimestamp() <= buckets.maxTimestamp;
+        int index = Math.toIntExact((newSample.getTimestamp() - buckets.minTimestamp) / buckets.step);
+        if (buckets.buckets[index] == null) {
+            buckets.buckets[index] = MinMaxSample.fromSample(newSample);
+            buckets.nonNullCount++;
+        } else {
+            buckets.buckets[index] = buckets.buckets[index].merge(newSample);
         }
-        return bucket.merge(newSample);
-    }
-
-    @Override
-    protected Sample bucketToSample(long timestamp, MinMaxSample bucket) {
-        return bucket;
     }
 
     @Override
@@ -140,11 +136,6 @@ public class RangeStage extends AbstractGroupingSampleStage<MinMaxSample> {
      */
     public static RangeStage fromArgs(Map<String, Object> args) {
         return fromArgs(args, groupByLabels -> groupByLabels.isEmpty() ? new RangeStage() : new RangeStage(groupByLabels));
-    }
-
-    @Override
-    protected long estimateStateSize() {
-        return STATE_SIZE;
     }
 
     /**

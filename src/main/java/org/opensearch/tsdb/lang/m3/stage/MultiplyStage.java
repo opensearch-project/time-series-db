@@ -8,11 +8,8 @@
 package org.opensearch.tsdb.lang.m3.stage;
 
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.tsdb.core.model.FloatSample;
 import org.opensearch.tsdb.core.model.Sample;
-import org.opensearch.tsdb.core.model.SampleList;
 import org.opensearch.tsdb.query.stage.PipelineStageAnnotation;
-import org.opensearch.tsdb.query.utils.RamUsageConstants;
 
 import java.io.IOException;
 import java.util.List;
@@ -51,12 +48,9 @@ import java.util.Map;
  * </ul>
  */
 @PipelineStageAnnotation(name = "multiply")
-public class MultiplyStage extends AbstractGroupingSampleStage<Double> {
+public class MultiplyStage extends AbstractGroupingDoubleBucketsStage {
     /** The name identifier for this stage type. */
     public static final String NAME = "multiply";
-
-    /** Cached shallow size of Double object used as aggregation state. */
-    private static final long STATE_SIZE = RamUsageConstants.DOUBLE_SHALLOW_SIZE;
 
     /**
      * Constructor for multiply without label grouping (multiplies all time series together).
@@ -82,16 +76,15 @@ public class MultiplyStage extends AbstractGroupingSampleStage<Double> {
     }
 
     @Override
-    protected Double aggregateSingleSample(Double bucket, Sample newSample) {
-        if (bucket == null) {
-            return newSample.getValue();
+    protected void aggregateSingleSample(DoubleBuckets buckets, Sample newSample) {
+        assert newSample.getTimestamp() <= buckets.maxTimestamp;
+        int index = Math.toIntExact((newSample.getTimestamp() - buckets.minTimestamp) / buckets.step);
+        if (Double.isNaN(buckets.buckets[index])) {
+            buckets.buckets[index] = newSample.getValue();
+            buckets.nonNullCount++;
+        } else {
+            buckets.buckets[index] *= newSample.getValue();
         }
-        return bucket * newSample.getValue();
-    }
-
-    @Override
-    protected Sample bucketToSample(long timestamp, Double bucket) {
-        return new FloatSample(timestamp, bucket);
     }
 
     @Override
@@ -113,16 +106,6 @@ public class MultiplyStage extends AbstractGroupingSampleStage<Double> {
     @Override
     protected boolean needsMaterialization() {
         return false; // Multiply already works with FloatSample, no materialization needed
-    }
-
-    @Override
-    protected SampleList mapToSampleList(Map<Long, Double> timestampToSample) {
-        return doubleMapToSampleList(timestampToSample);
-    }
-
-    @Override
-    protected long estimateStateSize() {
-        return STATE_SIZE;
     }
 
     /**

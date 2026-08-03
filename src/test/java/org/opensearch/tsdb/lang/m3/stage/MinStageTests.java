@@ -261,12 +261,10 @@ public class MinStageTests extends AbstractWireSerializingTestCase<MinStage> {
     public void testEstimateStateSize() {
         MinStage stage = new MinStage();
 
-        // MinStage uses Double as state, so should return RamUsageConstants.DOUBLE_SHALLOW_SIZE
         long stateSize = stage.estimateStateSize();
         assertTrue("State size should be positive", stateSize > 0);
 
-        // Should match the constant defined in RamUsageConstants
-        assertEquals(org.opensearch.tsdb.query.utils.RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
+        assertEquals(AbstractGroupingDoubleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     // Comprehensive test data - all tests use this same dataset

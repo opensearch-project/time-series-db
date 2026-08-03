@@ -27,7 +27,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("MinStage uses Double as state", RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
+        assertEquals("MinStage uses DoubleBuckets as state", AbstractGroupingDoubleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testMaxStageStateSize() {
@@ -35,7 +35,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("MaxStage uses Double as state", RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
+        assertEquals("MaxStage uses DoubleBuckets as state", AbstractGroupingDoubleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testSumStageStateSize() {
@@ -43,7 +43,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("SumStage uses Double as state", RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
+        assertEquals("SumStage uses DoubleBuckets as state", AbstractGroupingDoubleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testMultiplyStageStateSize() {
@@ -51,7 +51,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("MultiplyStage uses Double as state", RamUsageConstants.DOUBLE_SHALLOW_SIZE, stateSize);
+        assertEquals("MultiplyStage uses DoubleBuckets as state", AbstractGroupingDoubleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testAvgStageStateSize() {
@@ -59,7 +59,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("AvgStage uses SumCountSample as state", SumCountSample.SHALLOW_SIZE, stateSize);
+        assertEquals("AvgStage uses SamplesBuckets as state", AbstractGroupingSampleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testRangeStageStateSize() {
@@ -67,7 +67,7 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-        assertEquals("RangeStage uses MinMaxSample as state", MinMaxSample.SHALLOW_SIZE, stateSize);
+        assertEquals("RangeStage uses SamplesBuckets as state", AbstractGroupingSampleBucketsStage.BUCKETS_SHALLOW_SIZE, stateSize);
     }
 
     public void testPercentileOfSeriesStageStateSize() {
@@ -75,15 +75,11 @@ public class CircuitBreakerStateEstimationTests extends OpenSearchTestCase {
         long stateSize = stage.estimateStateSize();
 
         assertTrue("State size should be positive", stateSize > 0);
-
-        // PercentileOfSeriesStage uses MultiValueSample which includes:
-        // - MultiValueSample.SHALLOW_SIZE
-        // - ArrayList overhead
-        // - Initial Double
-        long expectedSize = MultiValueSample.SHALLOW_SIZE + org.opensearch.tsdb.core.model.SampleList.ARRAYLIST_OVERHEAD
-            + RamUsageConstants.DOUBLE_SHALLOW_SIZE;
-
-        assertEquals("PercentileOfSeriesStage uses MultiValueSample with ArrayList", expectedSize, stateSize);
+        assertEquals(
+            "PercentileOfSeriesStage uses SamplesBuckets as state",
+            AbstractGroupingSampleBucketsStage.BUCKETS_SHALLOW_SIZE,
+            stateSize
+        );
     }
 
     public void testAllStagesHavePositiveStateSize() {
